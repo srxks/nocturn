@@ -1,0 +1,113 @@
+import { useState } from 'react'
+import { Minus, Plus } from 'lucide-react'
+
+export default function TimerSettingsRow({
+  label,
+  value,
+  unit = 'min',
+  min,
+  max,
+  onChange,
+  onDecrease,
+  onIncrease,
+}) {
+  const [prevValue, setPrevValue] = useState(value)
+  const [inputValue, setInputValue] = useState(String(value))
+
+  // Render-phase sync when parent value prop changes (e.g. via +/- buttons)
+  if (value !== prevValue) {
+    setPrevValue(value)
+    setInputValue(String(value))
+  }
+
+  const handleInputChange = (e) => {
+    const raw = e.target.value
+
+    // Allow empty string temporarily so user can clear and retype
+    if (raw === '') {
+      setInputValue('')
+      return
+    }
+
+    // Only allow positive integer digits
+    if (/^\d+$/.test(raw)) {
+      setInputValue(raw)
+      const num = parseInt(raw, 10)
+      if (!isNaN(num)) {
+        const clamped = Math.min(max, Math.max(min, num))
+        onChange(clamped)
+      }
+    }
+  }
+
+  const handleBlur = () => {
+    if (inputValue === '' || isNaN(parseInt(inputValue, 10))) {
+      setInputValue(String(value))
+      onChange(value)
+    } else {
+      const num = parseInt(inputValue, 10)
+      const clamped = Math.min(max, Math.max(min, num))
+      setInputValue(String(clamped))
+      onChange(clamped)
+    }
+  }
+
+  const isMin = value <= min
+  const isMax = value >= max
+
+  return (
+    <div className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-nocturn-card border border-nocturn-border hover:border-nocturn-accent/30 transition-all duration-200 shadow-md shadow-black/40">
+      <div className="space-y-0.5 min-w-0 flex-1 pr-2">
+        <span className="text-sm sm:text-base font-semibold text-white block truncate">
+          {label}
+        </span>
+        <span className="text-xs text-nocturn-muted font-normal block">
+          Range: {min}–{max} {unit}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* Decrease Button */}
+        <button
+          type="button"
+          onClick={onDecrease}
+          disabled={isMin}
+          aria-label={`Decrease ${label}`}
+          className="w-10 h-10 rounded-xl bg-nocturn-surface border border-nocturn-border text-nocturn-muted hover:text-white hover:border-nocturn-accent/50 disabled:opacity-30 disabled:hover:border-nocturn-border flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent"
+        >
+          <Minus className="w-4 h-4 stroke-[2.5]" />
+        </button>
+
+        {/* Editable Numeric Input */}
+        <div className="flex items-center justify-center">
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={inputValue}
+            onChange={handleInputChange}
+            onBlur={handleBlur}
+            aria-label={`${label} in ${unit || 'units'}`}
+            className="w-16 sm:w-20 text-center text-base sm:text-xl font-bold font-mono text-nocturn-accent-bright bg-nocturn-surface border border-nocturn-border hover:border-nocturn-accent/40 focus:border-nocturn-accent py-1.5 px-1 rounded-xl outline-none focus:ring-1 focus:ring-nocturn-accent transition-all duration-150"
+          />
+          {unit && (
+            <span className="text-xs text-nocturn-muted font-medium ml-1.5 hidden sm:inline">
+              {unit}
+            </span>
+          )}
+        </div>
+
+        {/* Increase Button */}
+        <button
+          type="button"
+          onClick={onIncrease}
+          disabled={isMax}
+          aria-label={`Increase ${label}`}
+          className="w-10 h-10 rounded-xl bg-nocturn-surface border border-nocturn-border text-nocturn-muted hover:text-white hover:border-nocturn-accent/50 disabled:opacity-30 disabled:hover:border-nocturn-border flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent"
+        >
+          <Plus className="w-4 h-4 stroke-[2.5]" />
+        </button>
+      </div>
+    </div>
+  )
+}

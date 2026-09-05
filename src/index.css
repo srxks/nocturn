@@ -1,0 +1,187 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+
+  --color-nocturn-bg: #000000;
+  --color-nocturn-bg-secondary: #050A07;
+  --color-nocturn-card: #0B120D;
+  --color-nocturn-surface: #101A13;
+  --color-nocturn-timer: #000000;
+  --color-nocturn-accent: #00E676;
+  --color-nocturn-accent-bright: #69F0AE;
+  --color-nocturn-accent-dark: #00A85A;
+  --color-nocturn-text: #FFFFFF;
+  --color-nocturn-muted: #A7B3AA;
+  --color-nocturn-dim: #6F7A72;
+  --color-nocturn-border: #18261C;
+
+  --radius-card: 1.5rem;
+  --radius-card-lg: 1.75rem;
+
+  --shadow-glow: 0 0 20px -3px rgba(0, 230, 118, 0.35);
+  --shadow-glow-lg: 0 0 32px -4px rgba(0, 230, 118, 0.45);
+  --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.8);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  color: var(--color-nocturn-text);
+  background: #000000;
+  background-image: radial-gradient(circle at 50% 0%, #050A07 0%, #000000 80%);
+  background-attachment: fixed;
+  overflow-x: hidden;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(167, 179, 170, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 230, 118, 0.4);
+}
+
+/* Base Surfaces & Utility Styles */
+.nocturn-card {
+  background-color: var(--color-nocturn-card);
+  border-radius: 1.5rem;
+  border: 1px solid rgba(0, 230, 118, 0.1);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.8);
+}
+
+.nocturn-card-elevated {
+  background-color: var(--color-nocturn-surface);
+  border-radius: 1.5rem;
+  border: 1px solid rgba(0, 230, 118, 0.2);
+  box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.9), 0 0 20px -5px rgba(0, 230, 118, 0.15);
+}
+
+.nocturn-input {
+  background-color: rgba(11, 18, 13, 0.85);
+  color: var(--color-nocturn-text);
+  border: 1px solid rgba(0, 230, 118, 0.15);
+  border-radius: 1rem;
+  padding: 0.75rem 1rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.nocturn-input::placeholder {
+  color: rgba(167, 179, 170, 0.6);
+}
+
+.nocturn-input:focus {
+  border-color: var(--color-nocturn-accent);
+  box-shadow: 0 0 0 2px rgba(0, 230, 118, 0.3);
+}
+
+.nocturn-input:focus-visible {
+  outline: 2px solid var(--color-nocturn-accent);
+  outline-offset: 1px;
+}
+
+.nocturn-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-nocturn-accent);
+  color: #000000;
+  font-weight: 600;
+  border-radius: 9999px;
+  padding: 0.75rem 1.5rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+.nocturn-btn-primary:hover {
+  background-color: var(--color-nocturn-accent-bright);
+  box-shadow: 0 0 24px -2px rgba(0, 230, 118, 0.5);
+}
+
+.nocturn-btn-primary:active {
+  transform: scale(0.98);
+}
+
+.nocturn-btn-primary:focus-visible {
+  outline: 2px solid var(--color-nocturn-accent-bright);
+  outline-offset: 2px;
+}
+
+.nocturn-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(16, 26, 19, 0.9);
+  color: var(--color-nocturn-text);
+  font-weight: 500;
+  border-radius: 9999px;
+  padding: 0.75rem 1.5rem;
+  border: 1px solid rgba(0, 230, 118, 0.15);
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.nocturn-btn-secondary:hover {
+  background-color: #101A13;
+  border-color: rgba(0, 230, 118, 0.3);
+}
+
+.nocturn-btn-secondary:active {
+  transform: scale(0.98);
+}
+
+.nocturn-btn-secondary:focus-visible {
+  outline: 2px solid var(--color-nocturn-accent);
+  outline-offset: 2px;
+}
+
+.nocturn-nav-active {
+  background-color: rgba(0, 230, 118, 0.15);
+  color: var(--color-nocturn-accent-bright);
+  border: 1px solid rgba(0, 230, 118, 0.35);
+  box-shadow: 0 0 16px -2px rgba(0, 230, 118, 0.25);
+}
+
+.nocturn-glow {
+  box-shadow: 0 0 20px -3px rgba(0, 230, 118, 0.35);
+}
+
+.nocturn-glow-lg {
+  box-shadow: 0 0 32px -4px rgba(0, 230, 118, 0.45);
+}
+
+.nocturn-glow-timer {
+  box-shadow: 0 0 45px -5px rgba(0, 230, 118, 0.3);
+}
