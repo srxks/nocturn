@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase.js'
+import { supabase, isSupabaseConfigured } from '../lib/supabase.js'
 
 export const GEMINI_MODEL = 'gemini-3.6-flash'
 
@@ -335,8 +335,8 @@ Return ONLY a valid JSON object with keys:
   ]
 }`
 
-  // 1. Try Supabase Edge Function 'generate-plan'
-  if (supabase) {
+  // 1. Primary backend: Supabase Edge Function 'generate-plan'
+  if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase.functions.invoke('generate-plan', {
         body: {
@@ -350,35 +350,39 @@ Return ONLY a valid JSON object with keys:
         const validation = validatePlanResponse(data.plan)
         if (validation.valid) return validation.plan
       }
+      if (error) {
+        console.warn('[geminiPlannerService] Supabase Edge Function notice:', error)
+      }
+    } catch (err) {
+      console.warn('[geminiPlannerService] Exception invoking generate-plan Edge Function:', err)
+    }
+  }
+
+  // 2. Dev environment local proxy fallback (only in dev mode when Vite dev server is active)
+  if (import.meta.env.DEV) {
+    try {
+      const response = await fetch('/api/plan-day', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: promptText,
+          model: GEMINI_MODEL,
+          existingTasks: cleanExistingTasks,
+          userPrompt,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const rawPlan = data.plan || data
+        const validation = validatePlanResponse(rawPlan)
+        if (validation.valid) return validation.plan
+      }
     } catch {
-      // Continue to API fallback
+      // Dev proxy unavailable
     }
   }
 
-  // 2. Call backend proxy endpoint /api/plan-day
-  const apiEndpoint = '/api/plan-day'
-  try {
-    const response = await fetch(apiEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: promptText,
-        model: GEMINI_MODEL,
-        existingTasks: cleanExistingTasks,
-        userPrompt,
-      }),
-    })
-
-    if (response.ok) {
-      const data = await response.json()
-      const rawPlan = data.plan || data
-      const validation = validatePlanResponse(rawPlan)
-      if (validation.valid) return validation.plan
-    }
-  } catch {
-    // Edge function / server proxy unavailable
-  }
-
-  // 3. Fallback to intelligent rule-based offline plan
+  // 3. Fallback to intelligent rule-based offline plan (handles offline/network errors cleanly)
   return generateOfflinePlan(userPrompt, existingTasks, currentTime)
 }

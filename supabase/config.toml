@@ -1,0 +1,6 @@
+# Supabase Project & Edge Functions Configuration
+[functions.generate-plan]
+verify_jwt = false
+
+[functions.generate-vocab]
+verify_jwt = false

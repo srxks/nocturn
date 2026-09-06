@@ -1,9 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || '*'
   const reqHeaders = req.headers.get('Access-Control-Request-Headers')
   return {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Headers':
       reqHeaders || 'authorization, x-client-info, apikey, content-type, x-region',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',

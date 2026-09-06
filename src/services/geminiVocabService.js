@@ -7,7 +7,7 @@
  * Uses model: gemini-3.6-flash and Gemini Interactions API format.
  */
 
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 // Mandatory default model: gemini-3.6-flash
 export const GEMINI_MODEL = 'gemini-3.6-flash'
@@ -116,49 +116,52 @@ Expected JSON Structure:
   }
 ]`
 
-  // 1. Try Supabase Edge Function 'generate-vocab' using Gemini Interactions API server-side
-  if (supabase) {
+  // 1. Primary backend: Supabase Edge Function 'generate-vocab'
+  if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase.functions.invoke('generate-vocab', {
         body: {
           prompt: promptText,
           model: GEMINI_MODEL,
           existingWords: existingWordsList,
-          apiType: 'interactions',
+          count: targetCount,
         },
       })
       if (!error && data?.words) {
         const validation = validateVocabResponse(data.words, targetCount)
         if (validation.valid) return validation.words
       }
-    } catch {
-      // Fallback to backend API endpoint
+      if (error) {
+        console.warn('[geminiVocabService] Supabase Edge Function notice:', error)
+      }
+    } catch (err) {
+      console.warn('[geminiVocabService] Exception invoking generate-vocab Edge Function:', err)
     }
   }
 
-  // 2. Call secure server-side API proxy endpoint
-  const apiEndpoint = '/api/generate-vocab'
+  // 2. Dev environment local proxy fallback (only in dev mode when Vite dev server is active)
+  if (import.meta.env.DEV) {
+    try {
+      const response = await fetch('/api/generate-vocab', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: promptText,
+          model: GEMINI_MODEL,
+          existingWords: existingWordsList,
+          count: targetCount,
+        }),
+      })
 
-  try {
-    const response = await fetch(apiEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: promptText,
-        model: GEMINI_MODEL,
-        existingWords: existingWordsList,
-        count: targetCount,
-      }),
-    })
-
-    if (response.ok) {
-      const data = await response.json()
-      const rawWords = data.words || data
-      const validation = validateVocabResponse(rawWords, targetCount)
-      if (validation.valid) return validation.words
+      if (response.ok) {
+        const data = await response.json()
+        const rawWords = data.words || data
+        const validation = validateVocabResponse(rawWords, targetCount)
+        if (validation.valid) return validation.words
+      }
+    } catch {
+      // Dev proxy unavailable
     }
-  } catch {
-    // Edge function / server proxy unavailable
   }
 
   throw new Error(
