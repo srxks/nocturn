@@ -1,7 +1,6 @@
+import { supabase, isSupabaseConfigured } from '../lib/supabase.js'
 
-
-
-
+export const GEMINI_MODEL = 'gemini-3.6-flash'
 /**
  * Validates and normalizes Gemini Plan My Day response structure.
  */
@@ -335,39 +334,28 @@ Return ONLY a valid JSON object with keys:
   ]
 }`
 
-    // Direct Gemini API call using client‑side key (personal app, unsafe but works)
-    const GEMINI_API_KEY = (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_GEMINI_API_KEY) || process.env.VITE_GEMINI_API_KEY;
-    const GEMINI_MODEL = (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_GEMINI_MODEL) || process.env.VITE_GEMINI_MODEL;
-    if (GEMINI_API_KEY && GEMINI_MODEL) {
-      try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-        const response = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: promptText }] }],
-            generationConfig: { temperature: 0.7, responseMimeType: 'application/json' },
-          }),
-        });
-        if (response.ok) {
-          const data = await response.json();
-          const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (candidateText) {
-            let cleaned = candidateText.trim();
-            if (cleaned.startsWith('```')) {
-              cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-            }
-            const plan = JSON.parse(cleaned);
-            const validation = validatePlanResponse(plan);
-            if (validation.valid) return validation.plan;
-          }
-        } else {
-          console.warn('[geminiPlannerService] Direct Gemini API error:', response.status, await response.text());
-        }
-      } catch (err) {
-        console.warn('[geminiPlannerService] Direct Gemini fetch exception:', err);
+  // 1. Primary backend: Supabase Edge Function 'generate-plan'
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-plan', {
+        body: {
+          prompt: promptText,
+          model: GEMINI_MODEL,
+          existingTasks: cleanExistingTasks,
+          userPrompt,
+        },
+      })
+      if (!error && data?.plan) {
+        const validation = validatePlanResponse(data.plan)
+        if (validation.valid) return validation.plan
       }
+      if (error) {
+        console.warn('[geminiPlannerService] Supabase Edge Function notice:', error)
+      }
+    } catch (err) {
+      console.warn('[geminiPlannerService] Exception invoking generate-plan Edge Function:', err)
     }
+  }
 
   // 2. Dev environment local proxy fallback (only in dev mode when Vite dev server is active)
   if (import.meta?.env?.DEV) {
