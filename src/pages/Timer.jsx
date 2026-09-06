@@ -15,6 +15,7 @@ export default function Timer() {
   const {
     mode,
     isRunning,
+    isPaused,
     remainingSeconds,
     totalSeconds,
     currentSession,
@@ -23,6 +24,7 @@ export default function Timer() {
     togglePlayPause,
     resetTimer,
     skipTimer,
+    terminateTimer,
   } = useTimerSession()
 
   // Sync taskName when location state passes a new taskName from Tasks or Plan My Day
@@ -85,9 +87,11 @@ export default function Timer() {
       {/* Main Timer Controls */}
       <TimerControls
         isRunning={isRunning}
+        isPaused={isPaused}
         onTogglePlayPause={togglePlayPause}
         onReset={resetTimer}
         onSkip={skipTimer}
+        onTerminate={terminateTimer}
       />
     </div>
   )

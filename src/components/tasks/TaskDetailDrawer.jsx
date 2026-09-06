@@ -125,7 +125,7 @@ export default function TaskDetailDrawer({
       className={
         isDesktopInline
           ? 'w-full bg-nocturn-card border border-nocturn-border rounded-2xl shadow-xl flex flex-col justify-between overflow-hidden max-h-[calc(100vh-6rem)]'
-          : 'fixed inset-y-0 right-0 z-50 w-full sm:w-[420px] bg-nocturn-card border-l border-nocturn-border shadow-2xl flex flex-col justify-between'
+          : 'fixed inset-y-0 right-0 z-[75] w-full sm:w-[420px] bg-nocturn-card border-l border-nocturn-border shadow-2xl flex flex-col justify-between overflow-hidden'
       }
     >
       {/* Drawer Header */}
@@ -162,7 +162,7 @@ export default function TaskDetailDrawer({
       </div>
 
       {/* Drawer Scrollable Content Body */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-5">
         {/* Action 1: Add / Remove from My Day */}
         <button
           type="button"
@@ -371,12 +371,12 @@ export default function TaskDetailDrawer({
       </div>
 
       {/* Drawer Footer Actions */}
-      <div className="p-4 border-t border-nocturn-border bg-nocturn-card flex items-center justify-between gap-3">
+      <div className="flex-shrink-0 p-4 pb-8 sm:pb-4 border-t border-nocturn-border bg-nocturn-card flex items-center justify-between gap-3 relative z-10 pointer-events-auto">
         {/* Start Focus Timer Button */}
         <button
           type="button"
           onClick={handleFocus}
-          className="nocturn-btn-primary py-2.5 px-4 text-xs sm:text-sm font-semibold inline-flex items-center gap-2 shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.35)] cursor-pointer"
+          className="nocturn-btn-primary py-2.5 px-4 text-xs sm:text-sm font-semibold inline-flex items-center gap-2 shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.35)] cursor-pointer relative z-20 pointer-events-auto"
         >
           <Timer className="w-4 h-4 fill-black stroke-black" />
           Focus Task
@@ -390,7 +390,7 @@ export default function TaskDetailDrawer({
             onClose()
           }}
           aria-label="Delete task"
-          className="py-2.5 px-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/30 transition-all font-semibold text-xs sm:text-sm inline-flex items-center gap-2 cursor-pointer"
+          className="py-2.5 px-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/30 transition-all font-semibold text-xs sm:text-sm inline-flex items-center gap-2 cursor-pointer relative z-20 pointer-events-auto"
         >
           <Trash2 className="w-4 h-4 stroke-[2]" />
           <span>Delete Task</span>
@@ -412,7 +412,7 @@ export default function TaskDetailDrawer({
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
         onClick={onClose}
-        className="fixed inset-0 z-40 bg-black/65 backdrop-blur-md"
+        className="fixed inset-0 z-[70] bg-black/65 backdrop-blur-md"
       />
       {content}
     </>

@@ -15,4 +15,6 @@ export const TimerSessionContext = createContext({
   resumeTimer: () => {},
   resetTimer: () => {},
   skipTimer: () => {},
+  terminateTimer: () => {},
+  startPlanSession: () => {},
 })

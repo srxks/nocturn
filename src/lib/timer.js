@@ -169,7 +169,8 @@ export async function recordPomodoroHistoryRemote(
   taskId,
   _taskTitle,
   userId,
-  sessionId = null
+  sessionId = null,
+  completed = true
 ) {
   if (!isSupabaseConfigured || !supabase || !userId) return null
 
@@ -192,7 +193,7 @@ export async function recordPomodoroHistoryRemote(
       start_time: startTime,
       end_time: endTime,
       duration_seconds: durationSeconds,
-      completed: true,
+      completed: Boolean(completed),
       created_at: endTime,
       updated_at: endTime,
     }

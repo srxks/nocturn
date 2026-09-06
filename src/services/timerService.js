@@ -171,7 +171,7 @@ export async function recordPomodoroSession({
     await db.pomodoroSessions.put(sessionObj)
 
     if (sessionUserId) {
-      await recordPomodoroHistoryRemote(validDurationMinutes, sessionType, taskId, taskTitle, sessionUserId, sessionId)
+      await recordPomodoroHistoryRemote(validDurationMinutes, sessionType, taskId, taskTitle, sessionUserId, sessionId, completed)
     }
 
     return sessionObj

@@ -15,7 +15,6 @@ import {
   Check,
 } from 'lucide-react'
 import { useTasks } from '../context/useTasks'
-import { useTimerSettings } from '../context/useTimerSettings'
 import { useTimerSession } from '../context/useTimerSession'
 import { generateDailyPlan } from '../services/geminiPlannerService'
 import { savePlanSchedule, getPlanSchedule } from '../services/plannerPersistenceService'
@@ -30,8 +29,7 @@ const EXAMPLE_PROMPTS = [
 export default function PlanMyDay() {
   const navigate = useNavigate()
   const { tasks, addTask, toggleTask } = useTasks()
-  const { updateSettings } = useTimerSettings()
-  const { startTimer } = useTimerSession()
+  const { startPlanSession } = useTimerSession()
 
   const [prompt, setPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -120,33 +118,82 @@ export default function PlanMyDay() {
     }
   }
 
-  // Apply Timer Settings and Launch Focus
+  // Apply Timer Settings and Launch Focus or Break Session
   const handleApplyTimerAndFocus = async (block = null) => {
     const timerConfig = plan?.recommendedTimer || {
-      focusDuration: 50,
-      shortBreakDuration: 10,
-      longBreakDuration: 20,
+      focusDuration: 25,
+      shortBreakDuration: 5,
+      longBreakDuration: 15,
       sessions: 4,
     }
 
+    const allBlocks = plan?.blocks || []
+    const focusBlocks = allBlocks.filter((b) => b.type === 'focus')
+    const totalFocusCycles = focusBlocks.length > 0 ? focusBlocks.length : Number(timerConfig.sessions) || 4
+
     try {
-      // 1. Update timer configuration through existing sync pipeline
-      await updateSettings({
-        focusDuration: timerConfig.focusDuration,
-        shortBreakDuration: timerConfig.shortBreakDuration,
-        longBreakDuration: timerConfig.longBreakDuration,
-        sessions: timerConfig.sessions,
-      })
+      if (block && block.type === 'break') {
+        // User explicitly launched a Break block
+        const breakMins = Number(block.durationMinutes) || Number(timerConfig.shortBreakDuration) || 5
+        const breakMode = breakMins >= 15 ? 'longBreak' : 'shortBreak'
 
-      // 2. Start timer with target task name
-      const targetName = block?.title || (plan?.blocks || []).find((b) => b.type === 'focus')?.title || 'Focus Session'
-      const targetTaskId = block?.taskId || null
-      await startTimer(targetName, targetTaskId, 'focus', timerConfig.focusDuration)
+        await startPlanSession({
+          durationMinutes: breakMins,
+          breakDurationMinutes: breakMins,
+          sessionIndex: 1,
+          totalSessions: totalFocusCycles,
+          taskName: block.title || 'Break Session',
+          taskId: null,
+          mode: breakMode,
+        })
+      } else {
+        // Focus block or generic "Start Plan"
+        let targetBlock = block
+        let sessionIndex = 1
 
-      // 3. Navigate to Timer
+        if (targetBlock && targetBlock.type === 'focus') {
+          const idx = focusBlocks.findIndex(
+            (b) => b.id === targetBlock.id || b.title === targetBlock.title
+          )
+          sessionIndex = idx >= 0 ? idx + 1 : 1
+        } else {
+          targetBlock = focusBlocks[0] || allBlocks[0] || null
+          sessionIndex = 1
+        }
+
+        // Determine adjacent break duration
+        let adjacentBreakMins = Number(timerConfig.shortBreakDuration) || 5
+        if (targetBlock) {
+          const blockIdx = allBlocks.findIndex(
+            (b) => b.id === targetBlock.id || b === targetBlock
+          )
+          if (blockIdx >= 0) {
+            const nextBreak = allBlocks.slice(blockIdx + 1).find((b) => b.type === 'break')
+            if (nextBreak && Number(nextBreak.durationMinutes) > 0) {
+              adjacentBreakMins = Number(nextBreak.durationMinutes)
+            }
+          }
+        }
+
+        const focusDurationMins =
+          Number(targetBlock?.durationMinutes) || Number(timerConfig.focusDuration) || 25
+        const targetTitle = targetBlock?.title || 'Focus Session'
+        const targetTaskId = targetBlock?.taskId || null
+
+        await startPlanSession({
+          durationMinutes: focusDurationMins,
+          breakDurationMinutes: adjacentBreakMins,
+          sessionIndex,
+          totalSessions: totalFocusCycles,
+          taskName: targetTitle,
+          taskId: targetTaskId,
+          mode: 'focus',
+        })
+      }
+
       navigate('/timer')
     } catch (err) {
-      console.error('[PlanMyDay] Failed to apply timer settings:', err)
+      console.error('[PlanMyDay] Failed to apply plan timer session:', err)
       navigate('/timer')
     }
   }
@@ -554,6 +601,17 @@ export default function PlanMyDay() {
                         >
                           <Play className="w-3 h-3 fill-current" />
                           <span>Focus</span>
+                        </button>
+                      )}
+
+                      {isBreak && (
+                        <button
+                          type="button"
+                          onClick={() => handleApplyTimerAndFocus(block)}
+                          className="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Coffee className="w-3 h-3" />
+                          <span>Break</span>
                         </button>
                       )}
 

@@ -54,9 +54,14 @@ export function TimerSettingsProvider({ children }) {
   // Immediate local update + cloud sync for configuration (preserves live timerState & adapts active duration)
   const updateSettings = async (newConfig) => {
     const now = new Date().toISOString()
-    let newTimerState = settings.timerState ? { ...settings.timerState } : null
+    let newTimerState =
+      newConfig.timerState !== undefined
+        ? newConfig.timerState
+        : settings.timerState
+        ? { ...settings.timerState }
+        : null
 
-    if (newTimerState) {
+    if (newTimerState && newConfig.timerState === undefined) {
       const mode = newTimerState.mode || 'focus'
       const newDurationMins =
         mode === 'focus'

@@ -203,17 +203,21 @@ export default function Tasks() {
       </div>
 
       {/* Task Detail Panel / Drawer */}
-      <TaskDetailDrawer
-        task={selectedTask}
-        lists={lists}
-        onClose={() => setSelectedTask(null)}
-        onUpdateTask={updateTask}
-        onToggleComplete={toggleTask}
-        onDeleteTask={deleteTask}
-        onAddSubtask={addSubtask}
-        onToggleSubtask={toggleSubtask}
-        onDeleteSubtask={deleteSubtask}
-      />
+      <AnimatePresence>
+        {selectedTask && (
+          <TaskDetailDrawer
+            task={selectedTask}
+            lists={lists}
+            onClose={() => setSelectedTask(null)}
+            onUpdateTask={updateTask}
+            onToggleComplete={toggleTask}
+            onDeleteTask={deleteTask}
+            onAddSubtask={addSubtask}
+            onToggleSubtask={toggleSubtask}
+            onDeleteSubtask={deleteSubtask}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
