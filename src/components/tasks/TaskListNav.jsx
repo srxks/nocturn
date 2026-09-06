@@ -79,7 +79,7 @@ export default function TaskListNav() {
                 onClick={() => setActiveListId(view.id)}
                 className={`flex-1 sm:flex-none flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all cursor-pointer shrink-0 ${
                   active
-                    ? 'bg-nocturn-accent/15 text-nocturn-accent-bright font-semibold border border-nocturn-accent/35 shadow-[0_0_12px_rgba(0,230,118,0.2)]'
+                    ? 'bg-nocturn-accent/15 text-nocturn-accent-bright font-semibold border border-nocturn-accent/35 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.2)]'
                     : 'text-nocturn-muted hover:text-white hover:bg-white/5 border border-transparent'
                 }`}
               >

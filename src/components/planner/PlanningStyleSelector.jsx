@@ -51,7 +51,7 @@ export default function PlanningStyleSelector({ selectedStyle, onSelectStyle }) 
               onClick={() => onSelectStyle(style.id)}
               className={`p-4 rounded-2xl border text-left flex flex-col justify-between gap-2.5 transition-all duration-200 cursor-pointer ${
                 isSelected
-                  ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_16px_rgba(0,230,118,0.2)] ring-1 ring-nocturn-accent'
+                  ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_16px_rgba(var(--color-nocturn-accent-rgb),0.2)] ring-1 ring-nocturn-accent'
                   : 'bg-nocturn-surface/50 border-nocturn-border/80 hover:border-nocturn-accent/35 hover:bg-nocturn-surface/80'
               }`}
             >
@@ -61,7 +61,7 @@ export default function PlanningStyleSelector({ selectedStyle, onSelectStyle }) 
                   <span>{style.name}</span>
                 </span>
                 {isSelected && (
-                  <span className="w-2 h-2 rounded-full bg-nocturn-accent shadow-[0_0_8px_rgba(0,230,118,0.8)]" />
+                  <span className="w-2 h-2 rounded-full bg-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.8)]" />
                 )}
               </div>
 

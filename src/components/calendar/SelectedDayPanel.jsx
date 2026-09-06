@@ -110,9 +110,11 @@ export default function SelectedDayPanel({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] font-mono text-nocturn-muted bg-nocturn-card px-2 py-0.5 rounded-lg border border-nocturn-border">
-                      {evt.startTime}
-                    </span>
+                    {evt?.startTime && (
+                      <span className="text-[10px] font-mono text-nocturn-muted bg-nocturn-card px-2 py-0.5 rounded-lg border border-nocturn-border">
+                        {evt.startTime}
+                      </span>
+                    )}
                     <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${deadlineConfig.badgeClass}`}>
                       {deadlineConfig.formattedLabel}
                     </span>

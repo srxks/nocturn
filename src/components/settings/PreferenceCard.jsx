@@ -23,7 +23,7 @@ export default function PreferenceCard() {
         </div>
 
         {/* Active Dark Mode Pill */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-nocturn-accent-bright bg-nocturn-accent/15 border border-nocturn-accent/30 shadow-[0_0_12px_rgba(0,230,118,0.25)] select-none">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-nocturn-accent-bright bg-nocturn-accent/15 border border-nocturn-accent/30 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.25)] select-none">
           <Check className="w-3.5 h-3.5 stroke-[3]" />
           <span>Dark Mode</span>
         </div>

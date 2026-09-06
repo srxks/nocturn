@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -10,21 +10,83 @@ import {
   ChevronRight,
   HelpCircle,
 } from 'lucide-react'
+import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
-import { generateQuizOptions } from '../services/vocabService'
+import { getReviewQueueWords, generateQuizOptions, getTodayDateKey } from '../services/vocabService'
 
 export default function VocabReview() {
   const navigate = useNavigate()
-  const { reviewQueue, allWords, recordQuizResult } = useVocab()
+  const { user } = useAuth()
+  const { allWords, recordQuizResult, dailyLimit } = useVocab()
 
+  const [quizWords, setQuizWords] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedOption, setSelectedOption] = useState(null)
   const [isAnswered, setIsAnswered] = useState(false)
   const [score, setScore] = useState({ correct: 0, incorrect: 0 })
   const [isCompleted, setIsCompleted] = useState(false)
 
-  // Current quiz word
-  const currentWord = reviewQueue[currentIndex]
+  const userId = user?.id || null
+  const todayKey = getTodayDateKey()
+  const reviewWordsKey = `nocturn_review_words_${userId || 'guest'}_${todayKey}`
+  const reviewProgressKey = `nocturn_review_progress_${userId || 'guest'}_${todayKey}`
+
+  useEffect(() => {
+    let active = true
+    async function loadReviewWords() {
+      try {
+        const savedWordsRaw = sessionStorage.getItem(reviewWordsKey)
+        const savedProgressRaw = sessionStorage.getItem(reviewProgressKey)
+        if (savedWordsRaw && savedProgressRaw) {
+          const savedWords = JSON.parse(savedWordsRaw)
+          const savedProgress = JSON.parse(savedProgressRaw)
+          if (Array.isArray(savedWords) && savedWords.length > 0 && active) {
+            setQuizWords(savedWords)
+            setCurrentIndex(Math.min(savedProgress.currentIndex || 0, savedWords.length - 1))
+            setScore(savedProgress.score || { correct: 0, incorrect: 0 })
+            setIsLoading(false)
+            return
+          }
+        }
+
+        const words = await getReviewQueueWords(userId, dailyLimit)
+        if (active) {
+          setQuizWords(words)
+          if (words.length > 0) {
+            sessionStorage.setItem(reviewWordsKey, JSON.stringify(words))
+            sessionStorage.setItem(
+              reviewProgressKey,
+              JSON.stringify({ currentIndex: 0, score: { correct: 0, incorrect: 0 } })
+            )
+          }
+        }
+      } catch (err) {
+        console.warn('[VocabReview] Session load error:', err)
+      } finally {
+        if (active) {
+          setIsLoading(false)
+        }
+      }
+    }
+    loadReviewWords()
+    return () => {
+      active = false
+    }
+  }, [userId, dailyLimit, reviewWordsKey, reviewProgressKey])
+
+  // Persist review progress so refresh does not reset current progress
+  useEffect(() => {
+    if (quizWords.length > 0 && !isCompleted) {
+      try {
+        sessionStorage.setItem(reviewProgressKey, JSON.stringify({ currentIndex, score }))
+      } catch {
+        // ignore
+      }
+    }
+  }, [currentIndex, score, quizWords.length, isCompleted, reviewProgressKey])
+
+  const currentWord = quizWords[currentIndex]
 
   // Generate 4 multiple choice options for current word
   const options = useMemo(() => {
@@ -56,17 +118,33 @@ export default function VocabReview() {
 
   // Advance to Next Question
   const handleNextQuestion = () => {
-    if (currentIndex < reviewQueue.length - 1) {
+    if (currentIndex < quizWords.length - 1) {
       setCurrentIndex((prev) => prev + 1)
       setSelectedOption(null)
       setIsAnswered(false)
     } else {
       setIsCompleted(true)
+      try {
+        sessionStorage.removeItem(reviewWordsKey)
+        sessionStorage.removeItem(reviewProgressKey)
+      } catch {
+        // ignore
+      }
     }
   }
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <RefreshCw className="w-8 h-8 animate-spin text-nocturn-accent" />
+        <p className="text-sm text-nocturn-muted">Loading review queue...</p>
+      </div>
+    )
+  }
+
   // If no words due
-  if (reviewQueue.length === 0 && !isCompleted) {
+  if (quizWords.length === 0 && !isCompleted) {
     return (
       <div className="max-w-xl mx-auto py-12 space-y-6 text-center">
         <div className="w-16 h-16 rounded-3xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto shadow-[0_0_25px_rgba(251,191,36,0.3)]">
@@ -138,7 +216,7 @@ export default function VocabReview() {
 
         <button
           onClick={() => navigate('/vocab')}
-          className="w-full py-4 px-6 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_25px_rgba(0,230,118,0.4)] transition-all duration-200 text-center"
+          className="w-full py-4 px-6 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_25px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-all duration-200 text-center"
         >
           Back to Vocab
         </button>
@@ -162,7 +240,7 @@ export default function VocabReview() {
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-nocturn-card border border-nocturn-border text-xs font-bold text-white">
           <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
           <span>
-            Question {currentIndex + 1} of {reviewQueue.length}
+            Question {currentIndex + 1} of {quizWords.length}
           </span>
         </div>
       </div>
@@ -172,7 +250,7 @@ export default function VocabReview() {
         <div
           className="h-full bg-amber-400 transition-all duration-300 rounded-full"
           style={{
-            width: `${((currentIndex + 1) / reviewQueue.length) * 100}%`,
+            width: `${((currentIndex + 1) / quizWords.length) * 100}%`,
           }}
         />
       </div>
@@ -284,10 +362,10 @@ export default function VocabReview() {
 
           <button
             onClick={handleNextQuestion}
-            className="w-full sm:w-auto py-3.5 px-8 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(0,230,118,0.4)] transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto py-3.5 px-8 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-all duration-200 flex items-center justify-center gap-2"
           >
             <span>
-              {currentIndex < reviewQueue.length - 1
+              {currentIndex < quizWords.length - 1
                 ? 'Next Question'
                 : 'Complete Review'}
             </span>

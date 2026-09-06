@@ -21,7 +21,7 @@ export default function TaskItemRow({
         task.completed
           ? 'bg-nocturn-card/40 border-nocturn-border/50 opacity-75'
           : isSelected
-          ? 'bg-nocturn-card border-nocturn-accent/60 shadow-[0_0_16px_rgba(0,230,118,0.2)] ring-1 ring-nocturn-accent/40'
+          ? 'bg-nocturn-card border-nocturn-accent/60 shadow-[0_0_16px_rgba(var(--color-nocturn-accent-rgb),0.2)] ring-1 ring-nocturn-accent/40'
           : 'bg-nocturn-card border-nocturn-border hover:border-nocturn-accent/35 shadow-md shadow-black/40'
       }`}
     >
@@ -46,7 +46,7 @@ export default function TaskItemRow({
           }}
           className={`shrink-0 w-5 h-5 rounded-md border flex items-center justify-center transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent ${
             task.completed
-              ? 'bg-nocturn-accent border-nocturn-accent text-black shadow-[0_0_8px_rgba(0,230,118,0.5)]'
+              ? 'bg-nocturn-accent border-nocturn-accent text-black shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.5)]'
               : `border-nocturn-muted/40 ${deadlineConfig.checkboxHoverBorder} bg-nocturn-surface/50 text-transparent`
           }`}
         >
@@ -110,6 +110,21 @@ export default function TaskItemRow({
               </span>
             )}
 
+            {/* Priority Badge */}
+            {task.priority && (
+              <span
+                className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-md border font-medium capitalize ${
+                  task.priority === 'high'
+                    ? 'text-rose-400 bg-rose-500/10 border-rose-500/25'
+                    : task.priority === 'low'
+                    ? 'text-blue-400 bg-blue-500/10 border-blue-500/25'
+                    : 'text-amber-400 bg-amber-500/10 border-amber-500/25'
+                }`}
+              >
+                {task.priority === 'high' ? 'High' : task.priority === 'low' ? 'Low' : 'Medium'}
+              </span>
+            )}
+
             {/* Subtasks Count */}
             {subtasksTotal > 0 && (
               <span className="inline-flex items-center gap-1 text-[10px] bg-nocturn-surface px-1.5 py-0.5 rounded-md border border-nocturn-border text-nocturn-muted font-mono">
@@ -134,7 +149,7 @@ export default function TaskItemRow({
         <Star
           className={`w-5 h-5 stroke-[2] transition-colors duration-200 ${
             task.starred
-              ? 'fill-nocturn-accent text-nocturn-accent shadow-[0_0_10px_rgba(0,230,118,0.5)]'
+              ? 'fill-nocturn-accent text-nocturn-accent shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.5)]'
               : 'text-nocturn-dim hover:text-nocturn-muted'
           }`}
         />

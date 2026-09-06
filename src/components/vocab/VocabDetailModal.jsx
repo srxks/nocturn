@@ -1,18 +1,24 @@
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Calendar, CheckCircle2, BookOpen, Star, RefreshCw } from 'lucide-react'
-import { getWordStatus } from '../../services/vocabService'
+import { X, Calendar, CheckCircle2, BookOpen, Star, RefreshCw, Trash2, Edit3 } from 'lucide-react'
+import { getWordStatus, deleteLearnedWord, saveLearnedWord } from '../../services/vocabService'
+import VocabWordModal from './VocabWordModal'
 
 export default function VocabDetailModal({ word, onClose }) {
-  if (!word) return null
+  const [editedWord, setEditedWord] = useState(null)
+  const [isEditing, setIsEditing] = useState(false)
 
-  const status = getWordStatus(word)
+  const currentWord = editedWord?.id === word?.id ? editedWord : word
+  if (!currentWord) return null
+
+  const status = getWordStatus(currentWord)
 
   const getStatusBadge = () => {
     if (status === 'settled') {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
           <CheckCircle2 className="w-3.5 h-3.5" />
-          Settled
+          Mastered
         </span>
       )
     }
@@ -27,7 +33,7 @@ export default function VocabDetailModal({ word, onClose }) {
     return (
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-nocturn-accent/15 text-nocturn-accent border border-nocturn-accent/30">
         <BookOpen className="w-3.5 h-3.5" />
-        Learning
+        In Progress
       </span>
     )
   }
@@ -66,20 +72,20 @@ export default function VocabDetailModal({ word, onClose }) {
           <div className="space-y-4 pr-8">
             <div className="flex flex-wrap items-center gap-2">
               {getStatusBadge()}
-              {word.part_of_speech && (
+              {currentWord.part_of_speech && (
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium text-nocturn-muted bg-white/5 border border-nocturn-border">
-                  {word.part_of_speech}
+                  {currentWord.part_of_speech}
                 </span>
               )}
-              {word.difficulty && (
+              {currentWord.difficulty && (
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium text-amber-400/90 bg-amber-400/10 border border-amber-400/20">
-                  {word.difficulty}
+                  {currentWord.difficulty}
                 </span>
               )}
             </div>
 
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              {word.word}
+              {currentWord.word}
             </h2>
           </div>
 
@@ -88,7 +94,7 @@ export default function VocabDetailModal({ word, onClose }) {
             <div className="flex items-center justify-between text-xs font-medium">
               <span className="text-nocturn-muted">Mastery Progress</span>
               <span className="text-nocturn-accent font-bold">
-                {word.correct_count} / 5 Correct
+                {currentWord.correct_count >= 5 ? 'Mastered (5/5 Correct)' : `In Progress (${currentWord.correct_count || 0} of 5 reviews passed)`}
               </span>
             </div>
 
@@ -97,8 +103,8 @@ export default function VocabDetailModal({ word, onClose }) {
                 <div
                   key={i}
                   className={`h-2 flex-1 rounded-full transition-all duration-300 ${
-                    i <= word.correct_count
-                      ? 'bg-nocturn-accent shadow-[0_0_8px_rgba(0,230,118,0.5)]'
+                    i <= currentWord.correct_count
+                      ? 'bg-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.5)]'
                       : 'bg-white/10'
                   }`}
                 />
@@ -112,30 +118,30 @@ export default function VocabDetailModal({ word, onClose }) {
               Definition
             </h3>
             <p className="text-base text-nocturn-text leading-relaxed">
-              {word.definition}
+              {currentWord.definition}
             </p>
           </div>
 
           {/* Example Sentence */}
-          {word.example_sentence && (
+          {currentWord.example_sentence && (
             <div className="space-y-2 my-4 p-4 rounded-2xl bg-nocturn-accent/5 border-l-4 border-nocturn-accent">
               <h3 className="text-xs uppercase font-bold tracking-wider text-nocturn-accent">
                 Example Sentence
               </h3>
               <p className="text-sm text-white/90 italic">
-                "{word.example_sentence}"
+                "{currentWord.example_sentence}"
               </p>
             </div>
           )}
 
           {/* Synonyms */}
-          {Array.isArray(word.synonyms) && word.synonyms.length > 0 && (
+          {Array.isArray(currentWord.synonyms) && currentWord.synonyms.length > 0 && (
             <div className="space-y-2 my-4">
               <h3 className="text-xs uppercase font-bold tracking-wider text-nocturn-muted">
                 Synonyms
               </h3>
               <div className="flex flex-wrap gap-1.5">
-                {word.synonyms.map((syn, idx) => (
+                {currentWord.synonyms.map((syn, idx) => (
                   <span
                     key={idx}
                     className="px-2.5 py-1 rounded-xl text-xs text-nocturn-text bg-white/5 border border-nocturn-border/50"
@@ -147,21 +153,63 @@ export default function VocabDetailModal({ word, onClose }) {
             </div>
           )}
 
-          {/* Meta Dates */}
-          <div className="mt-6 pt-4 border-t border-nocturn-border/60 flex flex-wrap justify-between gap-3 text-xs text-nocturn-muted">
-            <div className="flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Added: {word.date_added || 'N/A'}</span>
+          {/* Meta Dates & Actions */}
+          <div className="mt-6 pt-4 border-t border-nocturn-border/60 flex flex-wrap items-center justify-between gap-3 text-xs text-nocturn-muted">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Added: {currentWord.date_added || 'N/A'}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Star className="w-3.5 h-3.5 text-nocturn-accent/70" />
+                <span>
+                  Last Quizzed:{' '}
+                  {currentWord.last_quizzed_date ? currentWord.last_quizzed_date : 'Never'}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Star className="w-3.5 h-3.5 text-nocturn-accent/70" />
-              <span>
-                Last Quizzed:{' '}
-                {word.last_quizzed_date ? word.last_quizzed_date : 'Never'}
-              </span>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-nocturn-border transition-colors flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-nocturn-accent" />
+                <span>Edit</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await deleteLearnedWord(currentWord.id)
+                  onClose()
+                }}
+                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition-colors flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
             </div>
           </div>
         </motion.div>
+
+        {/* Edit Word Modal */}
+        <VocabWordModal
+          isOpen={isEditing}
+          onClose={() => setIsEditing(false)}
+          onSave={async (data) => {
+            const updated = await saveLearnedWord({
+              ...currentWord,
+              ...data,
+            })
+            if (updated) {
+              setEditedWord(updated)
+            }
+          }}
+          initialData={currentWord}
+          mode="edit"
+        />
       </div>
     </AnimatePresence>
   )

@@ -27,7 +27,7 @@ export default function BottomNav() {
             >
               <div
                 className={`relative p-1 rounded-full transition-all duration-200 ${
-                  active ? 'bg-nocturn-accent/15 shadow-[0_0_12px_rgba(0,230,118,0.35)]' : ''
+                  active ? 'bg-nocturn-accent/15 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.35)]' : ''
                 }`}
               >
                 <Icon className="w-4.5 h-4.5 sm:w-5 sm:h-5 stroke-[2.2]" />

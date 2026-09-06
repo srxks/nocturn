@@ -1,5 +1,6 @@
 import { CheckSquare, ListTodo, Info } from 'lucide-react'
 import PreferenceCard from '../components/settings/PreferenceCard'
+import VocabSettingsCard from '../components/settings/VocabSettingsCard'
 import ThemeSettingsCard from '../components/settings/ThemeSettingsCard'
 import IntegrationCard from '../components/settings/IntegrationCard'
 import SupabaseConnectionCard from '../components/settings/SupabaseConnectionCard'
@@ -19,6 +20,9 @@ export default function Settings() {
 
       {/* Preferences Section */}
       <PreferenceCard />
+
+      {/* Vocabulary Learning Limit */}
+      <VocabSettingsCard />
 
       {/* Customize Theme Section */}
       <ThemeSettingsCard />

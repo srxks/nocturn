@@ -43,10 +43,19 @@ export default function Tasks() {
       : { name: 'Tasks', icon: CheckSquare, description: 'General task list' }
   }, [activeListId, lists])
 
-  // Filter tasks based on active view/list
   const filteredTasks = useMemo(() => {
     if (activeListId === 'my-day') {
-      return tasks.filter((t) => t.inMyDay || t.dueDate === todayKey || t.myDayDate === todayKey)
+      return tasks.filter((t) => {
+        // Strict rule: ONLY tasks explicitly added to My Day belong in My Day
+        const isExplicitlyInMyDay = Boolean(t.inMyDay || t.myDayDate === todayKey)
+        if (!isExplicitlyInMyDay) return false
+
+        // If it has a due date, it must be today or tomorrow (tasks due later do not belong in My Day)
+        if (t.dueDate) {
+          return t.dueDate === todayKey || t.dueDate === tomorrowKey
+        }
+        return true
+      })
     }
     if (activeListId === 'all') {
       return tasks
@@ -55,7 +64,7 @@ export default function Tasks() {
       return tasks.filter((t) => t.completed)
     }
     return tasks.filter((t) => t.listId === activeListId)
-  }, [tasks, activeListId, todayKey])
+  }, [tasks, activeListId, todayKey, tomorrowKey])
 
   const activeTasks = useMemo(() => filteredTasks.filter((t) => !t.completed), [filteredTasks])
   const completedTasks = useMemo(() => filteredTasks.filter((t) => t.completed), [filteredTasks])
@@ -64,8 +73,16 @@ export default function Tasks() {
   const completedCount = completedTasks.length
 
   const handleAddTask = (title, day) => {
-    const dueDate = day === 'tomorrow' ? tomorrowKey : todayKey
-    addTask(title, activeListId, dueDate)
+    let dueDate = null
+    if (day === 'today') {
+      dueDate = todayKey
+    } else if (day === 'tomorrow') {
+      dueDate = tomorrowKey
+    } else if (day && day !== 'none') {
+      dueDate = day
+    }
+    const inMyDay = activeListId === 'my-day'
+    addTask(title, activeListId, dueDate, 'medium', false, inMyDay)
   }
 
   const HeaderIcon = currentListObj?.icon || CheckSquare
@@ -113,7 +130,10 @@ export default function Tasks() {
         <div className="lg:col-span-9 xl:col-span-9 space-y-6 min-w-0">
           {/* Add Task Bar */}
           {activeListId !== 'completed' && (
-            <AddTask onAddTask={handleAddTask} />
+            <AddTask
+              onAddTask={handleAddTask}
+              defaultDay={activeListId === 'my-day' ? 'today' : 'none'}
+            />
           )}
 
           {/* Tasks List */}

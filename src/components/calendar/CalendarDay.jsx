@@ -32,9 +32,9 @@ export default function CalendarDay({
         !isCurrentMonth
           ? 'bg-nocturn-bg/40 border-nocturn-border/30 opacity-40 hover:opacity-75'
           : isSelected
-            ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_15px_rgba(0,230,118,0.25)] ring-1 ring-nocturn-accent'
+            ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.25)] ring-1 ring-nocturn-accent'
             : isToday
-              ? 'bg-nocturn-card border-nocturn-accent/60 shadow-[0_0_10px_rgba(0,230,118,0.15)]'
+              ? 'bg-nocturn-card border-nocturn-accent/60 shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.15)]'
               : 'bg-nocturn-card/80 border-nocturn-border hover:border-nocturn-accent/30 hover:bg-nocturn-card'
       }`}
     >
@@ -43,7 +43,7 @@ export default function CalendarDay({
         <span
           className={`text-xs sm:text-sm font-semibold font-mono px-1.5 py-0.5 rounded-lg ${
             isToday
-              ? 'bg-nocturn-accent text-black font-bold shadow-[0_0_8px_rgba(0,230,118,0.6)]'
+              ? 'bg-nocturn-accent text-black font-bold shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.6)]'
               : isSelected
                 ? 'text-nocturn-accent-bright font-bold'
                 : 'text-white'

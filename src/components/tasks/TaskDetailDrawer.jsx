@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { formatDateKey } from '../../services/calendarService'
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
+import { requestNotificationPermission } from '../../services/notificationService'
 
 export default function TaskDetailDrawer({
   task,
@@ -31,6 +32,55 @@ export default function TaskDetailDrawer({
 }) {
   const navigate = useNavigate()
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const [prevTaskId, setPrevTaskId] = useState(task?.id)
+  const [localTitle, setLocalTitle] = useState(task?.title || '')
+  const [localNotes, setLocalNotes] = useState(task?.notes || '')
+  const titleTimeoutRef = useRef(null)
+  const notesTimeoutRef = useRef(null)
+
+  // Synchronize local title and notes when selected task changes
+  if (task && task.id !== prevTaskId) {
+    setPrevTaskId(task.id)
+    setLocalTitle(task.title || '')
+    setLocalNotes(task.notes || '')
+  }
+
+  useEffect(() => {
+    return () => {
+      if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
+      if (notesTimeoutRef.current) clearTimeout(notesTimeoutRef.current)
+    }
+  }, [])
+
+  const handleTitleChange = (val) => {
+    setLocalTitle(val)
+    if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
+    titleTimeoutRef.current = setTimeout(() => {
+      if (task) onUpdateTask(task.id, { title: val })
+    }, 300)
+  }
+
+  const handleTitleBlur = () => {
+    if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
+    if (task && localTitle !== task.title) {
+      onUpdateTask(task.id, { title: localTitle })
+    }
+  }
+
+  const handleNotesChange = (val) => {
+    setLocalNotes(val)
+    if (notesTimeoutRef.current) clearTimeout(notesTimeoutRef.current)
+    notesTimeoutRef.current = setTimeout(() => {
+      if (task) onUpdateTask(task.id, { notes: val })
+    }, 300)
+  }
+
+  const handleNotesBlur = () => {
+    if (notesTimeoutRef.current) clearTimeout(notesTimeoutRef.current)
+    if (task && localNotes !== task.notes) {
+      onUpdateTask(task.id, { notes: localNotes })
+    }
+  }
 
   // Close panel on Escape key press
   useEffect(() => {
@@ -45,7 +95,11 @@ export default function TaskDetailDrawer({
 
   if (!task) return null
 
-  const todayKey = formatDateKey(new Date())
+  const today = new Date()
+  const todayKey = formatDateKey(today)
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowKey = formatDateKey(tomorrow)
   const deadlineConfig = getTaskDeadlineConfig(task)
 
   const handleFocus = () => {
@@ -82,7 +136,7 @@ export default function TaskDetailDrawer({
             onClick={() => onToggleComplete(task.id)}
             className={`w-6 h-6 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
               task.completed
-                ? 'bg-nocturn-accent border-nocturn-accent text-black shadow-[0_0_10px_rgba(0,230,118,0.5)]'
+                ? 'bg-nocturn-accent border-nocturn-accent text-black shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.5)]'
                 : 'border-nocturn-muted/40 hover:border-nocturn-accent bg-nocturn-surface/50 text-transparent'
             }`}
           >
@@ -90,8 +144,9 @@ export default function TaskDetailDrawer({
           </button>
           <input
             type="text"
-            value={task.title}
-            onChange={(e) => onUpdateTask(task.id, { title: e.target.value })}
+            value={localTitle}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            onBlur={handleTitleBlur}
             className="w-full bg-transparent text-white font-semibold text-base sm:text-lg border-b border-transparent focus:border-nocturn-accent outline-none"
           />
         </div>
@@ -111,7 +166,14 @@ export default function TaskDetailDrawer({
         {/* Action 1: Add / Remove from My Day */}
         <button
           type="button"
-          onClick={() => onUpdateTask(task.id, { inMyDay: !task.inMyDay })}
+          onClick={() => {
+            const nextInMyDay = !task.inMyDay
+            const updates = { inMyDay: nextInMyDay }
+            if (nextInMyDay && task.dueDate && task.dueDate > tomorrowKey) {
+              updates.dueDate = todayKey
+            }
+            onUpdateTask(task.id, updates)
+          }}
           className={`w-full flex items-center gap-3 p-3 rounded-xl border text-xs sm:text-sm font-medium transition-all cursor-pointer ${
             task.inMyDay
               ? 'bg-nocturn-accent/15 border-nocturn-accent/40 text-nocturn-accent-bright font-semibold'
@@ -214,12 +276,14 @@ export default function TaskDetailDrawer({
               <input
                 type="date"
                 value={task.dueDate || ''}
-                onChange={(e) =>
-                  onUpdateTask(task.id, {
-                    dueDate: e.target.value || null,
-                    inMyDay: e.target.value === todayKey ? true : task.inMyDay,
-                  })
-                }
+                onChange={(e) => {
+                  const val = e.target.value || null
+                  const updates = { dueDate: val }
+                  if (val && val > tomorrowKey && task.inMyDay) {
+                    updates.inMyDay = false
+                  }
+                  onUpdateTask(task.id, updates)
+                }}
                 className="bg-nocturn-surface text-white text-xs px-2.5 py-1.5 rounded-xl border border-nocturn-border outline-none focus:border-nocturn-accent font-mono cursor-pointer"
               />
             </div>
@@ -232,7 +296,13 @@ export default function TaskDetailDrawer({
             </span>
             <select
               value={task.reminder || ''}
-              onChange={(e) => onUpdateTask(task.id, { reminder: e.target.value || null })}
+              onChange={(e) => {
+                const val = e.target.value || null
+                if (val) {
+                  requestNotificationPermission()
+                }
+                onUpdateTask(task.id, { reminder: val })
+              }}
               className="bg-nocturn-surface text-white text-xs px-3 py-1.5 rounded-xl border border-nocturn-border outline-none focus:border-nocturn-accent cursor-pointer"
             >
               <option value="">No reminder</option>
@@ -269,10 +339,10 @@ export default function TaskDetailDrawer({
                 <button
                   key={p}
                   type="button"
-                  onClick={() => onUpdateTask(task.id, { priority: p })}
+                  onClick={() => onUpdateTask(task.id, { priority: p, starred: p === 'high' })}
                   className={`px-2.5 py-1 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer ${
                     task.priority === p
-                      ? 'bg-nocturn-accent text-black shadow-[0_0_8px_rgba(0,230,118,0.4)]'
+                      ? 'bg-nocturn-accent text-black shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.4)]'
                       : 'bg-nocturn-surface text-nocturn-muted border border-nocturn-border hover:text-white'
                   }`}
                 >
@@ -291,8 +361,9 @@ export default function TaskDetailDrawer({
           <textarea
             id="task-notes"
             rows={4}
-            value={task.notes || ''}
-            onChange={(e) => onUpdateTask(task.id, { notes: e.target.value })}
+            value={localNotes}
+            onChange={(e) => handleNotesChange(e.target.value)}
+            onBlur={handleNotesBlur}
             placeholder="Add additional notes or detail..."
             className="w-full bg-nocturn-surface text-white text-xs p-3 rounded-xl border border-nocturn-border outline-none focus:border-nocturn-accent resize-none placeholder:text-nocturn-muted/50"
           />
@@ -305,7 +376,7 @@ export default function TaskDetailDrawer({
         <button
           type="button"
           onClick={handleFocus}
-          className="nocturn-btn-primary py-2.5 px-4 text-xs sm:text-sm font-semibold inline-flex items-center gap-2 shadow-[0_0_15px_rgba(0,230,118,0.35)] cursor-pointer"
+          className="nocturn-btn-primary py-2.5 px-4 text-xs sm:text-sm font-semibold inline-flex items-center gap-2 shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.35)] cursor-pointer"
         >
           <Timer className="w-4 h-4 fill-black stroke-black" />
           Focus Task
@@ -314,11 +385,15 @@ export default function TaskDetailDrawer({
         {/* Delete Task Button */}
         <button
           type="button"
-          onClick={() => onDeleteTask(task.id)}
+          onClick={() => {
+            onDeleteTask(task.id)
+            onClose()
+          }}
           aria-label="Delete task"
-          className="p-2.5 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-rose-400 hover:bg-rose-400/10 border border-nocturn-border transition-colors cursor-pointer"
+          className="py-2.5 px-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/30 transition-all font-semibold text-xs sm:text-sm inline-flex items-center gap-2 cursor-pointer"
         >
           <Trash2 className="w-4 h-4 stroke-[2]" />
+          <span>Delete Task</span>
         </button>
       </div>
     </motion.div>

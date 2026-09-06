@@ -27,13 +27,13 @@ export default function ScheduleBlock({
 }) {
   const navigate = useNavigate()
   const isFocus = block.type === 'focus'
-  const isBreak = block.type === 'break'
+  const isBreak = block?.type === 'break'
 
   const [isEditing, setIsEditing] = useState(false)
-  const [editTime, setEditTime] = useState(block.startTime || '09:00')
-  const [editDuration, setEditDuration] = useState(block.duration || 45)
+  const [editTime, setEditTime] = useState(block?.startTime || '09:00')
+  const [editDuration, setEditDuration] = useState(block?.duration || 45)
 
-  const deadlineConfig = getTaskDeadlineConfig(block.taskObj || block)
+  const deadlineConfig = getTaskDeadlineConfig(block?.taskObj || block)
 
   const handleFocus = () => {
     navigate('/timer', { state: { taskName: block.title } })
@@ -51,7 +51,7 @@ export default function ScheduleBlock({
     <div
       className={`relative group flex flex-col gap-3 p-4 sm:p-4.5 rounded-2xl border transition-all duration-200 ${
         isFocus
-          ? 'bg-nocturn-card border-nocturn-accent/40 shadow-[0_0_20px_rgba(0,230,118,0.1)] hover:border-nocturn-accent/60'
+          ? 'bg-nocturn-card border-nocturn-accent/40 shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.1)] hover:border-nocturn-accent/60'
           : 'bg-nocturn-surface/40 border-nocturn-border/60 text-nocturn-muted opacity-85'
       }`}
     >
@@ -78,7 +78,7 @@ export default function ScheduleBlock({
           {/* Time Badge */}
           <div className="flex items-center gap-1.5 shrink-0 text-xs font-mono font-semibold text-nocturn-accent bg-nocturn-surface px-2.5 py-1.5 rounded-xl border border-nocturn-border">
             <Clock className="w-3.5 h-3.5" />
-            <span>{formatTimeRange(block.startTime, block.duration)}</span>
+            <span>{formatTimeRange(block?.startTime || '09:00', block?.duration || 45)}</span>
           </div>
 
           {/* Title */}
@@ -123,7 +123,7 @@ export default function ScheduleBlock({
             <button
               type="button"
               onClick={handleFocus}
-              className="nocturn-btn-primary py-1 px-3 text-xs font-semibold flex items-center gap-1.5 shadow-[0_0_12px_rgba(0,230,118,0.3)] cursor-pointer"
+              className="nocturn-btn-primary py-1 px-3 text-xs font-semibold flex items-center gap-1.5 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.3)] cursor-pointer"
             >
               <Play className="w-3 h-3 fill-current text-black" />
               <span>Focus</span>

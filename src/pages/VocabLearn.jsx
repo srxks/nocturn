@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -9,76 +9,176 @@ import {
   Sparkles,
   RefreshCw,
   AlertTriangle,
+  Plus,
+  BookOpen,
 } from 'lucide-react'
+import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
+import { getTodayDateKey, saveDailyVocabLog } from '../services/vocabService'
+import VocabWordModal from '../components/vocab/VocabWordModal'
 
 export default function VocabLearn() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const {
-    todayGeneratedWords,
+    allWords,
+    dailyWords,
     learnedTodayCount,
+    effectiveDailyTarget,
+    isDailyCompleted,
+    todayVocabLog,
+    sessionLearnKey,
+    sessionCompleteKey,
+    sessionCompletedIdsKey,
     isGenerating,
     generationError,
     fetchOrGenerateDailyWords,
     markWordLearned,
+    addWord,
   } = useVocab()
 
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [isCompletedView, setIsCompletedView] = useState(false)
-  const [loadingWords, setLoadingWords] = useState(false)
+  const todayKey = getTodayDateKey()
 
-  // Fetch words if not generated yet
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`nocturn_vocab_learn_idx_${user?.id || 'guest'}_${getTodayDateKey()}`)
+      return saved !== null && !isNaN(parseInt(saved, 10)) ? Math.max(0, parseInt(saved, 10)) : 0
+    } catch {
+      return 0
+    }
+  })
+
+  const [browsingCards, setBrowsingCards] = useState(false)
+  const [completedManually, setCompletedManually] = useState(() => {
+    try {
+      return localStorage.getItem(`nocturn_vocab_learn_completed_${user?.id || 'guest'}_${getTodayDateKey()}`) === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  const isCompletedView =
+    !browsingCards && (completedManually || isDailyCompleted || todayVocabLog?.completed === true)
+
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const markedWordsRef = useRef(new Set())
+
+  const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(0, dailyWords.length - 1)))
+  const currentWord = dailyWords[safeIndex]
+
+  // Persist current learning index so leaving halfway resumes exactly where left off
   useEffect(() => {
-    async function initWords() {
-      if (todayGeneratedWords.length === 0 && !isGenerating && !generationError) {
-        try {
-          setLoadingWords(true)
-          await fetchOrGenerateDailyWords()
-        } catch {
-          // Handled by hook error state
-        } finally {
-          setLoadingWords(false)
+    try {
+      if (dailyWords.length > 0 && sessionLearnKey) {
+        localStorage.setItem(sessionLearnKey, String(safeIndex))
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [safeIndex, dailyWords.length, sessionLearnKey])
+
+  // Mark current word as viewed / learned in session
+  useEffect(() => {
+    if (currentWord?.id && !markedWordsRef.current.has(currentWord.id)) {
+      markedWordsRef.current.add(currentWord.id)
+      if (currentWord.date_added !== todayKey) {
+        markWordLearned(currentWord).catch(() => {})
+      }
+      try {
+        if (sessionCompletedIdsKey) {
+          const raw = localStorage.getItem(sessionCompletedIdsKey)
+          const ids = raw ? JSON.parse(raw) : []
+          if (!ids.includes(currentWord.id)) {
+            ids.push(currentWord.id)
+            localStorage.setItem(sessionCompletedIdsKey, JSON.stringify(ids))
+          }
         }
+      } catch {
+        // ignore
       }
     }
-    initWords()
-  }, [todayGeneratedWords.length, isGenerating, generationError, fetchOrGenerateDailyWords])
+  }, [currentWord, todayKey, markWordLearned, sessionCompletedIdsKey])
 
-  // Save current word as learned when user views / passes it
-  useEffect(() => {
-    if (todayGeneratedWords[currentIndex]) {
-      markWordLearned(todayGeneratedWords[currentIndex])
+  const handleNext = async () => {
+    const nextIdx = safeIndex + 1
+
+    let currentCompletedIds = []
+    try {
+      if (sessionCompletedIdsKey) {
+        const raw = localStorage.getItem(sessionCompletedIdsKey)
+        currentCompletedIds = raw ? JSON.parse(raw) : []
+        if (currentWord?.id && !currentCompletedIds.includes(currentWord.id)) {
+          currentCompletedIds.push(currentWord.id)
+          localStorage.setItem(sessionCompletedIdsKey, JSON.stringify(currentCompletedIds))
+        }
+      }
+    } catch {
+      // ignore
     }
-  }, [currentIndex, todayGeneratedWords, markWordLearned])
 
-  // If daily is already completed before entering, show completion view
-  useEffect(() => {
-    if (learnedTodayCount >= 5 && todayGeneratedWords.length === 5) {
-      // Allow reviewing through cards or completion view
-    }
-  }, [learnedTodayCount, todayGeneratedWords.length])
-
-  const currentWord = todayGeneratedWords[currentIndex]
-
-  const handleNext = () => {
-    if (currentIndex < todayGeneratedWords.length - 1) {
-      setCurrentIndex((prev) => prev + 1)
+    if (nextIdx < dailyWords.length) {
+      setCurrentIndex(nextIdx)
+      try {
+        if (sessionLearnKey) localStorage.setItem(sessionLearnKey, String(nextIdx))
+      } catch {
+        // ignore
+      }
+      await saveDailyVocabLog({
+        date: todayKey,
+        userId: user?.id || null,
+        wordIds: dailyWords.map((w) => w.id),
+        currentIndex: nextIdx,
+        completedWordIds: currentCompletedIds,
+        completed: false,
+        updated_at: new Date().toISOString(),
+      })
     } else {
-      setIsCompletedView(true)
+      setCompletedManually(true)
+      setBrowsingCards(false)
+      try {
+        if (sessionCompleteKey) localStorage.setItem(sessionCompleteKey, 'true')
+        if (sessionLearnKey) localStorage.setItem(sessionLearnKey, String(dailyWords.length - 1))
+      } catch {
+        // ignore
+      }
+      await saveDailyVocabLog({
+        date: todayKey,
+        userId: user?.id || null,
+        wordIds: dailyWords.map((w) => w.id),
+        currentIndex: dailyWords.length - 1,
+        completedWordIds: dailyWords.map((w) => w.id),
+        completed: true,
+        updated_at: new Date().toISOString(),
+      })
     }
   }
 
-  const handlePrev = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex((prev) => prev - 1)
+  const handlePrev = async () => {
+    if (safeIndex > 0) {
+      const prevIdx = safeIndex - 1
+      setCurrentIndex(prevIdx)
+      try {
+        if (sessionLearnKey) localStorage.setItem(sessionLearnKey, String(prevIdx))
+      } catch {
+        // ignore
+      }
+      await saveDailyVocabLog({
+        date: todayKey,
+        userId: user?.id || null,
+        wordIds: dailyWords.map((w) => w.id),
+        currentIndex: prevIdx,
+        completedWordIds: todayVocabLog?.completedWordIds || [],
+        completed: false,
+        updated_at: new Date().toISOString(),
+      })
     }
   }
 
   // Loading State
-  if (isGenerating || loadingWords) {
+  if (isGenerating) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 text-center">
-        <div className="w-16 h-16 rounded-3xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent shadow-[0_0_25px_rgba(0,230,118,0.3)]">
+        <div className="w-16 h-16 rounded-3xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent shadow-[0_0_25px_rgba(var(--color-nocturn-accent-rgb),0.3)]">
           <RefreshCw className="w-8 h-8 animate-spin" />
         </div>
         <div className="space-y-2 max-w-sm">
@@ -86,47 +186,117 @@ export default function VocabLearn() {
             Generating Daily Vocabulary
           </h2>
           <p className="text-sm text-nocturn-muted">
-            Requesting 5 GRE-level words from Gemini AI...
+            Requesting GRE-level words from Gemini AI...
           </p>
         </div>
       </div>
     )
   }
 
-  // Error / Offline State
-  if (generationError || todayGeneratedWords.length === 0) {
+  // Empty Library State (User has no words at all)
+  if (allWords.length === 0 && dailyWords.length === 0) {
     return (
       <div className="max-w-xl mx-auto space-y-6 py-8">
         <button
+          type="button"
           onClick={() => navigate('/vocab')}
-          className="inline-flex items-center gap-2 text-sm text-nocturn-muted hover:text-white transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-nocturn-muted hover:text-white transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Vocab</span>
         </button>
 
-        <div className="p-8 rounded-3xl bg-nocturn-card border border-rose-500/30 space-y-4 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
-            <AlertTriangle className="w-6 h-6" />
+        <div className="p-8 rounded-3xl bg-nocturn-card border border-nocturn-border space-y-5 text-center shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+          <div className="w-14 h-14 rounded-2xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent mx-auto">
+            <BookOpen className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-bold text-white">
-            Unable to Load Today's Words
-          </h2>
-          <p className="text-sm text-nocturn-muted">
-            {generationError || "You're offline. Connect to the internet to generate today's new words."}
-          </p>
-          <div className="pt-2 flex justify-center gap-3">
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold text-white">
+              No Vocabulary Words Yet
+            </h2>
+            <p className="text-sm text-nocturn-muted max-w-sm mx-auto">
+              Your vocabulary library is currently empty. Generate a curated set with AI or add your own words to begin learning.
+            </p>
+          </div>
+
+          {generationError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs text-left flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{generationError}</span>
+            </div>
+          )}
+
+          <div className="pt-2 flex flex-col sm:flex-row justify-center gap-3">
             <button
+              type="button"
               onClick={() => fetchOrGenerateDailyWords()}
-              className="px-6 py-2.5 rounded-xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright transition-colors"
+              className="px-6 py-2.5 rounded-xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
             >
-              Try Again
+              <Sparkles className="w-4 h-4" />
+              <span>Generate with AI</span>
             </button>
             <button
-              onClick={() => navigate('/vocab')}
-              className="px-6 py-2.5 rounded-xl bg-white/5 text-white font-medium hover:bg-white/10 transition-colors border border-nocturn-border"
+              type="button"
+              onClick={() => setIsAddModalOpen(true)}
+              className="px-6 py-2.5 rounded-xl bg-white/5 text-white font-medium hover:bg-white/10 transition-colors border border-nocturn-border flex items-center justify-center gap-2 text-sm cursor-pointer"
             >
-              Back to Home
+              <Plus className="w-4 h-4 text-nocturn-accent" />
+              <span>Add Word</span>
+            </button>
+          </div>
+        </div>
+
+        <VocabWordModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onSubmit={async (wordData) => {
+            await addWord(wordData)
+          }}
+          mode="add"
+        />
+      </div>
+    )
+  }
+
+  // Completed Today State (Library has words, but daily learning set is complete)
+  if (dailyWords.length === 0 && (isDailyCompleted || learnedTodayCount >= effectiveDailyTarget)) {
+    return (
+      <div className="max-w-xl mx-auto space-y-6 py-8">
+        <button
+          type="button"
+          onClick={() => navigate('/vocab')}
+          className="inline-flex items-center gap-2 text-sm text-nocturn-muted hover:text-white transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Vocab</span>
+        </button>
+
+        <div className="p-8 rounded-3xl bg-nocturn-card border border-emerald-500/30 space-y-4 text-center shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
+            <CheckCircle2 className="w-7 h-7" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold text-white">
+              Today's Daily Set is Complete!
+            </h2>
+            <p className="text-sm text-nocturn-muted max-w-sm mx-auto">
+              You've completed your daily target of {effectiveDailyTarget} {effectiveDailyTarget === 1 ? 'word' : 'words'}. Head over to Review to practice and retain what you've learned.
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col sm:flex-row justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/vocab/review')}
+              className="px-6 py-2.5 rounded-xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright transition-colors cursor-pointer"
+            >
+              Go to Review Queue
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/vocab')}
+              className="px-6 py-2.5 rounded-xl bg-white/5 text-white font-medium hover:bg-white/10 transition-colors border border-nocturn-border cursor-pointer"
+            >
+              Back to Vocab
             </button>
           </div>
         </div>
@@ -143,21 +313,21 @@ export default function VocabLearn() {
             <CheckCircle2 className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight">
-            Today's 5 Words Completed!
+            Today's {dailyWords.length > 0 ? `${dailyWords.length} Words` : 'Set'} Completed!
           </h1>
           <p className="text-nocturn-muted text-sm max-w-md mx-auto">
-            Great job! You've learned today's GRE vocabulary set. They are now saved in your library.
+            Great job! You've learned today's vocabulary set. They are saved in your library and ready for review.
           </p>
         </div>
 
         {/* Word Summary List */}
         <div className="bg-nocturn-card border border-nocturn-border rounded-3xl p-6 space-y-3 shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
           <h3 className="text-xs uppercase font-bold tracking-wider text-nocturn-muted mb-2">
-            Today's Words
+            Today's Words ({dailyWords.length})
           </h3>
-          {todayGeneratedWords.map((item, idx) => (
+          {dailyWords.map((item, idx) => (
             <div
-              key={idx}
+              key={item.id || idx}
               className="p-4 rounded-2xl bg-white/[0.02] border border-nocturn-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
             >
               <div>
@@ -179,16 +349,28 @@ export default function VocabLearn() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 pt-2">
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
           <button
+            type="button"
+            onClick={() => {
+              setBrowsingCards(true)
+              setCurrentIndex(0)
+            }}
+            className="flex-1 py-3.5 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors text-center cursor-pointer"
+          >
+            Review Flashcards
+          </button>
+          <button
+            type="button"
             onClick={() => navigate('/vocab')}
-            className="flex-1 py-3.5 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold border border-nocturn-border transition-colors text-center"
+            className="flex-1 py-3.5 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors text-center cursor-pointer"
           >
             Back to Vocab Home
           </button>
           <button
+            type="button"
             onClick={() => navigate('/vocab/review')}
-            className="flex-1 py-3.5 px-6 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(0,230,118,0.4)] transition-colors text-center"
+            className="flex-1 py-3.5 px-6 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-colors text-center cursor-pointer"
           >
             Start Review Queue
           </button>
@@ -204,7 +386,7 @@ export default function VocabLearn() {
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigate('/vocab')}
-          className="inline-flex items-center gap-2 text-sm text-nocturn-muted hover:text-white transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-nocturn-muted hover:text-white transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back</span>
@@ -214,7 +396,7 @@ export default function VocabLearn() {
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-nocturn-card border border-nocturn-border text-xs font-bold text-white">
           <Sparkles className="w-3.5 h-3.5 text-nocturn-accent" />
           <span>
-            {currentIndex + 1} / {todayGeneratedWords.length}
+            {safeIndex + 1} / {dailyWords.length}
           </span>
         </div>
       </div>
@@ -224,7 +406,7 @@ export default function VocabLearn() {
         <div
           className="h-full bg-nocturn-accent transition-all duration-300 rounded-full"
           style={{
-            width: `${((currentIndex + 1) / todayGeneratedWords.length) * 100}%`,
+            width: `${((safeIndex + 1) / Math.max(1, dailyWords.length)) * 100}%`,
           }}
         />
       </div>
@@ -232,7 +414,7 @@ export default function VocabLearn() {
       {/* Flashcard Component with AnimatePresence */}
       <AnimatePresence mode="wait">
         <motion.div
-          key={currentIndex}
+          key={safeIndex}
           initial={{ opacity: 0, x: 15 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -15 }}
@@ -242,12 +424,12 @@ export default function VocabLearn() {
           {/* Top Word Badges */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {currentWord.part_of_speech && (
+              {currentWord?.part_of_speech && (
                 <span className="px-3 py-1 rounded-full text-xs font-semibold text-nocturn-accent bg-nocturn-accent/15 border border-nocturn-accent/30">
                   {currentWord.part_of_speech}
                 </span>
               )}
-              {currentWord.difficulty && (
+              {currentWord?.difficulty && (
                 <span className="px-3 py-1 rounded-full text-xs font-semibold text-amber-400 bg-amber-500/15 border border-amber-500/30">
                   {currentWord.difficulty}
                 </span>
@@ -259,7 +441,7 @@ export default function VocabLearn() {
           {/* Word Heading */}
           <div>
             <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
-              {currentWord.word}
+              {currentWord?.word}
             </h1>
           </div>
 
@@ -269,12 +451,12 @@ export default function VocabLearn() {
               Definition
             </h3>
             <p className="text-lg sm:text-xl text-nocturn-text leading-relaxed font-medium">
-              {currentWord.definition}
+              {currentWord?.definition}
             </p>
           </div>
 
           {/* Example Sentence */}
-          {currentWord.example_sentence && (
+          {currentWord?.example_sentence && (
             <div className="p-5 rounded-2xl bg-nocturn-accent/5 border-l-4 border-nocturn-accent space-y-1">
               <h3 className="text-xs uppercase font-bold tracking-wider text-nocturn-accent">
                 Example Sentence
@@ -286,7 +468,7 @@ export default function VocabLearn() {
           )}
 
           {/* Synonyms */}
-          {Array.isArray(currentWord.synonyms) && currentWord.synonyms.length > 0 && (
+          {Array.isArray(currentWord?.synonyms) && currentWord.synonyms.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-xs uppercase font-bold tracking-wider text-nocturn-muted">
                 Synonyms
@@ -310,8 +492,8 @@ export default function VocabLearn() {
       <div className="flex items-center justify-between gap-4 pt-2">
         <button
           onClick={handlePrev}
-          disabled={currentIndex === 0}
-          className="py-3.5 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors flex items-center gap-2 disabled:opacity-30 disabled:pointer-events-none"
+          disabled={safeIndex === 0}
+          className="py-3.5 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors flex items-center gap-2 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
         >
           <ChevronLeft className="w-5 h-5" />
           <span>Previous</span>
@@ -319,10 +501,10 @@ export default function VocabLearn() {
 
         <button
           onClick={handleNext}
-          className="py-3.5 px-8 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(0,230,118,0.4)] transition-all duration-200 flex items-center gap-2"
+          className="py-3.5 px-8 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-all duration-200 flex items-center gap-2 cursor-pointer"
         >
           <span>
-            {currentIndex === todayGeneratedWords.length - 1
+            {safeIndex === dailyWords.length - 1
               ? 'Complete Daily Set'
               : 'Next Word'}
           </span>

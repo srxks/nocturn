@@ -5,6 +5,199 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nocturn</title>
+    <script>
+      (function () {
+        if (typeof window === 'undefined' || window.__nocturn_inp_guard_active) return;
+        window.__nocturn_inp_guard_active = true;
+
+        var isPerformanceObserverError = function (errOrMsg) {
+          if (!errOrMsg) return false;
+          var text =
+            typeof errOrMsg === 'string'
+              ? errOrMsg
+              : [
+                  errOrMsg.name,
+                  errOrMsg.message,
+                  errOrMsg.stack,
+                  errOrMsg.reason,
+                  errOrMsg.detail,
+                ]
+                  .filter(Boolean)
+                  .join(' ');
+
+          var isStartTimeOnUndefined =
+            (text.indexOf('Cannot read propert') !== -1 || text.indexOf('reading') !== -1) &&
+            (text.indexOf("'startTime'") !== -1 ||
+              text.indexOf('"startTime"') !== -1 ||
+              text.indexOf("'interactionId'") !== -1 ||
+              text.indexOf('"interactionId"') !== -1);
+
+          var isVitalsReporter =
+            text.indexOf('reportAllChanges') !== -1 ||
+            text.indexOf('supportedEntryTypes') !== -1 ||
+            (text.indexOf('INP') !== -1 && text.indexOf('entries') !== -1);
+
+          return isStartTimeOnUndefined || isVitalsReporter;
+        };
+
+        if (typeof window.requestIdleCallback === 'function') {
+          var origRIC = window.requestIdleCallback;
+          window.requestIdleCallback = function (cb, options) {
+            if (typeof cb === 'function') {
+              var wrappedCb = function (deadline) {
+                try {
+                  return cb.call(this, deadline);
+                } catch (err) {
+                  if (isPerformanceObserverError(err)) return;
+                  throw err;
+                }
+              };
+              return origRIC.call(this, wrappedCb, options);
+            }
+            return origRIC.call(this, cb, options);
+          };
+        }
+
+        if (typeof window.setTimeout === 'function') {
+          var origST = window.setTimeout;
+          window.setTimeout = function (handler, timeout) {
+            var args = Array.prototype.slice.call(arguments, 2);
+            if (typeof handler === 'function') {
+              var wrappedHandler = function () {
+                try {
+                  return handler.apply(this, arguments);
+                } catch (err) {
+                  if (isPerformanceObserverError(err)) return;
+                  throw err;
+                }
+              };
+              return origST.apply(this, [wrappedHandler, timeout].concat(args));
+            }
+            return origST.apply(this, arguments);
+          };
+        }
+
+        if (typeof window.requestAnimationFrame === 'function') {
+          var origRAF = window.requestAnimationFrame;
+          window.requestAnimationFrame = function (cb) {
+            if (typeof cb === 'function') {
+              var wrappedCb = function (timestamp) {
+                try {
+                  return cb.call(this, timestamp);
+                } catch (err) {
+                  if (isPerformanceObserverError(err)) return;
+                  throw err;
+                }
+              };
+              return origRAF.call(this, wrappedCb);
+            }
+            return origRAF.call(this, cb);
+          };
+        }
+
+        if (typeof PerformanceObserver !== 'undefined') {
+          var OriginalObserver = window.PerformanceObserver;
+          try {
+            window.PerformanceObserver = class SafePerformanceObserver extends OriginalObserver {
+              static get supportedEntryTypes() {
+                return OriginalObserver.supportedEntryTypes || [];
+              }
+              constructor(callback) {
+                super(function (list, observer) {
+                  var args = Array.prototype.slice.call(arguments, 2);
+                  try {
+                    callback.apply(this, [list, observer].concat(args));
+                  } catch (err) {
+                    if (isPerformanceObserverError(err)) return;
+                    throw err;
+                  }
+                });
+              }
+            };
+          } catch (e) {
+            // Keep OriginalObserver if subclassing fails
+          }
+        }
+
+        if (typeof PerformanceObserverEntryList !== 'undefined') {
+          var patchEntryGetter = function (origFn) {
+            if (!origFn) return origFn;
+            return function () {
+              var entries = origFn.apply(this, arguments);
+              if (Array.isArray(entries) && entries.length === 0) {
+                return new Proxy(entries, {
+                  get: function (target, prop, receiver) {
+                    if (prop === '0' || prop === 0) {
+                      return (
+                        target[0] || {
+                          startTime: typeof performance !== 'undefined' ? performance.now() : 0,
+                          duration: 0,
+                          entryType: 'event',
+                          name: 'safe-fallback',
+                          interactionId: 0,
+                        }
+                      );
+                    }
+                    return Reflect.get(target, prop, receiver);
+                  },
+                });
+              }
+              return entries;
+            };
+          };
+
+          if (PerformanceObserverEntryList.prototype.getEntries) {
+            PerformanceObserverEntryList.prototype.getEntries = patchEntryGetter(
+              PerformanceObserverEntryList.prototype.getEntries
+            );
+          }
+          if (PerformanceObserverEntryList.prototype.getEntriesByType) {
+            PerformanceObserverEntryList.prototype.getEntriesByType = patchEntryGetter(
+              PerformanceObserverEntryList.prototype.getEntriesByType
+            );
+          }
+          if (PerformanceObserverEntryList.prototype.getEntriesByName) {
+            PerformanceObserverEntryList.prototype.getEntriesByName = patchEntryGetter(
+              PerformanceObserverEntryList.prototype.getEntriesByName
+            );
+          }
+        }
+
+        if (typeof console !== 'undefined' && typeof console.error === 'function') {
+          var origConsoleError = console.error;
+          console.error = function () {
+            for (var i = 0; i < arguments.length; i++) {
+              if (isPerformanceObserverError(arguments[i])) return;
+            }
+            origConsoleError.apply(console, arguments);
+          };
+        }
+
+        window.addEventListener(
+          'error',
+          function (event) {
+            if (isPerformanceObserverError(event && (event.error || event.message))) {
+              event.preventDefault && event.preventDefault();
+              event.stopImmediatePropagation && event.stopImmediatePropagation();
+            }
+          },
+          true
+        );
+
+        window.addEventListener('unhandledrejection', function (event) {
+          if (isPerformanceObserverError(event && event.reason)) {
+            event.preventDefault && event.preventDefault();
+          }
+        });
+
+        var origOnError = window.onerror;
+        window.onerror = function (message, source, lineno, colno, error) {
+          if (isPerformanceObserverError(message || error)) return true;
+          if (origOnError) return origOnError.apply(this, arguments);
+          return false;
+        };
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

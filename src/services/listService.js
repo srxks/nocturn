@@ -14,7 +14,7 @@ export async function createList(name) {
     const trimmed = name.trim()
     if (!trimmed) return null
     const newList = {
-      id: `list-${Date.now()}`,
+      id: crypto.randomUUID(),
       name: trimmed,
       system: false,
       createdAt: new Date().toISOString(),

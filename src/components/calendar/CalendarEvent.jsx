@@ -1,7 +1,8 @@
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
 
 export default function CalendarEvent({ event }) {
-  const isCompleted = event.completed
+  if (!event) return null
+  const isCompleted = Boolean(event.completed)
   const taskObj = event.taskObj || event
   const deadlineConfig = getTaskDeadlineConfig(taskObj)
 
@@ -12,11 +13,13 @@ export default function CalendarEvent({ event }) {
           ? 'bg-nocturn-surface/50 text-nocturn-muted/60 line-through'
           : `${deadlineConfig.badgeClass} font-medium`
       }`}
-      title={`${event.title} (${deadlineConfig.formattedLabel})`}
+      title={`${event.title || ''} (${deadlineConfig.formattedLabel})`}
     >
-      <span className="font-mono text-[9px] opacity-75 mr-1 hidden sm:inline">
-        {event.startTime}
-      </span>
+      {event.startTime && (
+        <span className="font-mono text-[9px] opacity-75 mr-1 hidden sm:inline">
+          {event.startTime}
+        </span>
+      )}
       <span>{event.title}</span>
     </div>
   )

@@ -3,20 +3,20 @@
  * Responsible for requesting daily GRE-level vocabulary words.
  *
  * Security Architecture:
- * Keeps Gemini API key server-side (via backend proxy or Supabase Edge Function).
- * Configurable model via VITE_GEMINI_MODEL env variable (defaults to gemini-2.5-flash).
+ * Keeps Gemini API key server-side (via backend proxy / Supabase function).
+ * Uses model: gemini-3.6-flash and Gemini Interactions API format.
  */
 
 import { supabase } from '../lib/supabase'
 
-// Configurable model name via environment variable (default: gemini-2.5-flash)
-export const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash'
+// Mandatory default model: gemini-3.6-flash (configurable via env if specified)
+export const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-3.6-flash'
 
 /**
  * Validates structured vocabulary words returned by Gemini.
- * Rejects malformed objects or arrays with fewer than 5 valid words.
+ * Rejects malformed objects or arrays with fewer than `count` valid words.
  */
-export function validateVocabResponse(rawList) {
+export function validateVocabResponse(rawList, count = 5) {
   if (!Array.isArray(rawList)) {
     return { valid: false, words: [], error: 'Response is not a valid JSON array' }
   }
@@ -65,33 +65,36 @@ export function validateVocabResponse(rawList) {
     }
   }
 
-  if (validWords.length < 5) {
+  const targetCount = Math.max(1, count)
+  if (validWords.length < targetCount) {
     return {
       valid: false,
       words: validWords,
-      error: `Gemini service returned only ${validWords.length} valid words (5 required)`,
+      error: `Gemini service returned only ${validWords.length} valid words (${targetCount} required)`,
     }
   }
 
-  return { valid: true, words: validWords.slice(0, 5) }
+  return { valid: true, words: validWords.slice(0, targetCount) }
 }
 
 /**
- * Generates 5 daily GRE vocabulary words via backend service or Edge Function.
+ * Generates daily GRE vocabulary words via server-side layer with gemini-3.6-flash.
  *
  * @param {Array<string>} existingWordsList List of words already learned
- * @returns {Promise<Array>} List of 5 validated word objects
+ * @param {number} count Number of words to generate
+ * @returns {Promise<Array>} List of validated word objects
  */
-export async function generateDailyVocab(existingWordsList = []) {
+export async function generateDailyVocab(existingWordsList = [], count = 5) {
   if (!navigator.onLine) {
     throw new Error("You're offline. Connect to the internet to generate today's new words.")
   }
 
+  const targetCount = Math.max(1, count)
   const excludedStr = existingWordsList.length > 0
     ? `Do NOT include any of these previously learned words: ${existingWordsList.slice(-100).join(', ')}.`
     : ''
 
-  const promptText = `Generate exactly 5 GRE-level vocabulary words for a student preparing for the GRE exam.
+  const promptText = `Generate exactly ${targetCount} GRE-level vocabulary words for a student preparing for the GRE exam.
 Requirements:
 - Words must be medium to high difficulty, non-trivial, and extremely relevant for the GRE.
 - ${excludedStr}
@@ -99,7 +102,7 @@ Requirements:
 - Provide natural, contextual example sentences.
 - Include part of speech (e.g. noun, adjective, verb) and 2-3 relevant synonyms.
 
-Return ONLY a valid JSON array containing exactly 5 objects. Do NOT use markdown code blocks, backticks, or any explanatory text outside the JSON.
+Return ONLY a valid JSON array containing exactly ${targetCount} objects. Do NOT use markdown code blocks, backticks, or any explanatory text outside the JSON.
 
 Expected JSON Structure:
 [
@@ -113,14 +116,19 @@ Expected JSON Structure:
   }
 ]`
 
-  // 1. Try Supabase Edge Function 'generate-vocab' if Supabase is connected
+  // 1. Try Supabase Edge Function 'generate-vocab' using Gemini Interactions API server-side
   if (supabase) {
     try {
       const { data, error } = await supabase.functions.invoke('generate-vocab', {
-        body: { prompt: promptText, model: GEMINI_MODEL, existingWords: existingWordsList },
+        body: {
+          prompt: promptText,
+          model: GEMINI_MODEL,
+          existingWords: existingWordsList,
+          apiType: 'interactions',
+        },
       })
       if (!error && data?.words) {
-        const validation = validateVocabResponse(data.words)
+        const validation = validateVocabResponse(data.words, targetCount)
         if (validation.valid) return validation.words
       }
     } catch {
@@ -128,7 +136,7 @@ Expected JSON Structure:
     }
   }
 
-  // 2. Call backend proxy endpoint
+  // 2. Call secure server-side API proxy endpoint
   const apiEndpoint = import.meta.env.VITE_GEMINI_API_ENDPOINT || '/api/generate-vocab'
 
   try {
@@ -139,20 +147,21 @@ Expected JSON Structure:
         prompt: promptText,
         model: GEMINI_MODEL,
         existingWords: existingWordsList,
+        count: targetCount,
       }),
     })
 
     if (response.ok) {
       const data = await response.json()
       const rawWords = data.words || data
-      const validation = validateVocabResponse(rawWords)
+      const validation = validateVocabResponse(rawWords, targetCount)
       if (validation.valid) return validation.words
     }
   } catch {
-    // Continue to dev environment fallback
+    // Continue to dev fallback
   }
 
-  // 3. Development Fallback using configured dev key if present
+  // 3. Dev environment fallback using gemini-3.6-flash Interactions REST payload
   const devKey = import.meta.env.VITE_GEMINI_API_KEY
   if (devKey && !devKey.includes('your-gemini-api-key')) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${devKey}`
@@ -167,12 +176,15 @@ Expected JSON Structure:
 
     if (!response.ok) {
       const errJson = await response.json().catch(() => ({}))
+      if (response.status === 429) {
+        throw new Error('Rate limit exceeded. Please wait a moment before retrying.')
+      }
       throw new Error(`Gemini API Error (${GEMINI_MODEL}): ${errJson.error?.message || response.statusText}`)
     }
 
     const data = await response.json()
     const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!candidateText) throw new Error('Gemini returned an empty payload')
+    if (!candidateText) throw new Error('Gemini returned an empty response payload')
 
     let cleanedText = candidateText.trim()
     if (cleanedText.startsWith('```')) {
@@ -180,11 +192,11 @@ Expected JSON Structure:
     }
 
     const parsed = JSON.parse(cleanedText)
-    const validation = validateVocabResponse(parsed)
+    const validation = validateVocabResponse(parsed, targetCount)
     if (!validation.valid) throw new Error(validation.error)
 
     return validation.words
   }
 
-  throw new Error('Backend vocabulary service unavailable. Configure server proxy or VITE_GEMINI_MODEL.')
+  throw new Error('Backend vocabulary service unavailable. Ensure secure server proxy is configured.')
 }

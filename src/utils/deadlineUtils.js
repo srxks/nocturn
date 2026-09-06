@@ -88,7 +88,7 @@ export const DEADLINE_CONFIG = {
     badgeClass: 'bg-nocturn-accent/15 text-nocturn-accent border-nocturn-accent/30',
     indicatorBg: 'bg-nocturn-accent',
     checkboxHoverBorder: 'hover:border-nocturn-accent',
-    dotClass: 'bg-nocturn-accent shadow-[0_0_8px_rgba(0,230,118,0.6)]',
+    dotClass: 'bg-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.6)]',
   },
   none: {
     status: 'none',

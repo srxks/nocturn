@@ -1,15 +1,27 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ShieldCheck, Timer, CheckSquare, Flame, Check, ChevronLeft, ChevronRight, Calendar, BarChart2 } from 'lucide-react'
+import { ShieldCheck, Timer, CheckSquare, Flame, Check, ChevronLeft, ChevronRight, Calendar, BarChart2, LogOut, RefreshCw, User as UserIcon } from 'lucide-react'
 import { db } from '../db/db'
 import { calculateProductivityStats } from '../services/statsService'
+import { useAuth } from '../context/useAuth'
+import { syncLocalDataToSupabase } from '../services/syncService'
+import { fetchUserFocusSessions } from '../lib/timer'
+import { fetchUserProfileRemote, updateUserProfileRemote } from '../lib/profile'
+import { getStorageItem, setStorageItem } from '../utils/storageUtils'
 
 export default function Profile() {
+  const navigate = useNavigate()
+  const { user, signOut } = useAuth()
+
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState(null)
+
   const [displayName, setDisplayName] = useState(() => {
-    return localStorage.getItem('nocturn_user_name') || 'Nocturn User'
+    return user?.user_metadata?.full_name || getStorageItem('nocturn_user_name', 'Nocturn User')
   })
   const [nameInput, setNameInput] = useState(() => {
-    return localStorage.getItem('nocturn_user_name') || 'Nocturn User'
+    return user?.user_metadata?.full_name || getStorageItem('nocturn_user_name', 'Nocturn User')
   })
   const [isSaved, setIsSaved] = useState(false)
 
@@ -17,36 +29,128 @@ export default function Profile() {
   const [period, setPeriod] = useState('week')
   const [periodOffset, setPeriodOffset] = useState(0)
 
-  // Safe Live Queries for reactive persistence with undefined guards
+  // Safe Live Queries strictly scoped to the authenticated user's ID
   const dbSessions = useLiveQuery(async () => {
     if (!db || !db.pomodoroSessions) return []
+    if (user?.id) {
+      return await db.pomodoroSessions.where('userId').equals(user.id).toArray()
+    }
     return await db.pomodoroSessions.toArray()
-  }, [])
+  }, [user?.id])
 
   const dbTasks = useLiveQuery(async () => {
     if (!db || !db.tasks) return []
+    if (user?.id) {
+      const all = await db.tasks.toArray()
+      return all.filter((t) => t.userId === user.id)
+    }
     return await db.tasks.toArray()
+  }, [user?.id])
+
+  const dbActiveSession = useLiveQuery(async () => {
+    if (!db || !db.activeSessions) return null
+    return await db.activeSessions.get('active')
   }, [])
+
+  // Load remote focus sessions from Supabase on mount / login
+  useEffect(() => {
+    if (!user?.id) return
+    let isMounted = true
+
+    async function loadRemoteSessions() {
+      try {
+        const remoteSessions = await fetchUserFocusSessions(user.id)
+        if (isMounted && Array.isArray(remoteSessions)) {
+          for (const s of remoteSessions) {
+            await db.pomodoroSessions.put({
+              id: s.id,
+              userId: s.user_id,
+              taskId: s.task_id || null,
+              startedAt: s.started_at || s.start_time || s.created_at,
+              completedAt: s.ended_at || s.end_time || s.created_at,
+              duration: Math.round((s.duration_seconds || 1500) / 60),
+              durationSeconds: s.duration_seconds || 1500,
+              sessionType: 'focus',
+              completed: s.completed,
+            })
+          }
+        }
+      } catch (err) {
+        console.warn('[Profile] Failed to fetch remote focus sessions:', err)
+      }
+    }
+
+    loadRemoteSessions()
+
+    return () => {
+      isMounted = false
+    }
+  }, [user?.id])
+
+  // Load and subscribe to remote profile changes
+  useEffect(() => {
+    if (!user?.id) return
+    let isMounted = true
+
+    fetchUserProfileRemote(user.id).then((p) => {
+      if (isMounted && p?.display_name) {
+        setDisplayName(p.display_name)
+        setNameInput(p.display_name)
+        setStorageItem('nocturn_user_name', p.display_name)
+      }
+    })
+
+    const handleProfileUpdated = (e) => {
+      if (e.detail?.display_name) {
+        setDisplayName(e.detail.display_name)
+        setNameInput(e.detail.display_name)
+      }
+    }
+    window.addEventListener('nocturn:profile-updated', handleProfileUpdated)
+
+    return () => {
+      isMounted = false
+      window.removeEventListener('nocturn:profile-updated', handleProfileUpdated)
+    }
+  }, [user?.id])
 
   const sessions = dbSessions || []
   const tasks = dbTasks || []
 
-  const stats = calculateProductivityStats(sessions, tasks, period, periodOffset)
+  const stats = calculateProductivityStats(sessions, tasks, period, periodOffset, dbActiveSession)
 
-  const handleSaveName = (e) => {
+  const handleSaveName = async (e) => {
     e.preventDefault()
     const trimmed = nameInput.trim()
     if (!trimmed) return
 
     setDisplayName(trimmed)
-    localStorage.setItem('nocturn_user_name', trimmed)
+    setStorageItem('nocturn_user_name', trimmed)
     setIsSaved(true)
+
+    if (user?.id) {
+      await updateUserProfileRemote(user.id, { display_name: trimmed })
+    }
+
     setTimeout(() => setIsSaved(false), 2000)
+  }
+
+  const handleSyncData = async () => {
+    if (!user) return
+    setSyncing(true)
+    setSyncResult(null)
+    const result = await syncLocalDataToSupabase(user.id)
+    setSyncing(false)
+    if (result.success) {
+      setSyncResult(`Synced ${result.synced} items to Supabase`)
+    } else {
+      setSyncResult(`Sync notice: ${result.error || 'Check network connection'}`)
+    }
   }
 
   // Get initials for avatar
   const initials =
-    displayName
+    (user?.email || displayName)
       .split(' ')
       .map((word) => word[0])
       .join('')
@@ -61,37 +165,72 @@ export default function Profile() {
           Profile
         </h1>
         <p className="text-xs sm:text-sm text-nocturn-muted">
-          Your productivity profile.
+          Your productivity profile & authentication status.
         </p>
       </header>
 
-      {/* Main Profile Card */}
+      {/* Main Profile & Supabase Auth Card */}
       <div className="nocturn-card p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-nocturn-border">
         <div className="flex items-center gap-4">
           {/* Avatar */}
-          <div className="w-14 h-14 rounded-full bg-nocturn-accent/15 border-2 border-nocturn-accent/40 flex items-center justify-center font-bold text-lg text-nocturn-accent-bright shadow-[0_0_20px_rgba(0,230,118,0.25)] shrink-0">
+          <div className="w-14 h-14 rounded-full bg-nocturn-accent/15 border-2 border-nocturn-accent/40 flex items-center justify-center font-bold text-lg text-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.25)] shrink-0">
             {initials}
           </div>
 
           {/* User Display Info */}
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg sm:text-xl font-bold text-white">{displayName}</h2>
+              <h2 className="text-lg sm:text-xl font-bold text-white">
+                {displayName || user?.user_metadata?.full_name || 'Nocturn User'}
+              </h2>
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-nocturn-accent-bright bg-nocturn-accent/15 px-2 py-0.5 rounded-full border border-nocturn-accent/30">
                 <ShieldCheck className="w-3 h-3 stroke-[2.5]" />
-                Persistent
+                {user ? 'Authenticated' : 'Local Offline Mode'}
               </span>
             </div>
             <p className="text-xs sm:text-sm text-nocturn-muted">
-              Productivity workspace
+              {user ? user.email : 'Guest Mode Workspace'}
             </p>
           </div>
         </div>
 
-        <div className="text-xs text-nocturn-dim font-medium bg-nocturn-surface px-3 py-1.5 rounded-xl border border-nocturn-border">
-          Offline & Cross-Device Ready
+        {/* Action Buttons: Sign In / Sign Out & Sync */}
+        <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+          {user ? (
+            <>
+              <button
+                onClick={handleSyncData}
+                disabled={syncing}
+                className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-nocturn-border transition-colors flex items-center gap-1.5"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                <span>Sync</span>
+              </button>
+              <button
+                onClick={() => signOut()}
+                className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-xs font-semibold border border-rose-500/30 transition-colors flex items-center gap-1.5"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign Out</span>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => navigate('/auth')}
+              className="px-4 py-2 rounded-xl bg-nocturn-accent text-black font-bold text-xs hover:bg-nocturn-accent-bright shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-colors flex items-center gap-1.5"
+            >
+              <UserIcon className="w-3.5 h-3.5" />
+              <span>Sign In / Sign Up</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {syncResult && (
+        <div className="p-3 rounded-2xl bg-nocturn-accent/10 border border-nocturn-accent/30 text-xs text-nocturn-accent font-medium">
+          {syncResult}
+        </div>
+      )}
 
       {/* Editable Name Section */}
       <section className="space-y-3">
@@ -220,26 +359,39 @@ export default function Profile() {
 
         {/* Period Navigation Card */}
         <div className="nocturn-card p-4 sm:p-5 border border-nocturn-border space-y-4">
-          <div className="flex items-center justify-between gap-3 border-b border-nocturn-border pb-3">
+          <div className="flex items-center justify-between gap-2 border-b border-nocturn-border pb-3">
             <button
               type="button"
               onClick={() => setPeriodOffset((prev) => prev - 1)}
-              className="p-1.5 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-white border border-nocturn-border cursor-pointer flex items-center gap-1 text-xs"
+              className="p-1.5 px-2.5 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-white border border-nocturn-border cursor-pointer flex items-center gap-1 text-xs transition-colors"
+              title="View previous period"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Previous</span>
             </button>
 
-            <span className="text-sm font-bold text-white flex items-center gap-2 font-mono">
-              <Calendar className="w-4 h-4 text-nocturn-accent" />
-              <span>{stats.periodLabel}</span>
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-white flex items-center gap-1.5 font-mono">
+                <Calendar className="w-4 h-4 text-nocturn-accent shrink-0" />
+                <span>{stats.periodLabel}</span>
+              </span>
+              {periodOffset !== 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPeriodOffset(0)}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-nocturn-accent/15 text-nocturn-accent border border-nocturn-accent/30 hover:bg-nocturn-accent/25 transition-colors cursor-pointer"
+                >
+                  Current
+                </button>
+              )}
+            </div>
 
             <button
               type="button"
               disabled={periodOffset >= 0}
               onClick={() => setPeriodOffset((prev) => prev + 1)}
-              className="p-1.5 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-white border border-nocturn-border disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 text-xs"
+              className="p-1.5 px-2.5 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-white border border-nocturn-border disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 text-xs transition-colors"
+              title="View next period"
             >
               <span>Next</span>
               <ChevronRight className="w-4 h-4" />
@@ -261,6 +413,12 @@ export default function Profile() {
               </span>
             </div>
           </div>
+
+          {stats.periodSessionsCount === 0 && stats.periodTasksCount === 0 && (
+            <p className="text-center text-xs text-nocturn-muted py-1">
+              No focus activity recorded for this period.
+            </p>
+          )}
         </div>
       </section>
     </div>

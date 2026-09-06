@@ -36,7 +36,7 @@ export default function ScheduleTimeline({
         <div className="flex items-center gap-2 text-xs text-nocturn-accent font-semibold bg-nocturn-surface px-3 py-1.5 rounded-xl border border-nocturn-border">
           <Clock className="w-3.5 h-3.5" />
           <span>
-            {schedule[0]?.startTime} – {schedule[schedule.length - 1]?.startTime}
+            {schedule[0]?.startTime || '09:00'} – {schedule[schedule.length - 1]?.startTime || '17:00'}
           </span>
         </div>
       </div>
@@ -44,9 +44,9 @@ export default function ScheduleTimeline({
       {/* Vertical Timeline List */}
       <div className="relative space-y-3">
         <AnimatePresence initial={false}>
-          {schedule.map((block, index) => (
+          {schedule.filter(Boolean).map((block, index) => (
             <motion.div
-              key={block.id}
+              key={block.id || index}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}

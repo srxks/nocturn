@@ -13,11 +13,11 @@ export default function OnboardingIllustration({ slideIndex }) {
         /* Slide 1: Focus & Pomodoro Illustration */
         <div className="relative w-full h-full flex items-center justify-center">
           {/* Outer glowing track */}
-          <div className="w-56 h-56 sm:w-64 sm:h-64 rounded-full border border-nocturn-accent/25 bg-nocturn-card/60 backdrop-blur-md flex items-center justify-center shadow-[0_0_40px_rgba(0,230,118,0.15)]">
+          <div className="w-56 h-56 sm:w-64 sm:h-64 rounded-full border border-nocturn-accent/25 bg-nocturn-card/60 backdrop-blur-md flex items-center justify-center shadow-[0_0_40px_rgba(var(--color-nocturn-accent-rgb),0.15)]">
             {/* Middle decorative ring */}
             <div className="w-44 h-44 sm:w-48 sm:h-48 rounded-full border border-dashed border-nocturn-accent/40 flex items-center justify-center">
               {/* Inner core circle */}
-              <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-gradient-to-tr from-nocturn-bg via-nocturn-card to-nocturn-accent/20 border border-nocturn-accent/40 flex flex-col items-center justify-center shadow-[0_0_25px_rgba(0,230,118,0.25)]">
+              <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-gradient-to-tr from-nocturn-bg via-nocturn-card to-nocturn-accent/20 border border-nocturn-accent/40 flex flex-col items-center justify-center shadow-[0_0_25px_rgba(var(--color-nocturn-accent-rgb),0.25)]">
                 <Timer className="w-10 h-10 sm:w-12 sm:h-12 text-nocturn-accent-bright mb-1 stroke-[1.8]" />
                 <span className="text-xs font-semibold text-white tracking-widest uppercase">
                   25:00
@@ -47,7 +47,7 @@ export default function OnboardingIllustration({ slideIndex }) {
             <div className="absolute w-48 h-56 rounded-3xl bg-nocturn-card/50 border border-nocturn-border rotate-6 scale-95 transform shadow-lg" />
 
             {/* Front stylized planner card */}
-            <div className="relative w-52 h-60 sm:w-56 sm:h-64 rounded-3xl bg-gradient-to-b from-nocturn-surface via-nocturn-card to-nocturn-bg border border-nocturn-accent/30 p-4 flex flex-col justify-between shadow-[0_15px_35px_rgba(0,0,0,0.9),0_0_25px_rgba(0,230,118,0.15)]">
+            <div className="relative w-52 h-60 sm:w-56 sm:h-64 rounded-3xl bg-gradient-to-b from-nocturn-surface via-nocturn-card to-nocturn-bg border border-nocturn-accent/30 p-4 flex flex-col justify-between shadow-[0_15px_35px_rgba(0,0,0,0.9),0_0_25px_rgba(var(--color-nocturn-accent-rgb),0.15)]">
               {/* Header */}
               <div className="flex items-center justify-between border-b border-nocturn-border pb-2.5">
                 <div className="flex items-center gap-2">

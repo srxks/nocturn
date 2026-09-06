@@ -17,7 +17,7 @@ export default function OnboardingIndicator({ totalSlides, currentSlide, onSelec
             onClick={() => onSelectSlide(index)}
             className={`h-2 rounded-full transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent focus-visible:ring-offset-2 focus-visible:ring-offset-nocturn-bg cursor-pointer ${
               isActive
-                ? 'w-8 bg-nocturn-accent shadow-[0_0_12px_rgba(0,230,118,0.6)]'
+                ? 'w-8 bg-nocturn-accent shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.6)]'
                 : 'w-2 bg-white/20 hover:bg-white/40'
             }`}
           />

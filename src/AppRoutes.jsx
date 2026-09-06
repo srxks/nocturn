@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
 import Onboarding from './pages/Onboarding'
+import Auth from './pages/Auth'
 import Tasks from './pages/Tasks'
 import Timer from './pages/Timer'
 import TimerSettings from './pages/TimerSettings'
@@ -12,6 +13,7 @@ import Vocab from './pages/Vocab'
 import VocabLearn from './pages/VocabLearn'
 import VocabReview from './pages/VocabReview'
 import VocabList from './pages/VocabList'
+import ProtectedRoute from './components/auth/ProtectedRoute'
 
 function AppRoutes() {
   return (
@@ -19,11 +21,18 @@ function AppRoutes() {
       {/* Root redirects to /onboarding */}
       <Route path="/" element={<Navigate to="/onboarding" replace />} />
 
-      {/* Standalone Onboarding route without AppShell / BottomNav */}
+      {/* Standalone Onboarding & Auth routes */}
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/auth" element={<Auth />} />
 
-      {/* Core app routes wrapped in AppShell with BottomNav / SidebarNav */}
-      <Route element={<AppShell />}>
+      {/* Core app routes wrapped in AppShell with ProtectedRoute */}
+      <Route
+        element={
+          <ProtectedRoute>
+            <AppShell />
+          </ProtectedRoute>
+        }
+      >
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/timer" element={<Timer />} />

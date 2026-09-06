@@ -25,7 +25,7 @@ export default function PlanButton({
         type="button"
         onClick={onClick}
         disabled={disabled || isGenerating}
-        className="w-full sm:w-auto nocturn-btn-primary py-2.5 px-5 sm:px-6 text-xs sm:text-sm font-semibold shadow-[0_0_24px_rgba(0,230,118,0.35)] hover:shadow-[0_0_32px_rgba(0,230,118,0.5)] disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all duration-200"
+        className="w-full sm:w-auto nocturn-btn-primary py-2.5 px-5 sm:px-6 text-xs sm:text-sm font-semibold shadow-[0_0_24px_rgba(var(--color-nocturn-accent-rgb),0.35)] hover:shadow-[0_0_32px_rgba(var(--color-nocturn-accent-rgb),0.5)] disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all duration-200"
       >
         {isGenerating ? (
           <>

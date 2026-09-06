@@ -1,12 +1,10 @@
 import { db } from '../db/db'
-import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
+import { recordPomodoroHistoryRemote } from '../lib/timer'
 
 /**
- * Timer & Pomodoro Session Service
- * Manages timer settings, timestamp-based active session persistence (cross-device ready via Supabase + local Dexie cache),
- * and completed Pomodoro session statistics logging.
+ * Retrieves timer settings from local Dexie IndexedDB
  */
-
 export async function getTimerSettings() {
   try {
     const settings = await db.timerSettings.get('default')
@@ -44,7 +42,7 @@ export async function saveTimerSettings(newSettings) {
 }
 
 /**
- * Persist or update an active focus/break session to both local Dexie cache and Supabase (when configured).
+ * Persist or update active focus session to Dexie local cache.
  */
 export async function recordActiveSession(sessionObj) {
   try {
@@ -55,45 +53,31 @@ export async function recordActiveSession(sessionObj) {
       userId: sessionObj.userId || null,
       taskId: sessionObj.taskId || null,
       taskName: sessionObj.taskName || '',
-      sessionType: sessionObj.sessionType || 'focus', // 'focus' | 'short_break' | 'long_break'
-      configuredDuration: Number(sessionObj.configuredDuration) || 25,
+      sessionType: sessionObj.sessionType || 'focus',
+      configuredDuration: Number.isFinite(Number(sessionObj.configuredDuration)) && Number(sessionObj.configuredDuration) > 0
+        ? Number(sessionObj.configuredDuration)
+        : 25,
       startedAt: sessionObj.startedAt || now,
       expectedEndAt: sessionObj.expectedEndAt || now,
       pausedAt: sessionObj.pausedAt || null,
-      remainingSecondsWhenPaused: sessionObj.remainingSecondsWhenPaused !== undefined ? sessionObj.remainingSecondsWhenPaused : null,
-      status: sessionObj.status || 'active', // 'active' | 'paused' | 'completed' | 'cancelled'
-      currentSession: Number(sessionObj.currentSession) || 1,
+      remainingSecondsWhenPaused:
+        Number.isFinite(Number(sessionObj.remainingSecondsWhenPaused)) && Number(sessionObj.remainingSecondsWhenPaused) >= 0
+          ? Number(sessionObj.remainingSecondsWhenPaused)
+          : null,
+      elapsedSeconds:
+        Number.isFinite(Number(sessionObj.elapsedSeconds)) && Number(sessionObj.elapsedSeconds) >= 0
+          ? Number(sessionObj.elapsedSeconds)
+          : 0,
+      canonicalStartTime: sessionObj.canonicalStartTime || null,
+      status: sessionObj.status || 'active',
+      currentSession: Number.isFinite(Number(sessionObj.currentSession)) && Number(sessionObj.currentSession) > 0
+        ? Number(sessionObj.currentSession)
+        : 1,
       createdAt: sessionObj.createdAt || now,
       updatedAt: now,
     }
 
-    // 1. Save to local Dexie cache
     await db.activeSessions.put(activeData)
-
-    // 2. Sync to Supabase if configured and online
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.from('active_sessions').upsert({
-          id: activeData.id,
-          session_id: activeData.session_id,
-          user_id: activeData.userId,
-          task_id: activeData.taskId,
-          task_name: activeData.taskName,
-          session_type: activeData.sessionType,
-          configured_duration: activeData.configuredDuration,
-          started_at: activeData.startedAt,
-          expected_end_at: activeData.expectedEndAt,
-          paused_at: activeData.pausedAt,
-          remaining_seconds_when_paused: activeData.remainingSecondsWhenPaused,
-          status: activeData.status,
-          current_session: activeData.currentSession,
-          updated_at: activeData.updatedAt,
-        })
-      } catch (sbErr) {
-        console.warn('Supabase active_session sync failed (using local cache):', sbErr)
-      }
-    }
-
     return activeData
   } catch (err) {
     console.error('timerService.recordActiveSession failed:', err)
@@ -102,44 +86,30 @@ export async function recordActiveSession(sessionObj) {
 }
 
 /**
- * Retrieve active session from Supabase (or local Dexie fallback).
+ * Retrieve active session from local Dexie.
  */
 export async function getActiveSession() {
   try {
-    // 1. Try fetching from Supabase if configured
-    if (isSupabaseConfigured) {
-      try {
-        const { data, error } = await supabase
-          .from('active_sessions')
-          .select('*')
-          .eq('id', 'active')
-          .maybeSingle()
+    const active = await db.activeSessions.get('active')
+    if (!active) return null
 
-        if (data && !error) {
-          return {
-            id: data.id,
-            sessionId: data.session_id,
-            userId: data.user_id,
-            taskId: data.task_id,
-            taskName: data.task_name,
-            sessionType: data.session_type,
-            configuredDuration: data.configured_duration,
-            startedAt: data.started_at,
-            expectedEndAt: data.expected_end_at,
-            pausedAt: data.paused_at,
-            remainingSecondsWhenPaused: data.remaining_seconds_when_paused,
-            status: data.status,
-            currentSession: data.current_session,
-            updatedAt: data.updated_at,
-          }
-        }
-      } catch (sbErr) {
-        console.warn('Supabase fetch active_session failed (falling back to Dexie):', sbErr)
-      }
+    return {
+      ...active,
+      configuredDuration: Number.isFinite(Number(active.configuredDuration)) && Number(active.configuredDuration) > 0
+        ? Number(active.configuredDuration)
+        : 25,
+      currentSession: Number.isFinite(Number(active.currentSession)) && Number(active.currentSession) > 0
+        ? Number(active.currentSession)
+        : 1,
+      remainingSecondsWhenPaused:
+        Number.isFinite(Number(active.remainingSecondsWhenPaused)) && Number(active.remainingSecondsWhenPaused) >= 0
+          ? Number(active.remainingSecondsWhenPaused)
+          : null,
+      elapsedSeconds:
+        Number.isFinite(Number(active.elapsedSeconds)) && Number(active.elapsedSeconds) >= 0
+          ? Number(active.elapsedSeconds)
+          : 0,
     }
-
-    // 2. Fallback to local Dexie database
-    return await db.activeSessions.get('active')
   } catch (err) {
     console.error('timerService.getActiveSession failed:', err)
     return null
@@ -147,66 +117,64 @@ export async function getActiveSession() {
 }
 
 /**
- * Clear/complete active session in Dexie and Supabase.
+ * Clear active session in Dexie.
  */
 export async function clearActiveSession() {
   try {
     await db.activeSessions.delete('active')
-
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.from('active_sessions').delete().eq('id', 'active')
-      } catch (sbErr) {
-        console.warn('Supabase clear active_session failed:', sbErr)
-      }
-    }
   } catch (err) {
     console.error('timerService.clearActiveSession failed:', err)
   }
 }
 
 /**
- * Record a completed focus session into persistent history database.
+ * Record a completed focus session in Dexie and Supabase.
  */
 export async function recordPomodoroSession({
   taskId = null,
   duration = 25,
+  durationSeconds = null,
   sessionType = 'focus',
   startedAt = null,
+  taskTitle = '',
+  sessionId = null,
+  completed = true,
 }) {
   try {
     const now = new Date()
-    const session = {
-      id: `pomo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    const validDurationSeconds =
+      Number.isFinite(Number(durationSeconds)) && Number(durationSeconds) > 0
+        ? Math.round(Number(durationSeconds))
+        : Math.round((Number(duration) || 25) * 60)
+    const validDurationMinutes = Math.round((validDurationSeconds / 60) * 10) / 10
+
+    let sessionUserId = null
+    if (isSupabaseConfigured && supabase) {
+      const { data: { session } } = await supabase.auth.getSession()
+      sessionUserId = session?.user?.id || null
+    }
+
+    const sessionRecordId = sessionId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
+
+    const sessionObj = {
+      id: sessionRecordId,
+      userId: sessionUserId,
       taskId,
-      userId: null, // Ready for future backend auth
-      startedAt: startedAt || new Date(now.getTime() - duration * 60 * 1000).toISOString(),
+      startedAt: startedAt || new Date(now.getTime() - validDurationSeconds * 1000).toISOString(),
       completedAt: now.toISOString(),
-      duration: Number(duration) || 25,
+      duration: validDurationMinutes,
+      durationSeconds: validDurationSeconds,
       sessionType,
+      completed,
     }
 
-    // Save to local Dexie table
-    await db.pomodoroSessions.add(session)
+    await db.pomodoroSessions.put(sessionObj)
 
-    // Sync to Supabase if configured
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.from('pomodoro_sessions').insert({
-          id: session.id,
-          task_id: session.taskId,
-          user_id: session.userId,
-          started_at: session.startedAt,
-          completed_at: session.completedAt,
-          duration: session.duration,
-          session_type: session.sessionType,
-        })
-      } catch (sbErr) {
-        console.warn('Supabase record pomodoro_session failed (saved to Dexie):', sbErr)
-      }
+    if (sessionUserId) {
+      await recordPomodoroHistoryRemote(validDurationMinutes, sessionType, taskId, taskTitle, sessionUserId, sessionId)
     }
 
-    return session
+    return sessionObj
   } catch (err) {
     console.error('timerService.recordPomodoroSession failed:', err)
     return null
@@ -215,25 +183,6 @@ export async function recordPomodoroSession({
 
 export async function getPomodoroSessions() {
   try {
-    if (isSupabaseConfigured) {
-      try {
-        const { data, error } = await supabase.from('pomodoro_sessions').select('*')
-        if (data && !error && data.length > 0) {
-          return data.map((d) => ({
-            id: d.id,
-            taskId: d.task_id,
-            userId: d.user_id,
-            startedAt: d.started_at,
-            completedAt: d.completed_at,
-            duration: d.duration,
-            sessionType: d.session_type,
-          }))
-        }
-      } catch (sbErr) {
-        console.warn('Supabase fetch pomodoro_sessions failed (using Dexie):', sbErr)
-      }
-    }
-
     return await db.pomodoroSessions.toArray()
   } catch (err) {
     console.error('timerService.getPomodoroSessions failed:', err)

@@ -9,13 +9,17 @@ export default function TimerRing({
   const radius = (size - strokeWidth * 2) / 2
   const circumference = 2 * Math.PI * radius
 
+  // Safely normalize remainingSeconds and totalSeconds
+  const validRemaining = typeof remainingSeconds === 'number' && !isNaN(remainingSeconds) && isFinite(remainingSeconds) && remainingSeconds >= 0 ? remainingSeconds : 0
+  const validTotal = typeof totalSeconds === 'number' && !isNaN(totalSeconds) && isFinite(totalSeconds) && totalSeconds > 0 ? totalSeconds : 1500
+
   // Calculate progress ratio (1.0 down to 0.0)
-  const progressRatio = totalSeconds > 0 ? remainingSeconds / totalSeconds : 0
+  const progressRatio = validTotal > 0 ? validRemaining / validTotal : 0
   const strokeDashoffset = circumference * (1 - progressRatio)
 
-  // Format MM:SS
-  const minutes = Math.floor(remainingSeconds / 60)
-  const seconds = remainingSeconds % 60
+  // Format MM:SS safely
+  const minutes = Math.floor(validRemaining / 60)
+  const seconds = Math.floor(validRemaining % 60)
   const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 
   return (
@@ -34,9 +38,9 @@ export default function TimerRing({
         aria-hidden="true"
       >
         <defs>
-          <linearGradient id="greenTimerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#69F0AE" />
-            <stop offset="100%" stopColor="#00E676" />
+          <linearGradient id="timerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="var(--color-nocturn-accent-bright, #69F0AE)" />
+            <stop offset="100%" stopColor="var(--color-nocturn-accent, #00E676)" />
           </linearGradient>
           <filter id="timerGlow" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="4" result="blur" />
@@ -50,7 +54,7 @@ export default function TimerRing({
           cy={size / 2}
           r={radius}
           fill="transparent"
-          stroke="#101A13"
+          stroke="var(--color-nocturn-border, #18261C)"
           strokeWidth={strokeWidth}
           className="opacity-80"
         />
@@ -61,7 +65,7 @@ export default function TimerRing({
           cy={size / 2}
           r={radius}
           fill="transparent"
-          stroke="url(#greenTimerGradient)"
+          stroke="url(#timerGradient)"
           strokeWidth={strokeWidth}
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
@@ -76,7 +80,7 @@ export default function TimerRing({
         <span
           aria-live="polite"
           aria-label={`Time remaining: ${formattedTime}`}
-          className="text-5xl sm:text-6xl font-bold tracking-tight text-white font-mono drop-shadow-[0_0_15px_rgba(0,230,118,0.2)]"
+          className="text-5xl sm:text-6xl font-bold tracking-tight text-white font-mono drop-shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.25)]"
         >
           {formattedTime}
         </span>

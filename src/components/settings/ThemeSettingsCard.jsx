@@ -173,7 +173,7 @@ export default function ThemeSettingsCard() {
                 onClick={() => applyTheme(preset)}
                 className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between gap-3 transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_16px_rgba(0,230,118,0.2)] ring-1 ring-nocturn-accent'
+                    ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_16px_rgba(var(--color-nocturn-accent-rgb),0.2)] ring-1 ring-nocturn-accent'
                     : 'bg-nocturn-surface/50 border-nocturn-border/80 hover:border-nocturn-accent/35'
                 }`}
               >
@@ -232,7 +232,7 @@ export default function ThemeSettingsCard() {
                     transition={{ duration: 0.15 }}
                     className={`p-3.5 rounded-2xl border flex flex-col justify-between gap-3 transition-all ${
                       isActive
-                        ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_16px_rgba(0,230,118,0.2)]'
+                        ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_16px_rgba(var(--color-nocturn-accent-rgb),0.2)]'
                         : 'bg-nocturn-surface/50 border-nocturn-border/80'
                     }`}
                   >

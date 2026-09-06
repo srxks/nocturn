@@ -56,7 +56,7 @@ export default function TaskItem({ task, onToggleComplete, onEditTask, onDeleteT
           onClick={() => onToggleComplete(task.id)}
           className={`shrink-0 w-6 h-6 rounded-lg border flex items-center justify-center transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent ${
             task.completed
-              ? 'bg-nocturn-accent border-nocturn-accent text-black shadow-[0_0_10px_rgba(0,230,118,0.5)]'
+              ? 'bg-nocturn-accent border-nocturn-accent text-black shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.5)]'
               : 'border-nocturn-muted/40 hover:border-nocturn-accent bg-nocturn-surface/50 text-transparent'
           }`}
         >
@@ -93,16 +93,33 @@ export default function TaskItem({ task, onToggleComplete, onEditTask, onDeleteT
             </button>
           </div>
         ) : (
-          <span
+          <div
             onClick={() => onToggleComplete(task.id)}
-            className={`text-sm sm:text-base break-words cursor-pointer select-none transition-all duration-200 ${
-              task.completed
-                ? 'line-through text-nocturn-dim font-normal'
-                : 'text-white font-medium'
-            }`}
+            className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer select-none"
           >
-            {task.title}
-          </span>
+            <span
+              className={`text-sm sm:text-base break-words transition-all duration-200 ${
+                task.completed
+                  ? 'line-through text-nocturn-dim font-normal'
+                  : 'text-white font-medium'
+              }`}
+            >
+              {task.title}
+            </span>
+            {task.priority && (
+              <span
+                className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-md border font-medium capitalize shrink-0 ${
+                  task.priority === 'high'
+                    ? 'text-rose-400 bg-rose-500/10 border-rose-500/25'
+                    : task.priority === 'low'
+                    ? 'text-blue-400 bg-blue-500/10 border-blue-500/25'
+                    : 'text-amber-400 bg-amber-500/10 border-amber-500/25'
+                }`}
+              >
+                {task.priority === 'high' ? 'High' : task.priority === 'low' ? 'Low' : 'Medium'}
+              </span>
+            )}
+          </div>
         )}
       </div>
 

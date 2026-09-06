@@ -5,7 +5,7 @@ export default function TimerSettingsRow({
   label,
   value,
   unit = 'min',
-  min,
+  min = 1,
   max,
   onChange,
   onDecrease,
@@ -34,7 +34,7 @@ export default function TimerSettingsRow({
       setInputValue(raw)
       const num = parseInt(raw, 10)
       if (!isNaN(num)) {
-        const clamped = Math.min(max, Math.max(min, num))
+        const clamped = Math.max(min, max != null ? Math.min(max, num) : num)
         onChange(clamped)
       }
     }
@@ -46,14 +46,14 @@ export default function TimerSettingsRow({
       onChange(value)
     } else {
       const num = parseInt(inputValue, 10)
-      const clamped = Math.min(max, Math.max(min, num))
+      const clamped = Math.max(min, max != null ? Math.min(max, num) : num)
       setInputValue(String(clamped))
       onChange(clamped)
     }
   }
 
   const isMin = value <= min
-  const isMax = value >= max
+  const isMax = max != null && value >= max
 
   return (
     <div className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-nocturn-card border border-nocturn-border hover:border-nocturn-accent/30 transition-all duration-200 shadow-md shadow-black/40">
@@ -62,7 +62,7 @@ export default function TimerSettingsRow({
           {label}
         </span>
         <span className="text-xs text-nocturn-muted font-normal block">
-          Range: {min}–{max} {unit}
+          {max != null && max < 999 ? `Range: ${min}–${max} ${unit}` : `Min: ${min} ${unit}`}
         </span>
       </div>
 

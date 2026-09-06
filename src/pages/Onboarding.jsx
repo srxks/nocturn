@@ -81,7 +81,7 @@ export default function Onboarding() {
         <button
           type="button"
           onClick={handleNext}
-          className="w-full nocturn-btn-primary py-3.5 text-base font-semibold shadow-[0_4px_20px_rgba(0,230,118,0.35)] cursor-pointer"
+          className="w-full nocturn-btn-primary py-3.5 text-base font-semibold shadow-[0_4px_20px_rgba(var(--color-nocturn-accent-rgb),0.35)] cursor-pointer"
         >
           {currentSlide === SLIDES.length - 1 ? 'Get Started' : 'Next'}
         </button>

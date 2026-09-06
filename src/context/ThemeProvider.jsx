@@ -3,11 +3,71 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, ensureSeedData } from '../db/db'
 import { ThemeContext } from './ThemeContext'
 import { DEFAULT_NOCTURN_THEME, PRESET_THEMES } from '../constants/presetThemes'
+import { useAuth } from './useAuth'
+import {
+  fetchUserSettings,
+  upsertUserSettings,
+  fetchUserThemes,
+  upsertUserThemeRemote,
+  deleteUserThemeRemote,
+} from '../lib/themes'
+import { isRealtimeWrite } from '../services/realtimeService'
+
+function hexToRgb(hex) {
+  if (!hex) return '0, 230, 118'
+  let clean = hex.replace('#', '').trim()
+  if (clean.length === 3) {
+    clean = clean.split('').map((c) => c + c).join('')
+  }
+  const num = parseInt(clean, 16)
+  if (isNaN(num)) return '0, 230, 118'
+  const r = (num >> 16) & 255
+  const g = (num >> 8) & 255
+  const b = num & 255
+  return `${r}, ${g}, ${b}`
+}
 
 export function ThemeProvider({ children }) {
+  const { user } = useAuth()
+
   useEffect(() => {
     ensureSeedData()
   }, [])
+
+  // Sync settings and themes from Supabase when user logs in or switches account
+  useEffect(() => {
+    if (!user?.id) return
+
+    async function loadRemoteThemesAndSettings() {
+      try {
+        const [remoteSettings, remoteThemes] = await Promise.all([
+          fetchUserSettings(user.id),
+          fetchUserThemes(user.id),
+        ])
+
+        // First populate remote themes in Dexie so activeTheme lookup resolves cleanly
+        if (remoteThemes && remoteThemes.length > 0) {
+          for (const theme of remoteThemes) {
+            await db.themes.put(theme)
+          }
+        }
+
+        // Restore active theme setting (supports both camelCase and snake_case)
+        const activeId = remoteSettings?.activeThemeId || remoteSettings?.active_theme_id
+        if (activeId) {
+          await db.themeSettings.put({
+            id: 'active',
+            activeThemeId: activeId,
+            customColors: remoteSettings?.customColors || null,
+          })
+        }
+      } catch (err) {
+        console.warn('[ThemeProvider] Error loading remote themes/settings:', err)
+      }
+    }
+
+    loadRemoteThemesAndSettings()
+  }, [user?.id])
 
   // Dexie live queries for themes and active theme settings
   const dbThemes = useLiveQuery(async () => {
@@ -27,7 +87,7 @@ export function ThemeProvider({ children }) {
   const activeThemeId = activeThemeSetting?.activeThemeId || DEFAULT_NOCTURN_THEME.id
   let activeTheme = allThemes.find((t) => t.id === activeThemeId) || DEFAULT_NOCTURN_THEME
 
-  // If custom colors were temporarily applied
+  // If custom colors were temporarily applied (live preview)
   if (activeThemeSetting?.customColors) {
     activeTheme = {
       ...activeTheme,
@@ -38,13 +98,15 @@ export function ThemeProvider({ children }) {
     }
   }
 
-  // Apply CSS variables dynamically to document root
+  // Apply CSS variables dynamically to document root whenever active theme changes
   useEffect(() => {
     if (!activeTheme || !activeTheme.colors) return
 
     const root = document.documentElement
     const c = activeTheme.colors
+    const accentRgb = hexToRgb(c.accent)
 
+    root.style.setProperty('--color-nocturn-accent-rgb', accentRgb)
     root.style.setProperty('--color-nocturn-bg', c.background)
     root.style.setProperty('--color-nocturn-card', c.surface)
     root.style.setProperty('--color-nocturn-surface', c.elevated)
@@ -59,16 +121,22 @@ export function ThemeProvider({ children }) {
     root.style.setProperty('--color-future', c.future || c.accent || '#00E676')
   }, [activeTheme])
 
-  // 1. Apply Theme
+  // 1. Apply Theme — changes theme immediately locally, then persists to Supabase
   const applyTheme = async (themeObj) => {
+    if (!themeObj?.id) return
+
     await db.themeSettings.put({
       id: 'active',
       activeThemeId: themeObj.id,
       customColors: null,
     })
+
+    if (user?.id && !isRealtimeWrite()) {
+      await upsertUserSettings(user.id, { activeThemeId: themeObj.id })
+    }
   }
 
-  // 2. Preview Custom Colors in Live Realtime without persisting immediately
+  // 2. Preview Custom Colors without saving immediately
   const previewCustomColors = async (customColors) => {
     await db.themeSettings.put({
       id: 'active',
@@ -80,41 +148,82 @@ export function ThemeProvider({ children }) {
   // 3. Save Custom Theme (Create or Update)
   const saveCustomTheme = async (name, colors, existingId = null) => {
     const now = new Date().toISOString()
+    const trimmedName = (name || '').trim()
+    if (!trimmedName) return null
 
+    // Updating an existing theme by ID
     if (existingId && !existingId.startsWith('preset-')) {
+      const updatedTheme = {
+        id: existingId,
+        userId: user?.id || null,
+        name: trimmedName,
+        isPreset: false,
+        colors,
+        updatedAt: now,
+      }
       await db.themes.update(existingId, {
-        name,
+        name: trimmedName,
         colors,
         updatedAt: now,
       })
-      await applyTheme({ id: existingId, name, colors })
+      await applyTheme(updatedTheme)
+
+      if (user?.id && !isRealtimeWrite()) {
+        const savedRemote = await upsertUserThemeRemote(updatedTheme, user.id)
+        if (savedRemote && savedRemote.id !== existingId) {
+          await db.themes.delete(existingId)
+          await db.themes.put(savedRemote)
+          await applyTheme(savedRemote)
+          return savedRemote.id
+        }
+      }
       return existingId
     }
 
-    const newId = `theme-custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    const newTheme = {
-      id: newId,
-      name,
+    // Creating new theme: check if a custom theme with this name already exists in Dexie
+    const allCurrentThemes = await db.themes.toArray()
+    const existingByName = allCurrentThemes.find(
+      (t) => !t.isPreset && t.name.toLowerCase() === trimmedName.toLowerCase()
+    )
+
+    const targetId = existingByName ? existingByName.id : crypto.randomUUID()
+    const themeRecord = {
+      id: targetId,
+      name: trimmedName,
       isPreset: false,
-      userId: null, // Ready for future backend sync
+      userId: user?.id || null,
       colors,
-      createdAt: now,
+      createdAt: existingByName?.createdAt || now,
       updatedAt: now,
     }
 
-    await db.themes.add(newTheme)
-    await applyTheme(newTheme)
-    return newId
+    await db.themes.put(themeRecord)
+    await applyTheme(themeRecord)
+
+    if (user?.id && !isRealtimeWrite()) {
+      const savedRemote = await upsertUserThemeRemote(themeRecord, user.id)
+      if (savedRemote && savedRemote.id !== targetId) {
+        await db.themes.delete(targetId)
+        await db.themes.put(savedRemote)
+        await applyTheme(savedRemote)
+        return savedRemote.id
+      }
+    }
+    return targetId
   }
 
   // 4. Delete Saved Theme
   const deleteSavedTheme = async (themeId) => {
     const target = await db.themes.get(themeId)
-    if (!target || target.isPreset) return // Prevent deleting built-in presets
+    if (!target || target.isPreset) return
 
     await db.themes.delete(themeId)
 
-    // If deleting active theme, fall back to Nocturn Green
+    if (user?.id && !isRealtimeWrite()) {
+      await deleteUserThemeRemote(themeId, user.id)
+    }
+
+    // If deleting active theme, fall back to default Nocturn Green
     if (activeTheme.id === themeId) {
       await applyTheme(DEFAULT_NOCTURN_THEME)
     }

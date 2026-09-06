@@ -5,7 +5,7 @@ export default function ProfileCard() {
     <div className="nocturn-card p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-nocturn-border">
       <div className="flex items-center gap-4">
         {/* Avatar Placeholder */}
-        <div className="w-14 h-14 rounded-full bg-nocturn-accent/15 border-2 border-nocturn-accent/40 flex items-center justify-center text-nocturn-accent-bright shadow-[0_0_20px_rgba(0,230,118,0.25)] shrink-0">
+        <div className="w-14 h-14 rounded-full bg-nocturn-accent/15 border-2 border-nocturn-accent/40 flex items-center justify-center text-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.25)] shrink-0">
           <User className="w-7 h-7 stroke-[2]" />
         </div>
 

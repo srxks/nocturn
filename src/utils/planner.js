@@ -199,13 +199,14 @@ export function generateSmartSchedule(
  * Recalculate schedule timings sequentially when blocks are edited or reordered.
  */
 export function recalculateScheduleTimings(schedule) {
-  if (!schedule || schedule.length === 0) return []
-  let currentMinutes = timeStringToMinutes(schedule[0].startTime)
+  if (!Array.isArray(schedule) || schedule.length === 0) return []
+  let currentMinutes = timeStringToMinutes(schedule[0]?.startTime || '09:00')
 
   return schedule.map((block) => {
+    if (!block) return block
     const startTime = minutesToTimeString(currentMinutes)
     const updated = { ...block, startTime }
-    currentMinutes += block.duration
+    currentMinutes += Number(block.duration) || 30
     return updated
   })
 }
