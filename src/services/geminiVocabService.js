@@ -9,8 +9,8 @@
 
 import { supabase } from '../lib/supabase'
 
-// Mandatory default model: gemini-3.6-flash (configurable via env if specified)
-export const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-3.6-flash'
+// Mandatory default model: gemini-3.6-flash
+export const GEMINI_MODEL = 'gemini-3.6-flash'
 
 /**
  * Validates structured vocabulary words returned by Gemini.
@@ -137,7 +137,7 @@ Expected JSON Structure:
   }
 
   // 2. Call secure server-side API proxy endpoint
-  const apiEndpoint = import.meta.env.VITE_GEMINI_API_ENDPOINT || '/api/generate-vocab'
+  const apiEndpoint = '/api/generate-vocab'
 
   try {
     const response = await fetch(apiEndpoint, {
@@ -158,45 +158,10 @@ Expected JSON Structure:
       if (validation.valid) return validation.words
     }
   } catch {
-    // Continue to dev fallback
+    // Edge function / server proxy unavailable
   }
 
-  // 3. Dev environment fallback using gemini-3.6-flash Interactions REST payload
-  const devKey = import.meta.env.VITE_GEMINI_API_KEY
-  if (devKey && !devKey.includes('your-gemini-api-key')) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${devKey}`
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptText }] }],
-        generationConfig: { temperature: 0.7, responseMimeType: 'application/json' },
-      }),
-    })
-
-    if (!response.ok) {
-      const errJson = await response.json().catch(() => ({}))
-      if (response.status === 429) {
-        throw new Error('Rate limit exceeded. Please wait a moment before retrying.')
-      }
-      throw new Error(`Gemini API Error (${GEMINI_MODEL}): ${errJson.error?.message || response.statusText}`)
-    }
-
-    const data = await response.json()
-    const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!candidateText) throw new Error('Gemini returned an empty response payload')
-
-    let cleanedText = candidateText.trim()
-    if (cleanedText.startsWith('```')) {
-      cleanedText = cleanedText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-    }
-
-    const parsed = JSON.parse(cleanedText)
-    const validation = validateVocabResponse(parsed, targetCount)
-    if (!validation.valid) throw new Error(validation.error)
-
-    return validation.words
-  }
-
-  throw new Error('Backend vocabulary service unavailable. Ensure secure server proxy is configured.')
+  throw new Error(
+    'Vocabulary generation service unavailable. Ensure the Supabase Edge Function (generate-vocab) is deployed and configured with GEMINI_API_KEY.'
+  )
 }

@@ -1,7 +1,6 @@
 import { supabase } from '../lib/supabase.js'
 
-export const GEMINI_MODEL =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_MODEL) || 'gemini-1.5-flash'
+export const GEMINI_MODEL = 'gemini-3.6-flash'
 
 /**
  * Validates and normalizes Gemini Plan My Day response structure.
@@ -357,7 +356,7 @@ Return ONLY a valid JSON object with keys:
   }
 
   // 2. Call backend proxy endpoint /api/plan-day
-  const apiEndpoint = import.meta.env.VITE_PLANNER_API_ENDPOINT || '/api/plan-day'
+  const apiEndpoint = '/api/plan-day'
   try {
     const response = await fetch(apiEndpoint, {
       method: 'POST',
@@ -377,39 +376,9 @@ Return ONLY a valid JSON object with keys:
       if (validation.valid) return validation.plan
     }
   } catch {
-    // Continue to dev fallback
+    // Edge function / server proxy unavailable
   }
 
-  // 3. Dev environment fallback using Gemini REST API directly
-  const devKey = import.meta.env.VITE_GEMINI_API_KEY
-  if (devKey && !devKey.includes('your-gemini-api-key')) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${devKey}`
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }] }],
-          generationConfig: { temperature: 0.7, responseMimeType: 'application/json' },
-        }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
-        let cleaned = (text || '').trim()
-        if (cleaned.startsWith('```')) {
-          cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-        }
-        const parsed = JSON.parse(cleaned)
-        const validation = validatePlanResponse(parsed)
-        if (validation.valid) return validation.plan
-      }
-    } catch {
-      // Fall through to offline plan
-    }
-  }
-
-  // 4. Fallback to intelligent rule-based offline plan
+  // 3. Fallback to intelligent rule-based offline plan
   return generateOfflinePlan(userPrompt, existingTasks, currentTime)
 }

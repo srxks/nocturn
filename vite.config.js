@@ -34,9 +34,7 @@ function vocabDevApiPlugin(env) {
                   ? 'gemini-3.6-flash'
                   : rawModel
               const apiKey =
-                env.VITE_GEMINI_API_KEY ||
                 env.GEMINI_API_KEY ||
-                process.env.VITE_GEMINI_API_KEY ||
                 process.env.GEMINI_API_KEY
 
               if (!apiKey || apiKey.includes('your-gemini-api-key')) {
@@ -118,9 +116,7 @@ function vocabDevApiPlugin(env) {
                   ? 'gemini-3.6-flash'
                   : rawModel
               const apiKey =
-                env.VITE_GEMINI_API_KEY ||
                 env.GEMINI_API_KEY ||
-                process.env.VITE_GEMINI_API_KEY ||
                 process.env.GEMINI_API_KEY
 
               if (!apiKey || apiKey.includes('your-gemini-api-key')) {

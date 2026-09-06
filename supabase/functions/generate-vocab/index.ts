@@ -27,7 +27,7 @@ serve(async (req) => {
       })
     }
 
-    const apiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('VITE_GEMINI_API_KEY')
+    const apiKey = Deno.env.get('GEMINI_API_KEY')
     if (!apiKey) {
       return new Response(
         JSON.stringify({
