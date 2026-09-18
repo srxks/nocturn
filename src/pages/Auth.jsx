@@ -141,7 +141,7 @@ export default function Auth() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {isSignUp && (
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-nocturn-muted">Full Name</label>
+              <label className="text-xs font-semibold text-nocturn-muted">Display Name</label>
               <div className="relative">
                 <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-nocturn-muted" />
                 <input

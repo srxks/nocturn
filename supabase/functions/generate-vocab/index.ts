@@ -114,6 +114,11 @@ Return ONLY a valid JSON array containing exactly ${targetCount} objects with ke
       cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
     }
 
+    const arrayMatch = cleaned.match(/\[[\s\S]*\]/)
+    if (arrayMatch) {
+      cleaned = arrayMatch[0]
+    }
+
     const words = JSON.parse(cleaned)
     if (!Array.isArray(words)) {
       return new Response(

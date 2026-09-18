@@ -60,19 +60,48 @@ export function TimerSessionProvider({ children }) {
   const [remainingSeconds, setRemainingSeconds] = useState(() => targetDurationForMode)
   const [totalSeconds, setTotalSeconds] = useState(() => targetDurationForMode)
 
-  // Render-phase state adjustment only when mode changes or settings change while idle
-  if (
-    mode !== prevMode ||
-    (!isRunning && !isPaused && !activeSession && targetDurationForMode !== prevTargetDuration)
-  ) {
+  // Render-phase state adjustment when mode changes or settings change
+  if (mode !== prevMode) {
     setPrevMode(mode)
     setPrevTargetDuration(targetDurationForMode)
-
     if (!isRunning && !isPaused && !activeSession) {
       setTotalSeconds(targetDurationForMode)
       setRemainingSeconds(targetDurationForMode)
     }
+  } else if (targetDurationForMode !== prevTargetDuration) {
+    setPrevTargetDuration(targetDurationForMode)
+    if (!isRunning && !isPaused && !activeSession) {
+      setTotalSeconds(targetDurationForMode)
+      setRemainingSeconds(targetDurationForMode)
+    } else {
+      // Dynamic duration adjustment while running or paused (Part 13):
+      // newRemaining = newTotal - elapsed
+      const newTotal = targetDurationForMode
+      const elapsed = elapsedSeconds
+      const newRemaining = Math.max(0, newTotal - elapsed)
+      setTotalSeconds(newTotal)
+      setRemainingSeconds(newRemaining)
+    }
   }
+
+  // Synchronize duration adjustments while running or paused across instances
+  const prevRunningTotalRef = useRef(totalSeconds)
+  useEffect(() => {
+    if (prevRunningTotalRef.current !== totalSeconds) {
+      prevRunningTotalRef.current = totalSeconds
+      if ((isRunning || isPaused) && updateTimerState) {
+        const actionId = crypto.randomUUID()
+        lastActionIdRef.current = actionId
+        updateTimerState({
+          actionId,
+          totalSeconds,
+          configuredDuration: totalSeconds,
+          remainingSecondsWhenPaused: isPaused ? remainingSeconds : undefined,
+          lastActionAt: new Date().toISOString(),
+        }).catch(() => {})
+      }
+    }
+  }, [totalSeconds, isRunning, isPaused, remainingSeconds, updateTimerState])
 
 
 

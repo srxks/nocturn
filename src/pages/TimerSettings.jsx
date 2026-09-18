@@ -15,6 +15,7 @@ export default function TimerSettings() {
     longBreakDuration: settings.longBreakDuration,
     sessions: settings.sessions,
     autoStartBreaks: Boolean(settings.autoStartBreaks),
+    autoStartPomo: Boolean(settings.autoStartPomo),
   })
 
   // Render-phase sync when context settings update (e.g. from remote realtime in another tab)
@@ -23,7 +24,8 @@ export default function TimerSettings() {
     settings.shortBreakDuration !== prevSettings.shortBreakDuration ||
     settings.longBreakDuration !== prevSettings.longBreakDuration ||
     settings.sessions !== prevSettings.sessions ||
-    settings.autoStartBreaks !== prevSettings.autoStartBreaks
+    settings.autoStartBreaks !== prevSettings.autoStartBreaks ||
+    settings.autoStartPomo !== prevSettings.autoStartPomo
   ) {
     setPrevSettings(settings)
     setLocalSettings({
@@ -32,6 +34,7 @@ export default function TimerSettings() {
       longBreakDuration: settings.longBreakDuration,
       sessions: settings.sessions,
       autoStartBreaks: Boolean(settings.autoStartBreaks),
+      autoStartPomo: Boolean(settings.autoStartPomo),
     })
   }
 
@@ -161,6 +164,41 @@ export default function TimerSettings() {
             <span
               className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
                 localSettings.autoStartBreaks ? 'translate-x-5 bg-black' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Auto-start Focus Toggle */}
+        <div className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-nocturn-card border border-nocturn-border hover:border-nocturn-accent/30 transition-all duration-200 shadow-md shadow-black/40">
+          <div className="space-y-0.5 min-w-0 flex-1 pr-2">
+            <span className="text-sm sm:text-base font-semibold text-white block truncate">
+              Auto-start Focus Sessions
+            </span>
+            <span className="text-xs text-nocturn-muted font-normal block">
+              Automatically start focus timers after break sessions
+            </span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={localSettings.autoStartPomo}
+            aria-label="Toggle auto-start focus sessions"
+            onClick={() =>
+              setLocalSettings((prev) => ({
+                ...prev,
+                autoStartPomo: !prev.autoStartPomo,
+              }))
+            }
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent ${
+              localSettings.autoStartPomo
+                ? 'bg-nocturn-accent'
+                : 'bg-nocturn-surface border-nocturn-border'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                localSettings.autoStartPomo ? 'translate-x-5 bg-black' : 'translate-x-0'
               }`}
             />
           </button>

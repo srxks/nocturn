@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import { useAuth } from '../context/useAuth'
@@ -65,6 +65,10 @@ export function useVocab() {
         }
       }
       if (matched.length > 0) {
+        // If daily limit was decreased: limit view to requested count without deleting
+        if (matched.length > dailyLimit) {
+          return matched.slice(0, dailyLimit)
+        }
         return matched
       }
     }
@@ -82,15 +86,7 @@ export function useVocab() {
     const needed = Math.max(0, dailyLimit - wordsAddedToday.length)
     const selected = [...wordsAddedToday, ...unlearned.slice(0, needed)]
 
-    return selected.sort((a, b) => {
-      const aToday = a.date_added === todayKey ? 1 : 0
-      const bToday = b.date_added === todayKey ? 1 : 0
-      if (aToday !== bToday) return bToday - aToday
-      if ((a.correct_count || 0) !== (b.correct_count || 0)) {
-        return (a.correct_count || 0) - (b.correct_count || 0)
-      }
-      return (a.word || '').localeCompare(b.word || '')
-    })
+    return selected.slice(0, dailyLimit)
   }, [allWords, todayVocabLog, dailyLimit, todayKey])
 
   // Session Resumption Metrics
@@ -156,7 +152,7 @@ export function useVocab() {
     return await getReviewQueueWords(userId, dailyLimit)
   }, [userId, dailyLimit]) || []
 
-  // 5. Generate Words Action via Gemini AI
+  // 5. Generate Words Action via Gemini AI (supports incremental addition when target increases)
   const fetchOrGenerateDailyWords = useCallback(async () => {
     if (isGenerating) return []
 
@@ -164,8 +160,23 @@ export function useVocab() {
     setIsGenerating(true)
 
     try {
+      // Determine existing words for today's set
+      const currentTodayWordIds = todayVocabLog?.wordIds || []
+      const existingTodayWords = allWords.filter(
+        (w) => currentTodayWordIds.includes(w.id) || w.date_added === todayKey
+      )
+
+      // If we already have >= dailyLimit words for today, don't request more
+      const neededCount = Math.max(0, dailyLimit - existingTodayWords.length)
+      if (neededCount === 0 && existingTodayWords.length > 0) {
+        setIsGenerating(false)
+        return existingTodayWords.slice(0, dailyLimit)
+      }
+
+      const countToFetch = neededCount > 0 ? neededCount : dailyLimit
       const existingWordNames = allWords.map((w) => w.word)
-      const newWords = await generateDailyVocab(existingWordNames, dailyLimit)
+
+      const newWords = await generateDailyVocab(existingWordNames, countToFetch)
 
       const savedList = []
       for (const item of newWords) {
@@ -179,27 +190,24 @@ export function useVocab() {
         savedList.push(saved)
       }
 
+      // Combine existing today's words with newly generated words (preserving existing)
+      const combinedTodayWords = [...existingTodayWords, ...savedList]
+      const combinedIds = Array.from(new Set(combinedTodayWords.map((w) => w.id)))
+
       await saveDailyVocabLog({
         date: todayKey,
         userId: userId,
-        wordIds: savedList.map((w) => w.id),
-        words: savedList,
+        wordIds: combinedIds,
+        words: combinedTodayWords,
         completed: false,
-        currentIndex: 0,
-        completedWordIds: [],
-        created_at: new Date().toISOString(),
+        currentIndex: todayVocabLog?.currentIndex || 0,
+        completedWordIds: todayVocabLog?.completedWordIds || [],
+        created_at: todayVocabLog?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
 
-      try {
-        localStorage.setItem(sessionLearnKey, '0')
-        localStorage.setItem(sessionCompleteKey, 'false')
-        localStorage.setItem(sessionCompletedIdsKey, '[]')
-      } catch {
-        // ignore
-      }
-
       setIsGenerating(false)
-      return savedList
+      return combinedTodayWords.slice(0, dailyLimit)
     } catch (err) {
       console.error('[useVocab] Daily word generation failed:', err)
       const errorMsg = err.message || 'Failed to generate vocabulary words'
@@ -207,7 +215,30 @@ export function useVocab() {
       setIsGenerating(false)
       throw err
     }
-  }, [todayKey, isGenerating, dailyLimit, allWords, userId, sessionLearnKey, sessionCompleteKey, sessionCompletedIdsKey])
+  }, [todayKey, isGenerating, dailyLimit, allWords, todayVocabLog, userId])
+
+  // Automatic daily set generation when online and today's set is incomplete
+  const autoGenAttemptedRef = useRef(false)
+  useEffect(() => {
+    if (autoGenAttemptedRef.current) return
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    if (isGenerating) return
+
+    const existingToday = (todayVocabLog?.wordIds || []).length
+    if (existingToday < dailyLimit && allWords.length > 0) {
+      const autoKey = `nocturn_vocab_autogen_${userId || 'guest'}_${todayKey}_${dailyLimit}`
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(autoKey)) return
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(autoKey, '1')
+
+      autoGenAttemptedRef.current = true
+      const timer = setTimeout(() => {
+        fetchOrGenerateDailyWords().catch(() => {
+          if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(autoKey)
+        })
+      }, 0)
+      return () => clearTimeout(timer)
+    }
+  }, [dailyLimit, todayVocabLog, allWords.length, isGenerating, fetchOrGenerateDailyWords, todayKey, userId])
 
   // 6. Mark Word Learned Action
   const markWordLearned = useCallback(

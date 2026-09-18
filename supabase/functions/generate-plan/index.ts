@@ -95,6 +95,11 @@ serve(async (req) => {
       cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
     }
 
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      cleaned = jsonMatch[0]
+    }
+
     const plan = JSON.parse(cleaned)
     return new Response(JSON.stringify({ plan }), {
       status: 200,

@@ -8,16 +8,59 @@ import { drainSyncQueue } from '../services/syncQueue'
 import { db } from '../db/db'
 import { cleanupLegacyLocalStorage, setStorageItem } from '../utils/storageUtils'
 
+const getCachedAuthUser = () => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('nocturn_auth_user') : null
+    if (raw) return JSON.parse(raw)
+  } catch {
+    // ignore
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+          const val = JSON.parse(localStorage.getItem(k))
+          if (val?.user) return val.user
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState(() => getCachedAuthUser())
   const [session, setSession] = useState(null)
-  const [loading, setLoading] = useState(() => isSupabaseConfigured && Boolean(supabase))
+  const [loading, setLoading] = useState(() => isSupabaseConfigured && Boolean(supabase) && !getCachedAuthUser())
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return
+    if (!isSupabaseConfigured || !supabase) {
+      return
+    }
 
     let lastInitializedUserId = null
     let isInitializing = false
+    let hasEndedLoading = false
+
+    const endLoading = (userToSet, sessionToSet) => {
+      if (hasEndedLoading) return
+      hasEndedLoading = true
+      if (sessionToSet !== undefined) setSession(sessionToSet)
+      if (userToSet !== undefined) setUser(userToSet)
+      setLoading(false)
+    }
+
+    // Guard against hanging indefinitely on net::ERR_CONNECTION_CLOSED / refresh_token outage
+    const timeoutId = setTimeout(() => {
+      const fallbackUser = getCachedAuthUser()
+      endLoading(fallbackUser ?? null, null)
+      if (fallbackUser) {
+        handleAuthUser(fallbackUser, 'TIMEOUT_FALLBACK')
+      }
+    }, 2500)
 
     // Handles all setup required after a user signs in
     const handleAuthUser = async (authUser, event = null) => {
@@ -65,42 +108,91 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // Get the initial session on mount
-    supabase.auth.getSession().then(({ data: { session: initSession } }) => {
-      setSession(initSession)
-      setUser(initSession?.user ?? null)
-      setLoading(false)
-      if (initSession?.user) {
-        handleAuthUser(initSession.user, 'GET_SESSION')
-      }
-    })
+    // Get the initial session on mount with timeout and catch guard
+    supabase.auth
+      .getSession()
+      .then(({ data: { session: initSession }, error }) => {
+        clearTimeout(timeoutId)
+        if (error) {
+          console.warn('[AuthProvider] getSession error:', error.message)
+          const fallbackUser = getCachedAuthUser()
+          endLoading(fallbackUser ?? null, null)
+          if (fallbackUser) {
+            handleAuthUser(fallbackUser, 'OFFLINE_FALLBACK')
+          }
+          return
+        }
+        endLoading(initSession?.user ?? null, initSession ?? null)
+        if (initSession?.user) {
+          try {
+            localStorage.setItem('nocturn_auth_user', JSON.stringify(initSession.user))
+          } catch {
+            // ignore storage error
+          }
+          handleAuthUser(initSession.user, 'GET_SESSION')
+        }
+      })
+      .catch((err) => {
+        clearTimeout(timeoutId)
+        console.warn('[AuthProvider] getSession network failure, using cached offline state:', err)
+        const fallbackUser = getCachedAuthUser()
+        endLoading(fallbackUser ?? null, null)
+        if (fallbackUser) {
+          handleAuthUser(fallbackUser, 'OFFLINE_FALLBACK')
+        }
+      })
 
     // Listen for auth state changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, currentSession) => {
-      setSession(currentSession)
-      setUser(currentSession?.user ?? null)
-      setLoading(false)
+      clearTimeout(timeoutId)
+      endLoading(currentSession?.user ?? null, currentSession ?? null)
 
       if (currentSession?.user) {
+        try {
+          localStorage.setItem('nocturn_auth_user', JSON.stringify(currentSession.user))
+        } catch {
+          // ignore storage error
+        }
         handleAuthUser(currentSession.user, event)
-      } else {
-        // User signed out — tear down realtime subscriptions
+      } else if (event === 'SIGNED_OUT') {
+        try {
+          localStorage.removeItem('nocturn_auth_user')
+        } catch {
+          // ignore storage error
+        }
         lastInitializedUserId = null
         stopRealtime()
       }
     })
 
-    // Register online event listener to drain sync queue on reconnect
-    const handleOnline = () => {
-      drainSyncQueue().catch(err =>
+    // Register online event listener to refresh session and drain sync queue on reconnect
+    const handleOnline = async () => {
+      try {
+        const { data: { session: refreshedSession } } = await supabase.auth.getSession()
+        if (refreshedSession?.user) {
+          setSession(refreshedSession)
+          setUser(refreshedSession.user)
+          try {
+            localStorage.setItem('nocturn_auth_user', JSON.stringify(refreshedSession.user))
+          } catch {
+            // ignore storage error
+          }
+          startRealtime(refreshedSession.user.id)
+        }
+      } catch (err) {
+        console.warn('[AuthProvider] Online session refresh notice:', err)
+      }
+
+      drainSyncQueue().catch((err) =>
         console.warn('[AuthProvider] Failed to drain sync queue on reconnect:', err)
       )
     }
     window.addEventListener('online', handleOnline)
 
     return () => {
+      clearTimeout(timeoutId)
       subscription?.unsubscribe()
       window.removeEventListener('online', handleOnline)
     }
@@ -172,6 +264,9 @@ export function AuthProvider({ children }) {
     // Stop realtime before signing out to prevent subscription errors
     stopRealtime()
     try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('nocturn_auth_user')
+      }
       cleanupLegacyLocalStorage()
       const customThemes = await db.themes.filter((t) => !t.isPreset).toArray()
       if (customThemes.length > 0) {

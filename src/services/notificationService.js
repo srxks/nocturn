@@ -109,11 +109,23 @@ function fireNotification(task) {
   // Native Notification
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
-      new Notification(`Reminder: ${task.title}`, {
+      const n = new Notification(`Reminder: ${task.title}`, {
         body: task.notes || 'Time to work on your task in Nocturn.',
         icon: '/favicon.ico',
         tag: `nocturn-reminder-${task.id}`,
       })
+      n.onclick = () => {
+        try {
+          if (typeof window !== 'undefined') {
+            window.focus()
+            window.dispatchEvent(
+              new CustomEvent('nocturn:open-task', { detail: { taskId: task.id } })
+            )
+          }
+        } catch {
+          // ignore
+        }
+      }
     } catch {
       // Fallback
     }

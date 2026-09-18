@@ -7,6 +7,7 @@ import { TimerSettingsProvider } from './context/TimerSettingsProvider'
 import { TimerSessionProvider } from './context/TimerSessionProvider'
 import { TaskProvider } from './context/TaskProvider'
 import { ToastProvider } from './context/ToastContext'
+import GlobalOfflineBanner from './components/common/GlobalOfflineBanner'
 import { cleanupLegacyLocalStorage } from './utils/storageUtils'
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
             <TimerSettingsProvider>
               <TimerSessionProvider>
                 <TaskProvider>
+                  <GlobalOfflineBanner />
                   <AppRoutes />
                 </TaskProvider>
               </TimerSessionProvider>

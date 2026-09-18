@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -36,8 +36,13 @@ export default function VocabReview() {
     let active = true
     async function loadReviewWords() {
       try {
-        const savedWordsRaw = sessionStorage.getItem(reviewWordsKey)
-        const savedProgressRaw = sessionStorage.getItem(reviewProgressKey)
+        const savedWordsRaw =
+          (typeof localStorage !== 'undefined' && localStorage.getItem(reviewWordsKey)) ||
+          sessionStorage.getItem(reviewWordsKey)
+        const savedProgressRaw =
+          (typeof localStorage !== 'undefined' && localStorage.getItem(reviewProgressKey)) ||
+          sessionStorage.getItem(reviewProgressKey)
+
         if (savedWordsRaw && savedProgressRaw) {
           const savedWords = JSON.parse(savedWordsRaw)
           const savedProgress = JSON.parse(savedProgressRaw)
@@ -54,11 +59,13 @@ export default function VocabReview() {
         if (active) {
           setQuizWords(words)
           if (words.length > 0) {
+            const progressData = { currentIndex: 0, score: { correct: 0, incorrect: 0 } }
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem(reviewWordsKey, JSON.stringify(words))
+              localStorage.setItem(reviewProgressKey, JSON.stringify(progressData))
+            }
             sessionStorage.setItem(reviewWordsKey, JSON.stringify(words))
-            sessionStorage.setItem(
-              reviewProgressKey,
-              JSON.stringify({ currentIndex: 0, score: { correct: 0, incorrect: 0 } })
-            )
+            sessionStorage.setItem(reviewProgressKey, JSON.stringify(progressData))
           }
         }
       } catch (err) {
@@ -75,11 +82,15 @@ export default function VocabReview() {
     }
   }, [userId, dailyLimit, reviewWordsKey, reviewProgressKey])
 
-  // Persist review progress so refresh does not reset current progress
+  // Persist review progress so refresh/reload/browser close preserves progress
   useEffect(() => {
     if (quizWords.length > 0 && !isCompleted) {
       try {
-        sessionStorage.setItem(reviewProgressKey, JSON.stringify({ currentIndex, score }))
+        const data = JSON.stringify({ currentIndex, score })
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(reviewProgressKey, data)
+        }
+        sessionStorage.setItem(reviewProgressKey, data)
       } catch {
         // ignore
       }
@@ -88,11 +99,16 @@ export default function VocabReview() {
 
   const currentWord = quizWords[currentIndex]
 
-  // Generate 4 multiple choice options for current word
-  const options = useMemo(() => {
-    if (!currentWord) return []
-    return generateQuizOptions(currentWord, allWords)
-  }, [currentWord, allWords])
+  // Stable Quiz Options: Generated ONCE when question loads, NEVER reshuffled on click or re-renders
+  const [currentOptionsState, setCurrentOptionsState] = useState({ wordId: null, options: [] })
+  if (currentWord?.id && currentOptionsState.wordId !== currentWord.id) {
+    setCurrentOptionsState({
+      wordId: currentWord.id,
+      options: generateQuizOptions(currentWord, allWords || []),
+    })
+  }
+
+  const options = currentWord?.id === currentOptionsState.wordId ? currentOptionsState.options : []
 
   // Handle Option Click
   const handleSelectOption = useCallback(
@@ -125,6 +141,10 @@ export default function VocabReview() {
     } else {
       setIsCompleted(true)
       try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(reviewWordsKey)
+          localStorage.removeItem(reviewProgressKey)
+        }
         sessionStorage.removeItem(reviewWordsKey)
         sessionStorage.removeItem(reviewProgressKey)
       } catch {

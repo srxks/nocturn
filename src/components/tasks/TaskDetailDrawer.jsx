@@ -14,7 +14,6 @@ import {
   Trash2,
   Timer,
 } from 'lucide-react'
-import { formatDateKey } from '../../services/calendarService'
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
 import { requestNotificationPermission } from '../../services/notificationService'
 
@@ -95,11 +94,6 @@ export default function TaskDetailDrawer({
 
   if (!task) return null
 
-  const today = new Date()
-  const todayKey = formatDateKey(today)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const tomorrowKey = formatDateKey(tomorrow)
   const deadlineConfig = getTaskDeadlineConfig(task)
 
   const handleFocus = () => {
@@ -168,11 +162,7 @@ export default function TaskDetailDrawer({
           type="button"
           onClick={() => {
             const nextInMyDay = !task.inMyDay
-            const updates = { inMyDay: nextInMyDay }
-            if (nextInMyDay && task.dueDate && task.dueDate > tomorrowKey) {
-              updates.dueDate = todayKey
-            }
-            onUpdateTask(task.id, updates)
+            onUpdateTask(task.id, { inMyDay: nextInMyDay })
           }}
           className={`w-full flex items-center gap-3 p-3 rounded-xl border text-xs sm:text-sm font-medium transition-all cursor-pointer ${
             task.inMyDay
@@ -278,11 +268,7 @@ export default function TaskDetailDrawer({
                 value={task.dueDate || ''}
                 onChange={(e) => {
                   const val = e.target.value || null
-                  const updates = { dueDate: val }
-                  if (val && val > tomorrowKey && task.inMyDay) {
-                    updates.inMyDay = false
-                  }
-                  onUpdateTask(task.id, updates)
+                  onUpdateTask(task.id, { dueDate: val })
                 }}
                 className="bg-nocturn-surface text-white text-xs px-2.5 py-1.5 rounded-xl border border-nocturn-border outline-none focus:border-nocturn-accent font-mono cursor-pointer"
               />
@@ -290,26 +276,67 @@ export default function TaskDetailDrawer({
           </div>
 
           {/* Reminder Selector */}
-          <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
-            <span className="text-nocturn-muted font-medium flex items-center gap-2">
-              <Bell className="w-4 h-4 text-nocturn-accent" /> Reminder
-            </span>
-            <select
-              value={task.reminder || ''}
-              onChange={(e) => {
-                const val = e.target.value || null
-                if (val) {
-                  requestNotificationPermission()
-                }
-                onUpdateTask(task.id, { reminder: val })
-              }}
-              className="bg-nocturn-surface text-white text-xs px-3 py-1.5 rounded-xl border border-nocturn-border outline-none focus:border-nocturn-accent cursor-pointer"
-            >
-              <option value="">No reminder</option>
-              <option value="09:00">Morning (09:00)</option>
-              <option value="14:00">Afternoon (14:00)</option>
-              <option value="18:00">Evening (18:00)</option>
-            </select>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+              <span className="text-nocturn-muted font-medium flex items-center gap-2">
+                <Bell className="w-4 h-4 text-nocturn-accent" /> Reminder
+              </span>
+              <div className="flex items-center gap-2">
+                <select
+                  value={
+                    !task.reminder
+                      ? ''
+                      : ['09:00', '14:00', '18:00'].includes(task.reminder)
+                      ? task.reminder
+                      : 'custom'
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (!val) {
+                      onUpdateTask(task.id, { reminder: null })
+                    } else if (val === 'custom') {
+                      requestNotificationPermission()
+                      onUpdateTask(task.id, { reminder: '12:00' })
+                    } else {
+                      requestNotificationPermission()
+                      onUpdateTask(task.id, { reminder: val })
+                    }
+                  }}
+                  className="bg-nocturn-surface text-white text-xs px-3 py-1.5 rounded-xl border border-nocturn-border outline-none focus:border-nocturn-accent cursor-pointer"
+                >
+                  <option value="">No reminder</option>
+                  <option value="09:00">Morning (09:00)</option>
+                  <option value="14:00">Afternoon (14:00)</option>
+                  <option value="18:00">Evening (18:00)</option>
+                  <option value="custom">Custom Time...</option>
+                </select>
+                {task.reminder && (
+                  <button
+                    type="button"
+                    onClick={() => onUpdateTask(task.id, { reminder: null })}
+                    className="p-1 text-nocturn-muted hover:text-rose-400 cursor-pointer"
+                    title="Clear reminder"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+            {task.reminder && !['09:00', '14:00', '18:00'].includes(task.reminder) && (
+              <div className="flex items-center justify-end gap-2">
+                <span className="text-[11px] text-nocturn-muted">Custom time:</span>
+                <input
+                  type="time"
+                  value={task.reminder}
+                  onChange={(e) => {
+                    const val = e.target.value || null
+                    if (val) requestNotificationPermission()
+                    onUpdateTask(task.id, { reminder: val })
+                  }}
+                  className="bg-nocturn-surface text-white text-xs px-2.5 py-1 rounded-lg border border-nocturn-border outline-none focus:border-nocturn-accent font-mono cursor-pointer"
+                />
+              </div>
+            )}
           </div>
 
           {/* Recurrence Selector */}
