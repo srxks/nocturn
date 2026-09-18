@@ -61,6 +61,18 @@ export function ThemeProvider({ children }) {
             customColors: remoteSettings?.customColors || null,
           })
         }
+
+        // Restore UI style preference ('normal' | 'angular')
+        const remoteUiStyle = remoteSettings?.uiStyle || remoteSettings?.ui_style
+        if (remoteUiStyle === 'angular' || remoteUiStyle === 'normal') {
+          const currentPrefs = (await db.userSettings.get('preferences')) || {}
+          await db.userSettings.put({
+            ...currentPrefs,
+            id: 'preferences',
+            uiStyle: remoteUiStyle,
+            updatedAt: new Date().toISOString(),
+          })
+        }
       } catch (err) {
         console.warn('[ThemeProvider] Error loading remote themes/settings:', err)
       }
@@ -69,7 +81,7 @@ export function ThemeProvider({ children }) {
     loadRemoteThemesAndSettings()
   }, [user?.id])
 
-  // Dexie live queries for themes and active theme settings
+  // Dexie live queries for themes, active theme settings, and user style preferences
   const dbThemes = useLiveQuery(async () => {
     return await db.themes.toArray()
   }, [])
@@ -77,6 +89,20 @@ export function ThemeProvider({ children }) {
   const activeThemeSetting = useLiveQuery(async () => {
     return await db.themeSettings.get('active')
   }, [])
+
+  const userSettings = useLiveQuery(async () => {
+    if (!db || !db.userSettings) return null
+    return await db.userSettings.get('preferences')
+  }, [])
+
+  const uiStyle = userSettings?.uiStyle === 'angular' ? 'angular' : 'normal'
+
+  // Sync data-ui-style attribute to documentElement immediately
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-ui-style', uiStyle)
+    }
+  }, [uiStyle])
 
   // Separate preset themes vs user custom themes
   const allThemes = dbThemes && dbThemes.length > 0 ? dbThemes : PRESET_THEMES
@@ -234,6 +260,33 @@ export function ThemeProvider({ children }) {
     await applyTheme(DEFAULT_NOCTURN_THEME)
   }
 
+  // 6. Set and Persist UI Style ('normal' | 'angular')
+  const setUiStyle = async (newStyle) => {
+    const validStyle = newStyle === 'angular' ? 'angular' : 'normal'
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-ui-style', validStyle)
+    }
+
+    const currentPrefs = (await db.userSettings.get('preferences')) || {}
+    const nowIso = new Date().toISOString()
+    await db.userSettings.put({
+      ...currentPrefs,
+      id: 'preferences',
+      uiStyle: validStyle,
+      updatedAt: nowIso,
+    })
+
+    if (user?.id && !isRealtimeWrite()) {
+      await upsertUserSettings(user.id, { uiStyle: validStyle })
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('nocturn:ui-style-changed', { detail: { uiStyle: validStyle } })
+      )
+    }
+  }
+
   return (
     <ThemeContext.Provider
       value={{
@@ -245,6 +298,8 @@ export function ThemeProvider({ children }) {
         saveCustomTheme,
         deleteSavedTheme,
         resetToNocturn,
+        uiStyle,
+        setUiStyle,
       }}
     >
       {children}

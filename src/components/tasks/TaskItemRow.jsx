@@ -1,5 +1,6 @@
 import { Check, Star, Calendar, Repeat, ListChecks, Sun } from 'lucide-react'
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
+import { useTheme } from '../../context/useTheme'
 
 export default function TaskItemRow({
   task,
@@ -9,6 +10,8 @@ export default function TaskItemRow({
   onSelectTask,
   isSelected = false,
 }) {
+  const { uiStyle } = useTheme()
+  const isAngular = uiStyle === 'angular'
   const deadlineConfig = getTaskDeadlineConfig(task)
   const listObj = lists.find((l) => l.id === task.listId)
   const subtasksTotal = task.subtasks ? task.subtasks.length : 0
@@ -17,7 +20,9 @@ export default function TaskItemRow({
   return (
     <div
       onClick={() => onSelectTask(task)}
-      className={`group relative flex items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none ${
+      className={`group relative flex items-center justify-between gap-3 p-3.5 sm:p-4 border transition-all duration-200 cursor-pointer select-none ${
+        isAngular ? 'rounded-none angular-chamfer-sm' : 'rounded-2xl'
+      } ${
         task.completed
           ? 'bg-nocturn-card/40 border-nocturn-border/50 opacity-75'
           : isSelected
@@ -113,7 +118,9 @@ export default function TaskItemRow({
             {/* Priority Badge */}
             {task.priority && (
               <span
-                className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-md border font-medium capitalize ${
+                className={`inline-flex items-center text-[10px] px-1.5 py-0.5 border font-medium ${
+                  isAngular ? 'rounded-none font-mono text-[9px]' : 'rounded-md capitalize'
+                } ${
                   task.priority === 'high'
                     ? 'text-rose-400 bg-rose-500/10 border-rose-500/25'
                     : task.priority === 'low'
@@ -121,7 +128,17 @@ export default function TaskItemRow({
                     : 'text-amber-400 bg-amber-500/10 border-amber-500/25'
                 }`}
               >
-                {task.priority === 'high' ? 'High' : task.priority === 'low' ? 'Low' : 'Medium'}
+                {isAngular
+                  ? task.priority === 'high'
+                    ? '[HIGH]'
+                    : task.priority === 'low'
+                    ? '[LOW]'
+                    : '[MED]'
+                  : task.priority === 'high'
+                  ? 'High'
+                  : task.priority === 'low'
+                  ? 'Low'
+                  : 'Medium'}
               </span>
             )}
 

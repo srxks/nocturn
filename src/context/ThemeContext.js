@@ -8,4 +8,6 @@ export const ThemeContext = createContext({
   saveCustomTheme: () => {},
   deleteSavedTheme: () => {},
   resetToNocturn: () => {},
+  uiStyle: 'normal',
+  setUiStyle: () => {},
 })

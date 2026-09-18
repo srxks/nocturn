@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Wifi, WifiOff } from 'lucide-react'
 import { drainSyncQueue } from '../../services/syncQueue'
+import { useTheme } from '../../context/useTheme'
 
 export default function GlobalOfflineBanner() {
+  const { uiStyle } = useTheme()
+  const isAngular = uiStyle === 'angular'
+
   const [isOffline, setIsOffline] = useState(() => {
     return typeof navigator !== 'undefined' ? !navigator.onLine : false
   })
@@ -52,14 +56,22 @@ export default function GlobalOfflineBanner() {
       className="fixed bottom-20 sm:bottom-5 left-1/2 -translate-x-1/2 z-[85] pointer-events-none transition-all duration-300 select-none"
     >
       {isOffline ? (
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-300 text-xs font-semibold shadow-lg backdrop-blur-md">
+        <div
+          className={`flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/15 border border-amber-500/35 text-amber-300 text-xs font-semibold shadow-lg backdrop-blur-md ${
+            isAngular ? 'rounded-none font-mono text-[10px] angular-chamfer-sm' : 'rounded-full'
+          }`}
+        >
           <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span>OFFLINE • Working locally</span>
+          <span>{isAngular ? '[ OFFLINE // LOCAL_MODE ]' : 'OFFLINE • Working locally'}</span>
         </div>
       ) : (
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-semibold shadow-lg backdrop-blur-md">
+        <div
+          className={`flex items-center gap-2 px-3.5 py-1.5 bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-semibold shadow-lg backdrop-blur-md ${
+            isAngular ? 'rounded-none font-mono text-[10px] angular-chamfer-sm' : 'rounded-full'
+          }`}
+        >
           <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span>Back online • Synced</span>
+          <span>{isAngular ? '[ ONLINE // FLUSHED ]' : 'Back online • Synced'}</span>
         </div>
       )}
     </div>

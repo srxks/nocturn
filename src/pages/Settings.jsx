@@ -1,5 +1,6 @@
 import { CheckSquare, ListTodo, Info } from 'lucide-react'
 import PreferenceCard from '../components/settings/PreferenceCard'
+import UiStyleSettingsCard from '../components/settings/UiStyleSettingsCard'
 import VocabSettingsCard from '../components/settings/VocabSettingsCard'
 import ThemeSettingsCard from '../components/settings/ThemeSettingsCard'
 import IntegrationCard from '../components/settings/IntegrationCard'
@@ -17,6 +18,9 @@ export default function Settings() {
           Customize your Nocturn experience.
         </p>
       </header>
+
+      {/* UI Style Selector (Normal vs Angular) */}
+      <UiStyleSettingsCard />
 
       {/* Preferences Section */}
       <PreferenceCard />

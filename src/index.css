@@ -183,3 +183,94 @@ body {
 .nocturn-glow-timer {
   box-shadow: 0 0 45px -5px rgba(var(--color-nocturn-accent-rgb, 0, 230, 118), 0.3);
 }
+
+/* ==========================================================================
+   UI STYLE SYSTEM: ANGULAR (COMMAND CENTER HUD) & NORMAL TOKENS
+   ========================================================================== */
+
+/* Chamfered and Angular Utilities */
+.angular-chamfer {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 14px) 0,
+    100% 14px,
+    100% 100%,
+    14px 100%,
+    0 calc(100% - 14px)
+  );
+}
+
+.angular-chamfer-sm {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 8px) 0,
+    100% 8px,
+    100% 100%,
+    8px 100%,
+    0 calc(100% - 8px)
+  );
+}
+
+.angular-cut-corner {
+  clip-path: polygon(
+    12px 0,
+    100% 0,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    0 100%,
+    0 12px
+  );
+}
+
+.angular-hud-grid {
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Angular Mode Dynamic Overrides */
+[data-ui-style="angular"] .nocturn-card {
+  border-radius: 0px !important;
+  border: 1px solid var(--color-nocturn-border) !important;
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.9);
+}
+
+[data-ui-style="angular"] .nocturn-card-elevated {
+  border-radius: 0px !important;
+  border: 1px solid rgba(var(--color-nocturn-accent-rgb, 0, 230, 118), 0.25) !important;
+  box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.95), 0 0 15px -3px rgba(var(--color-nocturn-accent-rgb, 0, 230, 118), 0.15);
+}
+
+[data-ui-style="angular"] .nocturn-btn-primary {
+  border-radius: 0px !important;
+  clip-path: polygon(
+    0 0,
+    calc(100% - 8px) 0,
+    100% 8px,
+    100% 100%,
+    8px 100%,
+    0 calc(100% - 8px)
+  );
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+[data-ui-style="angular"] .nocturn-btn-secondary {
+  border-radius: 0px !important;
+  clip-path: polygon(
+    0 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% 100%,
+    6px 100%,
+    0 calc(100% - 6px)
+  );
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+[data-ui-style="angular"] .nocturn-input {
+  border-radius: 0px !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
