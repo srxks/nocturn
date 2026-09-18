@@ -9,6 +9,7 @@
 
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient.js'
 import { getStorageItem, setStorageItem, removeStorageItem } from '../utils/storageUtils.js'
+import { setSyncingState, reportNetworkSuccess, classifyAndReportError } from './networkStateService.js'
 
 const QUEUE_KEY = 'nocturn_sync_queue'
 
@@ -86,94 +87,106 @@ export async function drainSyncQueue() {
   const queue = readQueue()
   if (queue.length === 0) return { drained: 0, remaining: 0 }
 
-  const nowMs = Date.now()
-  const remaining = []
-  let drainedCount = 0
+  setSyncingState(true)
+  try {
+    const nowMs = Date.now()
+    const remaining = []
+    let drainedCount = 0
 
-  for (const entry of queue) {
-    // Respect exponential backoff delay
-    if (entry.nextRetryAt && entry.nextRetryAt > nowMs) {
-      remaining.push(entry)
-      continue
-    }
+    for (const entry of queue) {
+      // Respect exponential backoff delay
+      if (entry.nextRetryAt && entry.nextRetryAt > nowMs) {
+        remaining.push(entry)
+        continue
+      }
 
-    try {
-      if (entry.operation === 'upsert') {
-        const onConflict =
-          entry.table === 'user_settings' || entry.table === 'timer_settings' || entry.table === 'user_profiles'
-            ? 'user_id'
-            : entry.table === 'themes'
-            ? 'user_id, name'
-            : 'id'
+      try {
+        if (entry.operation === 'upsert') {
+          const onConflict =
+            entry.table === 'user_settings' || entry.table === 'timer_settings' || entry.table === 'user_profiles'
+              ? 'user_id'
+              : entry.table === 'themes'
+              ? 'user_id, name'
+              : 'id'
 
-        const { error } = await supabase
-          .from(entry.table)
-          .upsert(entry.payload, { onConflict })
-
-        if (error) {
-          // Fatal auth / schema errors shouldn't be retried endlessly
-          if (error.code === 'PGRST301' || error.code === '42501' || error.code === '42P01') {
-            console.warn(`[syncQueue] Dropping non-retryable error for ${entry.table}:`, error.message)
-          } else {
-            entry.attempts = (entry.attempts || 0) + 1
-            // Exponential backoff: 2s, 4s, 8s, 16s... max 60s
-            const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
-            entry.nextRetryAt = Date.now() + backoffMs
-            if (entry.attempts < 8) remaining.push(entry)
-          }
-        } else {
-          drainedCount++
-        }
-      } else if (entry.operation === 'delete') {
-        const idToDelete = entry.payload?.id
-        if (idToDelete) {
           const { error } = await supabase
             .from(entry.table)
-            .delete()
-            .eq('id', idToDelete)
+            .upsert(entry.payload, { onConflict })
 
-          if (error && error.code !== 'PGRST116') {
-            entry.attempts = (entry.attempts || 0) + 1
-            const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
-            entry.nextRetryAt = Date.now() + backoffMs
-            if (entry.attempts < 8) remaining.push(entry)
+          if (error) {
+            classifyAndReportError(error)
+            // Fatal auth / schema errors shouldn't be retried endlessly
+            if (error.code === 'PGRST301' || error.code === '42501' || error.code === '42P01') {
+              console.warn(`[syncQueue] Dropping non-retryable error for ${entry.table}:`, error.message)
+            } else {
+              entry.attempts = (entry.attempts || 0) + 1
+              // Exponential backoff: 2s, 4s, 8s, 16s... max 60s
+              const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
+              entry.nextRetryAt = Date.now() + backoffMs
+              if (entry.attempts < 8) remaining.push(entry)
+            }
           } else {
+            reportNetworkSuccess()
             drainedCount++
           }
-        }
-      } else if (entry.operation === 'delete_all_user_vocab') {
-        const userId = entry.payload?.user_id
-        if (userId) {
-          const { error } = await supabase
-            .from('vocab_words')
-            .delete()
-            .eq('user_id', userId)
+        } else if (entry.operation === 'delete') {
+          const idToDelete = entry.payload?.id
+          if (idToDelete) {
+            const { error } = await supabase
+              .from(entry.table)
+              .delete()
+              .eq('id', idToDelete)
 
-          if (error && error.code !== 'PGRST116') {
-            entry.attempts = (entry.attempts || 0) + 1
-            const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
-            entry.nextRetryAt = Date.now() + backoffMs
-            if (entry.attempts < 8) remaining.push(entry)
-          } else {
-            drainedCount++
+            if (error && error.code !== 'PGRST116') {
+              classifyAndReportError(error)
+              entry.attempts = (entry.attempts || 0) + 1
+              const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
+              entry.nextRetryAt = Date.now() + backoffMs
+              if (entry.attempts < 8) remaining.push(entry)
+            } else {
+              reportNetworkSuccess()
+              drainedCount++
+            }
+          }
+        } else if (entry.operation === 'delete_all_user_vocab') {
+          const userId = entry.payload?.user_id
+          if (userId) {
+            const { error } = await supabase
+              .from('vocab_words')
+              .delete()
+              .eq('user_id', userId)
+
+            if (error && error.code !== 'PGRST116') {
+              classifyAndReportError(error)
+              entry.attempts = (entry.attempts || 0) + 1
+              const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
+              entry.nextRetryAt = Date.now() + backoffMs
+              if (entry.attempts < 8) remaining.push(entry)
+            } else {
+              reportNetworkSuccess()
+              drainedCount++
+            }
           }
         }
+      } catch (err) {
+        classifyAndReportError(err)
+        entry.attempts = (entry.attempts || 0) + 1
+        const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
+        entry.nextRetryAt = Date.now() + backoffMs
+        if (entry.attempts < 8) remaining.push(entry)
       }
-    } catch {
-      entry.attempts = (entry.attempts || 0) + 1
-      const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
-      entry.nextRetryAt = Date.now() + backoffMs
-      if (entry.attempts < 8) remaining.push(entry)
     }
-  }
 
-  if (remaining.length === 0) {
-    clearQueue()
-  } else {
-    writeQueue(remaining)
-  }
+    if (remaining.length === 0) {
+      clearQueue()
+    } else {
+      writeQueue(remaining)
+    }
 
-  return { drained: drainedCount, remaining: remaining.length }
+    return { drained: drainedCount, remaining: remaining.length }
+  } finally {
+    setSyncingState(false)
+  }
 }
 
 /**

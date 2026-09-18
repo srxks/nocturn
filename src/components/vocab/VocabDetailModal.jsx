@@ -92,9 +92,9 @@ export default function VocabDetailModal({ word, onClose }) {
           {/* Mastery Score Progress */}
           <div className="my-6 p-4 rounded-2xl bg-white/[0.03] border border-nocturn-border/60 space-y-2">
             <div className="flex items-center justify-between text-xs font-medium">
-              <span className="text-nocturn-muted">Mastery Progress</span>
+              <span className="text-nocturn-muted">Mastery Progress (5 successful reviews)</span>
               <span className="text-nocturn-accent font-bold">
-                {currentWord.correct_count >= 5 ? 'Mastered (5/5 Correct)' : `In Progress (${currentWord.correct_count || 0} of 5 reviews passed)`}
+                {currentWord.correct_count >= 5 ? 'Mastered' : `${currentWord.correct_count || 0} of 5 reviews passed`}
               </span>
             </div>
 

@@ -363,11 +363,11 @@ export default function Profile() {
             <button
               type="button"
               onClick={() => setPeriodOffset((prev) => prev - 1)}
-              className="p-1.5 px-2.5 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-white border border-nocturn-border cursor-pointer flex items-center gap-1 text-xs transition-colors"
-              title="View previous period"
+              className="p-2 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-white hover:border-nocturn-accent/40 border border-nocturn-border cursor-pointer flex items-center justify-center transition-colors"
+              title="Previous period"
+              aria-label="Previous period"
             >
               <ChevronLeft className="w-4 h-4" />
-              <span>Previous</span>
             </button>
 
             <div className="flex items-center gap-2">
@@ -390,10 +390,10 @@ export default function Profile() {
               type="button"
               disabled={periodOffset >= 0}
               onClick={() => setPeriodOffset((prev) => prev + 1)}
-              className="p-1.5 px-2.5 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-white border border-nocturn-border disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 text-xs transition-colors"
-              title="View next period"
+              className="p-2 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-white hover:border-nocturn-accent/40 border border-nocturn-border disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center transition-colors"
+              title="Next period"
+              aria-label="Next period"
             >
-              <span>Next</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

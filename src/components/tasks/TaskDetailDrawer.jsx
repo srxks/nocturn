@@ -31,6 +31,7 @@ export default function TaskDetailDrawer({
 }) {
   const navigate = useNavigate()
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [prevTaskId, setPrevTaskId] = useState(task?.id)
   const [localTitle, setLocalTitle] = useState(task?.title || '')
   const [localNotes, setLocalNotes] = useState(task?.notes || '')
@@ -398,7 +399,7 @@ export default function TaskDetailDrawer({
       </div>
 
       {/* Drawer Footer Actions */}
-      <div className="flex-shrink-0 p-4 pb-8 sm:pb-4 border-t border-nocturn-border bg-nocturn-card flex items-center justify-between gap-3 relative z-10 pointer-events-auto">
+      <div className="flex-shrink-0 p-4 pb-12 sm:pb-5 border-t border-nocturn-border bg-nocturn-card flex items-center justify-between gap-3 relative z-10 pointer-events-auto">
         {/* Start Focus Timer Button */}
         <button
           type="button"
@@ -412,10 +413,7 @@ export default function TaskDetailDrawer({
         {/* Delete Task Button */}
         <button
           type="button"
-          onClick={() => {
-            onDeleteTask(task.id)
-            onClose()
-          }}
+          onClick={() => setShowDeleteConfirm(true)}
           aria-label="Delete task"
           className="py-2.5 px-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/30 transition-all font-semibold text-xs sm:text-sm inline-flex items-center gap-2 cursor-pointer relative z-20 pointer-events-auto"
         >
@@ -423,6 +421,43 @@ export default function TaskDetailDrawer({
           <span>Delete Task</span>
         </button>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto">
+          <div className="w-full max-w-sm bg-nocturn-card border border-rose-500/30 rounded-2xl p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-9 h-9 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-bold text-white">Delete Task?</h3>
+            </div>
+            <p className="text-xs text-nocturn-muted leading-relaxed">
+              Are you sure you want to delete <span className="text-white font-medium">"{task.title}"</span>? This cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-nocturn-muted hover:text-white bg-white/5 border border-nocturn-border transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteConfirm(false)
+                  onDeleteTask(task.id)
+                  onClose()
+                }}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 transition-colors shadow-[0_0_12px_rgba(244,63,94,0.35)] cursor-pointer"
+              >
+                Delete Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   )
 

@@ -422,8 +422,9 @@ export default function Vocab() {
           <div className="p-4 rounded-2xl bg-white/[0.02] border border-nocturn-border/60">
             <p className="text-xs text-nocturn-muted font-medium">Mastered</p>
             <p className="text-2xl font-extrabold text-emerald-400 mt-1">
-              {settledCount}
+              {settledCount} {settledCount === 1 ? 'word' : 'words'}
             </p>
+            <p className="text-[10px] text-nocturn-muted mt-0.5">Mastery: 5 successful reviews</p>
           </div>
         </div>
       </div>

@@ -13,6 +13,8 @@ import {
   Plus,
   Zap,
   Check,
+  Sliders,
+  Square,
 } from 'lucide-react'
 import { useTasks } from '../context/useTasks'
 import { useTimerSession } from '../context/useTimerSession'
@@ -29,7 +31,7 @@ const EXAMPLE_PROMPTS = [
 export default function PlanMyDay() {
   const navigate = useNavigate()
   const { tasks, addTask, toggleTask } = useTasks()
-  const { startPlanSession } = useTimerSession()
+  const { startPlanSession, isRunning, taskName, terminateTimer } = useTimerSession()
 
   const [prompt, setPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -38,6 +40,11 @@ export default function PlanMyDay() {
   const [appliedTaskTitles, setAppliedTaskTitles] = useState(() => new Set())
   const [feedbackMsg, setFeedbackMsg] = useState(null)
   const [isApplying, setIsApplying] = useState(false)
+  const [isEditingTimer, setIsEditingTimer] = useState(false)
+  const [customFocusDuration, setCustomFocusDuration] = useState(50)
+  const [customBreakDuration, setCustomBreakDuration] = useState(10)
+  const [customLongBreakDuration, setCustomLongBreakDuration] = useState(20)
+  const [customSessions, setCustomSessions] = useState(4)
 
   const todayKey = useMemo(() => formatDateKey(new Date()), [])
   const dateString = useMemo(() => {
@@ -54,17 +61,22 @@ export default function PlanMyDay() {
     getPlanSchedule(todayKey).then((saved) => {
       if (!isMounted || !saved) return
       if (saved.blocks && saved.blocks.length > 0) {
+        const rt = saved.recommendedTimer || {
+          focusDuration: 50,
+          shortBreakDuration: 10,
+          longBreakDuration: 20,
+          sessions: 4,
+        }
         setPlan({
           summary: saved.summary || 'Your custom daily schedule.',
-          recommendedTimer: saved.recommendedTimer || {
-            focusDuration: 50,
-            shortBreakDuration: 10,
-            longBreakDuration: 20,
-            sessions: 4,
-          },
+          recommendedTimer: rt,
           blocks: saved.blocks,
           suggestedNewTasks: saved.suggestedNewTasks || [],
         })
+        if (rt.focusDuration) setCustomFocusDuration(Number(rt.focusDuration) || 50)
+        if (rt.shortBreakDuration) setCustomBreakDuration(Number(rt.shortBreakDuration) || 10)
+        if (rt.longBreakDuration) setCustomLongBreakDuration(Number(rt.longBreakDuration) || 20)
+        if (rt.sessions) setCustomSessions(Number(rt.sessions) || 4)
       }
       if (saved.userInstruction) {
         setPrompt(saved.userInstruction)
@@ -101,6 +113,12 @@ export default function PlanMyDay() {
       }
 
       setPlan(generated)
+      if (generated.recommendedTimer) {
+        if (generated.recommendedTimer.focusDuration) setCustomFocusDuration(Number(generated.recommendedTimer.focusDuration) || 50)
+        if (generated.recommendedTimer.shortBreakDuration) setCustomBreakDuration(Number(generated.recommendedTimer.shortBreakDuration) || 10)
+        if (generated.recommendedTimer.longBreakDuration) setCustomLongBreakDuration(Number(generated.recommendedTimer.longBreakDuration) || 20)
+        if (generated.recommendedTimer.sessions) setCustomSessions(Number(generated.recommendedTimer.sessions) || 4)
+      }
 
       // Persist to Dexie
       await savePlanSchedule({
@@ -120,16 +138,16 @@ export default function PlanMyDay() {
 
   // Apply Timer Settings and Launch Focus or Break Session
   const handleApplyTimerAndFocus = async (block = null) => {
-    const timerConfig = plan?.recommendedTimer || {
-      focusDuration: 25,
-      shortBreakDuration: 5,
-      longBreakDuration: 15,
-      sessions: 4,
+    const timerConfig = {
+      focusDuration: Number(customFocusDuration) || plan?.recommendedTimer?.focusDuration || 25,
+      shortBreakDuration: Number(customBreakDuration) || plan?.recommendedTimer?.shortBreakDuration || 5,
+      longBreakDuration: Number(customLongBreakDuration) || plan?.recommendedTimer?.longBreakDuration || 15,
+      sessions: Number(customSessions) || plan?.recommendedTimer?.sessions || 4,
     }
 
     const allBlocks = plan?.blocks || []
     const focusBlocks = allBlocks.filter((b) => b.type === 'focus')
-    const totalFocusCycles = focusBlocks.length > 0 ? focusBlocks.length : Number(timerConfig.sessions) || 4
+    const totalFocusCycles = Number(timerConfig.sessions) || (focusBlocks.length > 0 ? focusBlocks.length : 4)
 
     try {
       if (block && block.type === 'break') {
@@ -425,29 +443,99 @@ export default function PlanMyDay() {
 
             {/* Timer Recommendation Widget */}
             {plan.recommendedTimer && (
-              <div className="p-4 rounded-2xl bg-nocturn-surface/70 border border-nocturn-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent shrink-0">
-                    <Zap className="w-5 h-5 stroke-[2.2]" />
+              <div className="p-4 sm:p-5 rounded-2xl bg-nocturn-surface/70 border border-nocturn-border space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent shrink-0">
+                      <Zap className="w-5 h-5 stroke-[2.2]" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-nocturn-muted block">
+                          Recommended Focus Structure
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingTimer((prev) => !prev)}
+                          className="text-[11px] text-nocturn-accent hover:underline flex items-center gap-1 cursor-pointer font-medium"
+                        >
+                          <Sliders className="w-3 h-3" />
+                          <span>{isEditingTimer ? 'Done' : 'Customize'}</span>
+                        </button>
+                      </div>
+                      <span className="text-sm sm:text-base font-bold text-white">
+                        {customFocusDuration}m Focus · {customBreakDuration}m Break · {customSessions} Sessions
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-xs font-semibold text-nocturn-muted block">
-                      Recommended Focus Structure
-                    </span>
-                    <span className="text-sm sm:text-base font-bold text-white">
-                      {plan.recommendedTimer.focusDuration}m Focus · {plan.recommendedTimer.shortBreakDuration}m Break · {plan.recommendedTimer.sessions} Sessions
-                    </span>
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleApplyTimerAndFocus()}
+                    className="w-full sm:w-auto py-2.5 px-4 rounded-xl bg-nocturn-accent text-black font-bold text-xs hover:bg-nocturn-accent-bright shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-black" />
+                    <span>Apply & Start Timer</span>
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleApplyTimerAndFocus()}
-                  className="w-full sm:w-auto py-2.5 px-4 rounded-xl bg-nocturn-accent text-black font-bold text-xs hover:bg-nocturn-accent-bright shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-                >
-                  <Play className="w-3.5 h-3.5 fill-black" />
-                  <span>Apply & Start Timer</span>
-                </button>
+                {/* Customizable Timer Inputs before starting */}
+                {isEditingTimer && (
+                  <div className="pt-3 border-t border-nocturn-border/60 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-nocturn-muted block mb-1">
+                        Focus (mins)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="300"
+                        value={customFocusDuration}
+                        onChange={(e) => setCustomFocusDuration(Math.max(1, Number(e.target.value) || 1))}
+                        className="nocturn-input text-xs py-1.5 px-2.5 w-full font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-nocturn-muted block mb-1">
+                        Short Break (mins)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="120"
+                        value={customBreakDuration}
+                        onChange={(e) => setCustomBreakDuration(Math.max(1, Number(e.target.value) || 1))}
+                        className="nocturn-input text-xs py-1.5 px-2.5 w-full font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-nocturn-muted block mb-1">
+                        Long Break (mins)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="180"
+                        value={customLongBreakDuration}
+                        onChange={(e) => setCustomLongBreakDuration(Math.max(1, Number(e.target.value) || 1))}
+                        className="nocturn-input text-xs py-1.5 px-2.5 w-full font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-nocturn-muted block mb-1">
+                        Sessions
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="24"
+                        value={customSessions}
+                        onChange={(e) => setCustomSessions(Math.max(1, Number(e.target.value) || 1))}
+                        className="nocturn-input text-xs py-1.5 px-2.5 w-full font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -489,6 +577,12 @@ export default function PlanMyDay() {
                 const isEvent = block.type === 'event'
                 const isExisting = block.isExisting
                 const isTaskApplied = appliedTaskTitles.has(block.title)
+                const isBlockActive =
+                  isRunning &&
+                  (taskName === block.title ||
+                    (taskName &&
+                      block.title &&
+                      taskName.trim().toLowerCase() === block.title.trim().toLowerCase()))
 
                 // Task completion state if existing
                 const existingTaskObj = isExisting && block.taskId ? tasks.find((t) => t.id === block.taskId) : null
@@ -498,7 +592,9 @@ export default function PlanMyDay() {
                   <div
                     key={block.id || idx}
                     className={`p-4 sm:p-5 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                      isFocus
+                      isBlockActive
+                        ? 'bg-rose-950/25 border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.2)]'
+                        : isFocus
                         ? 'bg-nocturn-card border-nocturn-accent/40 shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.1)]'
                         : isBreak
                         ? 'bg-indigo-950/20 border-indigo-500/30'
@@ -525,7 +621,9 @@ export default function PlanMyDay() {
                       ) : (
                         <div
                           className={`w-5 h-5 mt-0.5 sm:mt-0 rounded-lg flex items-center justify-center shrink-0 ${
-                            isFocus
+                            isBlockActive
+                              ? 'text-rose-400'
+                              : isFocus
                               ? 'text-nocturn-accent'
                               : isBreak
                               ? 'text-indigo-400'
@@ -546,7 +644,12 @@ export default function PlanMyDay() {
                             {block.title}
                           </h3>
 
-                          {/* Block Type Badge */}
+                          {/* Block Type Badge & Active Badge */}
+                          {isBlockActive && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                              Active Now
+                            </span>
+                          )}
                           {isFocus && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-nocturn-accent/15 text-nocturn-accent border border-nocturn-accent/30">
                               Focus Session
@@ -593,26 +696,39 @@ export default function PlanMyDay() {
                         </span>
                       </div>
 
-                      {isFocus && (
+                      {isBlockActive ? (
                         <button
                           type="button"
-                          onClick={() => handleApplyTimerAndFocus(block)}
-                          className="px-3 py-1.5 rounded-xl bg-nocturn-accent/20 hover:bg-nocturn-accent/30 text-nocturn-accent border border-nocturn-accent/40 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                          onClick={() => terminateTimer()}
+                          className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(244,63,94,0.3)]"
                         >
-                          <Play className="w-3 h-3 fill-current" />
-                          <span>Focus</span>
+                          <Square className="w-3 h-3 fill-current" />
+                          <span>Terminate</span>
                         </button>
-                      )}
+                      ) : (
+                        <>
+                          {isFocus && (
+                            <button
+                              type="button"
+                              onClick={() => handleApplyTimerAndFocus(block)}
+                              className="px-3 py-1.5 rounded-xl bg-nocturn-accent/20 hover:bg-nocturn-accent/30 text-nocturn-accent border border-nocturn-accent/40 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Play className="w-3 h-3 fill-current" />
+                              <span>Focus</span>
+                            </button>
+                          )}
 
-                      {isBreak && (
-                        <button
-                          type="button"
-                          onClick={() => handleApplyTimerAndFocus(block)}
-                          className="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Coffee className="w-3 h-3" />
-                          <span>Break</span>
-                        </button>
+                          {isBreak && (
+                            <button
+                              type="button"
+                              onClick={() => handleApplyTimerAndFocus(block)}
+                              className="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Coffee className="w-3 h-3" />
+                              <span>Break</span>
+                            </button>
+                          )}
+                        </>
                       )}
 
                       {!isExisting && !isBreak && !isEvent && !isTaskApplied && (

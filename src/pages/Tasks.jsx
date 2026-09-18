@@ -72,7 +72,7 @@ export default function Tasks() {
   const totalCount = filteredTasks.length
   const completedCount = completedTasks.length
 
-  const handleAddTask = (title, day) => {
+  const handleAddTask = (title, day, explicitInMyDay = false) => {
     let dueDate = null
     if (day === 'today') {
       dueDate = todayKey
@@ -81,7 +81,7 @@ export default function Tasks() {
     } else if (day && day !== 'none') {
       dueDate = day
     }
-    const inMyDay = activeListId === 'my-day'
+    const inMyDay = activeListId === 'my-day' || Boolean(explicitInMyDay)
     addTask(title, activeListId, dueDate, 'medium', false, inMyDay)
   }
 
@@ -133,6 +133,7 @@ export default function Tasks() {
             <AddTask
               onAddTask={handleAddTask}
               defaultDay={activeListId === 'my-day' ? 'today' : 'none'}
+              defaultInMyDay={activeListId === 'my-day'}
             />
           )}
 

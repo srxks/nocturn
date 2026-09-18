@@ -161,6 +161,9 @@ export default function VocabList() {
             </button>
           ))}
         </div>
+        <p className="text-[11px] text-nocturn-muted">
+          Mastery: 5 successful reviews. Mastered words remain permanently in your library.
+        </p>
       </div>
 
       {/* Word Grid */}

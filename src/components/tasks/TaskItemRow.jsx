@@ -135,10 +135,10 @@ export default function TaskItemRow({
                     ? '[LOW]'
                     : '[MED]'
                   : task.priority === 'high'
-                  ? 'High'
+                  ? 'High priority'
                   : task.priority === 'low'
-                  ? 'Low'
-                  : 'Medium'}
+                  ? 'Low priority'
+                  : 'Medium priority'}
               </span>
             )}
 
@@ -146,7 +146,7 @@ export default function TaskItemRow({
             {subtasksTotal > 0 && (
               <span className="inline-flex items-center gap-1 text-[10px] bg-nocturn-surface px-1.5 py-0.5 rounded-md border border-nocturn-border text-nocturn-muted font-mono">
                 <ListChecks className="w-3 h-3 stroke-[2]" />
-                {subtasksDone}/{subtasksTotal}
+                {subtasksDone > 0 ? `${subtasksDone}/${subtasksTotal}` : `${subtasksTotal}`} {subtasksTotal === 1 ? 'subtask' : 'subtasks'}
               </span>
             )}
           </div>

@@ -22,6 +22,7 @@ import { fetchTimerSettingsRemote, upsertTimerSettingsRemote, fetchUserFocusSess
 import { fetchUserVocabWords, upsertVocabWordsRemote, deleteVocabWordRemote, deleteAllVocabWordsRemote } from '../lib/vocab.js'
 import { toUuid } from '../lib/idUtils.js'
 import { resolveConflict, getTombstones, clearTombstone, isTombstoned } from './conflictService.js'
+import { setSyncingState, reportNetworkSuccess, classifyAndReportError } from './networkStateService.js'
 
 export async function syncWithCloud(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) {
@@ -33,7 +34,9 @@ export async function syncWithCloud(userId) {
     return { success: true, synced: 0, offline: true }
   }
 
+  setSyncingState(true)
   let totalSynced = 0
+  try {
 
   // ─── 0. Process Tombstones (Apply local deletions to cloud) ─────────────────
   try {
@@ -394,7 +397,14 @@ export async function syncWithCloud(userId) {
     console.warn('[syncService] Focus sessions sync notice:', focusErr.message)
   }
 
-  return { success: true, synced: totalSynced }
+    reportNetworkSuccess()
+    return { success: true, synced: totalSynced }
+  } catch (syncErr) {
+    classifyAndReportError(syncErr)
+    return { success: false, synced: totalSynced, error: syncErr }
+  } finally {
+    setSyncingState(false)
+  }
 }
 
 export async function syncLocalDataToSupabase(userId) {

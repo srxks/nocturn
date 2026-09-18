@@ -321,6 +321,8 @@ Requirements:
    - shortBreakDuration (minutes, e.g. 10, 5)
    - longBreakDuration (minutes, e.g. 20, 15)
    - sessions (number of focus cycles, e.g. 4, 2)
+6. Context-Adaptive Workload Decomposition:
+   If a workload involves long periods (e.g. 2 hours of probability, 150 minutes of project/assignment), intelligently decompose it into context-adaptive focus blocks interspersed with short breaks (e.g. 150 mins could be 50 + 10 break + 50 + 10 break + 50, or 45 + 10 + 45 + 10 + 60). Do NOT enforce a single rigid rule; determine structure dynamically based on workload and context.
 
 Return ONLY a valid JSON object with keys:
 {

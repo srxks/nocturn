@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react'
-import { Plus, Calendar } from 'lucide-react'
+import { Plus, Calendar, Sun } from 'lucide-react'
 
-export default function AddTask({ onAddTask, defaultDay = 'none' }) {
+export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay = false }) {
   const [title, setTitle] = useState('')
   const [day, setDay] = useState(defaultDay)
+  const [inMyDay, setInMyDay] = useState(defaultInMyDay || defaultDay === 'today')
   const [prevDefaultDay, setPrevDefaultDay] = useState(defaultDay)
   const [customDate, setCustomDate] = useState('')
   const dateInputRef = useRef(null)
@@ -11,6 +12,7 @@ export default function AddTask({ onAddTask, defaultDay = 'none' }) {
   if (defaultDay !== prevDefaultDay) {
     setPrevDefaultDay(defaultDay)
     setDay(defaultDay)
+    setInMyDay(defaultInMyDay || defaultDay === 'today')
   }
 
   const handleSubmit = (e) => {
@@ -19,8 +21,13 @@ export default function AddTask({ onAddTask, defaultDay = 'none' }) {
     if (!trimmed) return
 
     const targetDate = day === 'custom' && customDate ? customDate : (day === 'none' ? null : day)
-    onAddTask(trimmed, targetDate)
+    onAddTask(trimmed, targetDate, inMyDay)
     setTitle('')
+    if (defaultDay === 'none') {
+      setDay('none')
+      setInMyDay(false)
+      setCustomDate('')
+    }
   }
 
   const handleCustomDateChange = (e) => {
@@ -52,9 +59,9 @@ export default function AddTask({ onAddTask, defaultDay = 'none' }) {
         </button>
       </div>
 
-      {/* Target Day / Date Toggle */}
+      {/* Target Day / Date Toggle & Explicit My Day Toggle */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-nocturn-muted font-medium">Add to:</span>
+        <span className="text-xs text-nocturn-muted font-medium">Due:</span>
         <div className="inline-flex items-center bg-nocturn-card p-0.5 rounded-xl border border-nocturn-border">
           <button
             type="button"
@@ -113,6 +120,20 @@ export default function AddTask({ onAddTask, defaultDay = 'none' }) {
             />
           </div>
         </div>
+
+        {/* Explicit Add to My Day Button */}
+        <button
+          type="button"
+          onClick={() => setInMyDay((prev) => !prev)}
+          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-medium border transition-all duration-200 cursor-pointer ${
+            inMyDay
+              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
+              : 'bg-nocturn-card text-nocturn-muted hover:text-white border-nocturn-border'
+          }`}
+        >
+          <Sun className={`w-3.5 h-3.5 ${inMyDay ? 'text-amber-400 fill-amber-400' : ''}`} />
+          <span>My Day</span>
+        </button>
       </div>
     </form>
   )
