@@ -28,7 +28,7 @@ export default function Vocab() {
     reviewCount,
     isGenerating,
     generationError,
-    fetchOrGenerateDailyWords,
+    generateNewWords,
     addWord,
     deleteAllWords,
   } = useVocab()
@@ -50,13 +50,21 @@ export default function Vocab() {
   const handleStartLearn = async () => {
     if (allWords.length === 0) {
       try {
-        await fetchOrGenerateDailyWords()
+        await generateNewWords()
         navigate('/vocab/learn')
       } catch {
         // Error handled by hook state
       }
     } else {
       navigate('/vocab/learn')
+    }
+  }
+
+  const handleGenerateNewWords = async () => {
+    try {
+      await generateNewWords()
+    } catch {
+      // Error handled by hook state
     }
   }
 
@@ -89,8 +97,23 @@ export default function Vocab() {
           </p>
         </div>
 
-        {/* Action Controls: Add Word & Delete All Words */}
+        {/* Action Controls: Generate with AI, Add Word & Delete All Words */}
         <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
+          <button
+            type="button"
+            onClick={handleGenerateNewWords}
+            disabled={isGenerating}
+            className="px-3.5 py-2 rounded-xl bg-nocturn-accent/15 hover:bg-nocturn-accent/25 text-nocturn-accent border border-nocturn-accent/30 transition-colors flex items-center gap-2 text-xs font-semibold cursor-pointer disabled:opacity-50"
+            title="Generate brand new words with AI"
+          >
+            {isGenerating ? (
+              <RefreshCw className="w-4 h-4 animate-spin text-nocturn-accent" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-nocturn-accent" />
+            )}
+            <span>Generate with AI</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setIsAddModalOpen(true)}
@@ -187,14 +210,29 @@ export default function Vocab() {
 
           <div className="pt-6">
             {isDailyCompleted ? (
-              <button
-                type="button"
-                onClick={() => navigate('/vocab/learn')}
-                className="w-full py-3.5 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
-              >
-                <span>Review Today's Words</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => navigate('/vocab/learn')}
+                  className="py-3.5 px-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer"
+                >
+                  <span>Review Today's Words</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGenerateNewWords}
+                  disabled={isGenerating}
+                  className="py-3.5 px-4 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-all flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isGenerating ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  <span>Generate More Words</span>
+                </button>
+              </div>
             ) : allWords.length === 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <button
@@ -225,29 +263,45 @@ export default function Vocab() {
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={handleStartLearn}
-                disabled={isGenerating}
-                className="w-full py-3.5 px-6 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-all duration-200 flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer"
-              >
-                {isGenerating ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Generating Words with Gemini...</span>
-                  </>
-                ) : learnedTodayCount > 0 ? (
-                  <>
-                    <span>Continue Learning (Word {Math.min(currentLearningIndex + 1, Math.max(dailyWords.length, 1))} of {dailyWords.length})</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                ) : (
-                  <>
-                    <span>Start Learning ({dailyWords.length} words)</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleStartLearn}
+                  disabled={isGenerating}
+                  className="flex-1 py-3.5 px-6 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-all duration-200 flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer"
+                >
+                  {isGenerating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Generating Words with Gemini...</span>
+                    </>
+                  ) : learnedTodayCount > 0 ? (
+                    <>
+                      <span>Continue Learning (Word {Math.min(currentLearningIndex + 1, Math.max(dailyWords.length, 1))} of {dailyWords.length})</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  ) : (
+                    <>
+                      <span>Start Learning ({dailyWords.length} words)</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGenerateNewWords}
+                  disabled={isGenerating}
+                  className="py-3.5 px-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer disabled:opacity-50"
+                  title="Generate brand new words with AI"
+                >
+                  {isGenerating ? (
+                    <RefreshCw className="w-4 h-4 animate-spin text-nocturn-accent" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-nocturn-accent" />
+                  )}
+                  <span className="hidden sm:inline">Generate with AI</span>
+                </button>
+              </div>
             )}
           </div>
         </div>

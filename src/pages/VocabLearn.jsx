@@ -32,7 +32,7 @@ export default function VocabLearn() {
     sessionCompletedIdsKey,
     isGenerating,
     generationError,
-    fetchOrGenerateDailyWords,
+    generateNewWords,
     markWordLearned,
     addWord,
   } = useVocab()
@@ -229,10 +229,15 @@ export default function VocabLearn() {
           <div className="pt-2 flex flex-col sm:flex-row justify-center gap-3">
             <button
               type="button"
-              onClick={() => fetchOrGenerateDailyWords()}
-              className="px-6 py-2.5 rounded-xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
+              onClick={() => generateNewWords()}
+              disabled={isGenerating}
+              className="px-6 py-2.5 rounded-xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-all flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-50"
             >
-              <Sparkles className="w-4 h-4" />
+              {isGenerating ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
               <span>Generate with AI</span>
             </button>
             <button
@@ -349,28 +354,48 @@ export default function VocabLearn() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
           <button
             type="button"
             onClick={() => {
               setBrowsingCards(true)
               setCurrentIndex(0)
             }}
-            className="flex-1 py-3.5 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors text-center cursor-pointer"
+            className="py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors text-center cursor-pointer text-xs sm:text-sm"
           >
             Review Flashcards
           </button>
           <button
             type="button"
+            onClick={async () => {
+              try {
+                await generateNewWords()
+                setBrowsingCards(false)
+              } catch {
+                // error handled by hook state
+              }
+            }}
+            disabled={isGenerating}
+            className="py-3 px-4 rounded-2xl bg-nocturn-accent/15 hover:bg-nocturn-accent/25 text-nocturn-accent border border-nocturn-accent/30 transition-colors text-center cursor-pointer text-xs sm:text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {isGenerating ? (
+              <RefreshCw className="w-4 h-4 animate-spin text-nocturn-accent" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-nocturn-accent" />
+            )}
+            <span>Learn More Words</span>
+          </button>
+          <button
+            type="button"
             onClick={() => navigate('/vocab')}
-            className="flex-1 py-3.5 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors text-center cursor-pointer"
+            className="py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors text-center cursor-pointer text-xs sm:text-sm"
           >
             Back to Vocab Home
           </button>
           <button
             type="button"
             onClick={() => navigate('/vocab/review')}
-            className="flex-1 py-3.5 px-6 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-colors text-center cursor-pointer"
+            className="py-3 px-4 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-colors text-center cursor-pointer text-xs sm:text-sm"
           >
             Start Review Queue
           </button>

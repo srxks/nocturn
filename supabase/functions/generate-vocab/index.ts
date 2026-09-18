@@ -28,7 +28,8 @@ serve(async (req) => {
       })
     }
 
-    const apiKey = Deno.env.get('GEMINI_API_KEY')
+    const body = await req.json().catch(() => ({}))
+    const apiKey = Deno.env.get('GEMINI_API_KEY') || body.apiKey
     if (!apiKey) {
       return new Response(
         JSON.stringify({
@@ -42,7 +43,6 @@ serve(async (req) => {
       )
     }
 
-    const body = await req.json().catch(() => ({}))
     const { prompt, existingWords = [], count = 5 } = body
 
     // Always use gemini-3.6-flash (active supported model)
@@ -54,7 +54,7 @@ serve(async (req) => {
     const targetCount = Math.max(1, Number(count) || 5)
     const excludedStr =
       Array.isArray(existingWords) && existingWords.length > 0
-        ? `Do NOT include any of these previously learned words: ${existingWords.slice(-100).join(', ')}.`
+        ? `CRITICAL REQUIREMENT: Do NOT include or repeat any of these already learned words: ${existingWords.join(', ')}.`
         : ''
 
     const promptText =
@@ -66,6 +66,7 @@ Requirements:
 - Provide concise but accurate definitions.
 - Provide natural, contextual example sentences.
 - Include part of speech (e.g. noun, adjective, verb) and 2-3 relevant synonyms.
+- Every word must be brand new, distinct, and not appear in the excluded list.
 
 Return ONLY a valid JSON array containing exactly ${targetCount} objects with keys: word, definition, example_sentence, part_of_speech, synonyms, difficulty.`
 
@@ -80,8 +81,7 @@ Return ONLY a valid JSON array containing exactly ${targetCount} objects with ke
       body: JSON.stringify({
         contents: [{ parts: [{ text: promptText }] }],
         generationConfig: {
-          temperature: 0.7,
-          responseMimeType: 'application/json',
+          temperature: 0.9,
         },
       }),
     })

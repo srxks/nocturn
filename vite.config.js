@@ -59,8 +59,7 @@ function vocabDevApiPlugin(env) {
                 body: JSON.stringify({
                   contents: [{ parts: [{ text: promptText }] }],
                   generationConfig: {
-                    temperature: 0.7,
-                    responseMimeType: 'application/json',
+                    temperature: 0.9,
                   },
                 }),
               })
@@ -184,6 +183,14 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
+    define: {
+      'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(
+        env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || ''
+      ),
+      'import.meta.env.GEMINI_API_KEY': JSON.stringify(
+        env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || ''
+      ),
+    },
     plugins: [
       react(),
       tailwindcss(),

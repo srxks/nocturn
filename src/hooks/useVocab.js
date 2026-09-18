@@ -146,76 +146,96 @@ export function useVocab() {
   const totalUserWords = allWords.length
   const effectiveDailyTarget = totalUserWords > 0 ? Math.min(dailyLimit, Math.max(dailyWords.length, 1)) : dailyLimit
 
-  // 4. Live Query for Review Queue Words (scoped to user, deterministic, excludes today-quizzed)
+  // 4. Live Query for Review Queue Words (scoped to user, deterministic, up to 10 words)
   const reviewQueue = useLiveQuery(async () => {
     if (!db || !db.vocab) return []
-    return await getReviewQueueWords(userId, dailyLimit)
-  }, [userId, dailyLimit]) || []
+    return await getReviewQueueWords(userId, 10)
+  }, [userId]) || []
 
-  // 5. Generate Words Action via Gemini AI (supports incremental addition when target increases)
-  const fetchOrGenerateDailyWords = useCallback(async () => {
-    if (isGenerating) return []
+  // 5. Generate Brand New Words Action via Gemini AI (guaranteed brand new words every time)
+  const generateNewWords = useCallback(
+    async (count = null) => {
+      if (isGenerating) return []
 
-    setGenerationError(null)
-    setIsGenerating(true)
+      setGenerationError(null)
+      setIsGenerating(true)
 
-    try {
+      try {
+        const targetCount = count && Number(count) > 0 ? Number(count) : dailyLimit
+        const existingWordNames = allWords.map((w) => w.word)
+
+        const newWords = await generateDailyVocab(existingWordNames, targetCount)
+
+        const savedList = []
+        for (const item of newWords) {
+          const saved = await saveLearnedWord({
+            ...item,
+            userId: userId,
+            date_added: todayKey,
+            correct_count: 0,
+            last_quizzed_date: null,
+          })
+          savedList.push(saved)
+        }
+
+        // Append to today's log so they are immediately available to learn
+        const currentTodayWordIds = todayVocabLog?.wordIds || []
+        const existingTodayWords = allWords.filter(
+          (w) => currentTodayWordIds.includes(w.id) || w.date_added === todayKey
+        )
+        const combinedTodayWords = [...existingTodayWords, ...savedList]
+        const combinedIds = Array.from(new Set(combinedTodayWords.map((w) => w.id)))
+
+        await saveDailyVocabLog({
+          date: todayKey,
+          userId: userId,
+          wordIds: combinedIds,
+          words: combinedTodayWords,
+          completed: false,
+          currentIndex: todayVocabLog?.currentIndex || 0,
+          completedWordIds: todayVocabLog?.completedWordIds || [],
+          created_at: todayVocabLog?.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+
+        setIsGenerating(false)
+        return savedList
+      } catch (err) {
+        console.error('[useVocab] Word generation failed:', err)
+        const errorMsg = err.message || 'Failed to generate vocabulary words'
+        setGenerationError(errorMsg)
+        setIsGenerating(false)
+        throw err
+      }
+    },
+    [todayKey, isGenerating, dailyLimit, allWords, todayVocabLog, userId]
+  )
+
+  const fetchOrGenerateDailyWords = useCallback(
+    async (options = {}) => {
+      const forceNew = options === true || options?.forceNew === true
+
+      if (forceNew) {
+        return await generateNewWords(dailyLimit)
+      }
+
       // Determine existing words for today's set
       const currentTodayWordIds = todayVocabLog?.wordIds || []
       const existingTodayWords = allWords.filter(
         (w) => currentTodayWordIds.includes(w.id) || w.date_added === todayKey
       )
 
-      // If we already have >= dailyLimit words for today, don't request more
+      // If we already have >= dailyLimit words for today, return them unless forceNew is requested
       const neededCount = Math.max(0, dailyLimit - existingTodayWords.length)
       if (neededCount === 0 && existingTodayWords.length > 0) {
-        setIsGenerating(false)
         return existingTodayWords.slice(0, dailyLimit)
       }
 
       const countToFetch = neededCount > 0 ? neededCount : dailyLimit
-      const existingWordNames = allWords.map((w) => w.word)
-
-      const newWords = await generateDailyVocab(existingWordNames, countToFetch)
-
-      const savedList = []
-      for (const item of newWords) {
-        const saved = await saveLearnedWord({
-          ...item,
-          userId: userId,
-          date_added: todayKey,
-          correct_count: 0,
-          last_quizzed_date: null,
-        })
-        savedList.push(saved)
-      }
-
-      // Combine existing today's words with newly generated words (preserving existing)
-      const combinedTodayWords = [...existingTodayWords, ...savedList]
-      const combinedIds = Array.from(new Set(combinedTodayWords.map((w) => w.id)))
-
-      await saveDailyVocabLog({
-        date: todayKey,
-        userId: userId,
-        wordIds: combinedIds,
-        words: combinedTodayWords,
-        completed: false,
-        currentIndex: todayVocabLog?.currentIndex || 0,
-        completedWordIds: todayVocabLog?.completedWordIds || [],
-        created_at: todayVocabLog?.created_at || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-
-      setIsGenerating(false)
-      return combinedTodayWords.slice(0, dailyLimit)
-    } catch (err) {
-      console.error('[useVocab] Daily word generation failed:', err)
-      const errorMsg = err.message || 'Failed to generate vocabulary words'
-      setGenerationError(errorMsg)
-      setIsGenerating(false)
-      throw err
-    }
-  }, [todayKey, isGenerating, dailyLimit, allWords, todayVocabLog, userId])
+      return await generateNewWords(countToFetch)
+    },
+    [dailyLimit, todayVocabLog, allWords, todayKey, generateNewWords]
+  )
 
   // Automatic daily set generation when online and today's set is incomplete
   const autoGenAttemptedRef = useRef(false)
@@ -312,6 +332,7 @@ export function useVocab() {
     isGenerating,
     generationError,
     fetchOrGenerateDailyWords,
+    generateNewWords,
     markWordLearned,
     recordQuizResult,
     getWordStatus,

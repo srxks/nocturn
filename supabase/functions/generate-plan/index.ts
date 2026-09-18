@@ -28,7 +28,8 @@ serve(async (req) => {
       })
     }
 
-    const apiKey = Deno.env.get('GEMINI_API_KEY')
+    const body = await req.json().catch(() => ({}))
+    const apiKey = Deno.env.get('GEMINI_API_KEY') || body.apiKey
     if (!apiKey) {
       return new Response(
         JSON.stringify({
@@ -42,7 +43,6 @@ serve(async (req) => {
       )
     }
 
-    const body = await req.json().catch(() => ({}))
     const { prompt } = body
 
     let selectedModel = body.model || 'gemini-3.6-flash'

@@ -278,82 +278,110 @@ export async function updateWordQuizResult(wordId, isCorrect) {
   }
 }
 
-export async function getReviewQueueWords(userId = null, limit = null) {
+function createSeededRandom(seedStr) {
+  let h = 1779033703 ^ seedStr.length
+  for (let i = 0; i < seedStr.length; i++) {
+    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353)
+    h = (h << 13) | (h >>> 19)
+  }
+  return function () {
+    h = Math.imul(h ^ (h >>> 16), 2246822507)
+    h = Math.imul(h ^ (h >>> 13), 3266489909)
+    return ((h ^= h >>> 16) >>> 0) / 4294967296
+  }
+}
+
+function shuffleArray(arr, rng) {
+  const result = [...arr]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    const temp = result[i]
+    result[i] = result[j]
+    result[j] = temp
+  }
+  return result
+}
+
+export async function getReviewQueueWords(userId = null, limit = 10) {
   try {
     const allWords = await getAllLearnedWords(userId)
     const today = getTodayDateKey()
+    const maxLimit = Math.min(10, Math.max(1, Number(limit) || 10))
 
+    // 1. Filter:
+    // - Exclude words learned today (w.date_added === today)
+    // - Include words from all previous days (w.date_added !== today)
+    // - Exclude words already reviewed/quizzed today (w.last_quizzed_date >= today)
     const eligible = allWords.filter((w) => {
       if (!w || !w.word) return false
-
-      // Words quizzed today are already reviewed today -> leave queue
-      if (w.last_quizzed_date && w.last_quizzed_date >= today) {
-        return false
-      }
-
-      // Words added today that are currently unlearned (< 5 and no quiz history)
-      // belong in today's active daily learning set, NOT in the review queue
-      if (w.date_added === today && (Number(w.correct_count) || 0) === 0 && !w.last_quizzed_date) {
-        return false
-      }
-
-      // Words never quizzed are due immediately
-      if (!w.last_quizzed_date) {
-        return true
-      }
-
-      const daysSince = getDaysDifference(w.last_quizzed_date, today)
-      const count = Number(w.correct_count) || 0
-
-      // Spaced repetition schedule: words currently being learned remain in progress
-      if (count === 0) return true
-      if (count === 1) return daysSince >= 1
-      if (count === 2) return daysSince >= 3
-      if (count === 3) return daysSince >= 5
-      if (count === 4) return daysSince >= 7
-      // Settled words (count >= 5) need refresh only after 14 days
-      return daysSince >= 14
+      if (w.date_added === today) return false
+      if (w.last_quizzed_date && w.last_quizzed_date >= today) return false
+      return true
     })
 
-    // Deduplicate by normalized word name so duplicates never appear in the review queue
+    // Deduplicate by normalized word name
     const seen = new Set()
-    const dedupedEligible = []
+    const deduped = []
     for (const w of eligible) {
       const norm = (w.word || '').trim().toLowerCase()
       if (!norm || seen.has(norm)) continue
       seen.add(norm)
-      dedupedEligible.push(w)
+      deduped.push(w)
     }
 
-    // Deterministic, stable ordering
-    dedupedEligible.sort((a, b) => {
+    if (deduped.length === 0) return []
+
+    // 2. Group into priority tiers by review age:
+    // Oldest reviewed word has highest priority!
+    // Words never reviewed (null / undefined / empty last_quizzed_date) are the oldest / highest priority of all.
+    // Words with older last_quizzed_date come next.
+    const buckets = new Map()
+    for (const w of deduped) {
+      const key = w.last_quizzed_date ? String(w.last_quizzed_date).slice(0, 10) : '0000-00-00'
+      if (!buckets.has(key)) {
+        buckets.set(key, [])
+      }
+      buckets.get(key).push(w)
+    }
+
+    // Sort bucket keys ascending: '0000-00-00' first (never reviewed), then oldest date to newest date
+    const sortedBucketKeys = Array.from(buckets.keys()).sort()
+
+    // 3. Randomly select up to maximum 10 words using daily seed:
+    const seedStr = `${today}-${userId || 'guest'}`
+    const seededRandom = createSeededRandom(seedStr)
+
+    const selected = []
+    for (const key of sortedBucketKeys) {
+      if (selected.length >= maxLimit) break
+
+      const bucketWords = buckets.get(key)
+      const shuffledBucket = shuffleArray(bucketWords, seededRandom)
+
+      const needed = maxLimit - selected.length
+      selected.push(...shuffledBucket.slice(0, needed))
+    }
+
+    // 4. Sort selected words: strictly from oldest reviewed word (high priority) to newest one
+    selected.sort((a, b) => {
       const aQuizzed = Boolean(a.last_quizzed_date)
       const bQuizzed = Boolean(b.last_quizzed_date)
+      // Never reviewed (null) comes first
       if (!aQuizzed && bQuizzed) return -1
       if (aQuizzed && !bQuizzed) return 1
 
-      if ((a.correct_count || 0) !== (b.correct_count || 0)) {
-        return (a.correct_count || 0) - (b.correct_count || 0)
-      }
-
+      // Oldest review date first
       if (a.last_quizzed_date && b.last_quizzed_date) {
         if (a.last_quizzed_date !== b.last_quizzed_date) {
           return a.last_quizzed_date.localeCompare(b.last_quizzed_date)
         }
       }
 
-      if ((a.word || '') !== (b.word || '')) {
-        return (a.word || '').localeCompare(b.word || '')
-      }
-
-      return (a.id || '').localeCompare(b.id || '')
+      // Tie-breaker: word name
+      return (a.word || '').localeCompare(b.word || '')
     })
 
-    if (limit && limit > 0) {
-      return dedupedEligible.slice(0, limit)
-    }
-
-    return dedupedEligible
+    return selected.slice(0, maxLimit)
   } catch (err) {
     console.error('Failed to get review queue words:', err)
     return []
