@@ -5,9 +5,7 @@ import { ThemeContext } from './ThemeContext'
 import { DEFAULT_NOCTURN_THEME, PRESET_THEMES } from '../constants/presetThemes'
 import { useAuth } from './useAuth'
 import {
-  fetchUserSettings,
   upsertUserSettings,
-  fetchUserThemes,
   upsertUserThemeRemote,
   deleteUserThemeRemote,
 } from '../lib/themes'
@@ -34,52 +32,9 @@ export function ThemeProvider({ children }) {
     ensureSeedData()
   }, [])
 
-  // Sync settings and themes from Supabase when user logs in or switches account
-  useEffect(() => {
-    if (!user?.id) return
-
-    async function loadRemoteThemesAndSettings() {
-      try {
-        const [remoteSettings, remoteThemes] = await Promise.all([
-          fetchUserSettings(user.id),
-          fetchUserThemes(user.id),
-        ])
-
-        // First populate remote themes in Dexie so activeTheme lookup resolves cleanly
-        if (remoteThemes && remoteThemes.length > 0) {
-          for (const theme of remoteThemes) {
-            await db.themes.put(theme)
-          }
-        }
-
-        // Restore active theme setting (supports both camelCase and snake_case)
-        const activeId = remoteSettings?.activeThemeId || remoteSettings?.active_theme_id
-        if (activeId) {
-          await db.themeSettings.put({
-            id: 'active',
-            activeThemeId: activeId,
-            customColors: remoteSettings?.customColors || null,
-          })
-        }
-
-        // Restore UI style preference ('normal' | 'angular')
-        const remoteUiStyle = remoteSettings?.uiStyle || remoteSettings?.ui_style
-        if (remoteUiStyle === 'angular' || remoteUiStyle === 'normal') {
-          const currentPrefs = (await db.userSettings.get('preferences')) || {}
-          await db.userSettings.put({
-            ...currentPrefs,
-            id: 'preferences',
-            uiStyle: remoteUiStyle,
-            updatedAt: new Date().toISOString(),
-          })
-        }
-      } catch (err) {
-        console.warn('[ThemeProvider] Error loading remote themes/settings:', err)
-      }
-    }
-
-    loadRemoteThemesAndSettings()
-  }, [user?.id])
+  // NOTE: Themes and settings are synchronized centrally via syncCoordinator
+  // and AuthProvider, and received via realtimeService. Dexie is the local reactive
+  // source of truth, watched below via useLiveQuery. No duplicate REST calls needed here.
 
   // Dexie live queries for themes, active theme settings, and user style preferences
   const dbThemes = useLiveQuery(async () => {

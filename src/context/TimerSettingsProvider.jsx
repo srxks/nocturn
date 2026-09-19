@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, ensureSeedData } from '../db/db'
 import { TimerSettingsContext } from './TimerSettingsContext'
 import { useAuth } from './useAuth'
-import { upsertTimerSettingsRemote, fetchTimerSettingsRemote } from '../lib/timer'
+import { upsertTimerSettingsRemote } from '../lib/timer'
 import { isRealtimeWrite } from '../services/realtimeService'
 
 const DEFAULT_SETTINGS = {
@@ -23,26 +23,9 @@ export function TimerSettingsProvider({ children }) {
     ensureSeedData()
   }, [])
 
-  // Sync from Supabase when user logs in or switches accounts
-  useEffect(() => {
-    if (!user?.id) return
-
-    async function loadRemoteSettings() {
-      try {
-        const remote = await fetchTimerSettingsRemote(user.id)
-        if (remote) {
-          await db.timerSettings.put({
-            id: 'default',
-            ...remote,
-          })
-        }
-      } catch (err) {
-        console.warn('[TimerSettingsProvider] Error loading remote timer settings:', err)
-      }
-    }
-
-    loadRemoteSettings()
-  }, [user?.id])
+  // NOTE: Timer settings are synchronized centrally via syncCoordinator
+  // and AuthProvider, and received via realtimeService. Dexie is the local reactive
+  // source of truth, watched below via useLiveQuery. No duplicate REST calls needed here.
 
   const dbSettings = useLiveQuery(async () => {
     const record = await db.timerSettings.get('default')

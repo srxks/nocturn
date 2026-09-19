@@ -5,7 +5,7 @@ import { db } from '../../db/db'
 import { useAuth } from '../../context/useAuth'
 import { useToast } from '../../context/useToast'
 import { useTheme } from '../../context/useTheme'
-import { syncWithCloud } from '../../services/syncService'
+import { requestCoordinatedSync } from '../../services/syncService'
 
 export default function DataManagementCard() {
   const { user } = useAuth()
@@ -99,7 +99,7 @@ export default function DataManagementCard() {
 
       // Pull fresh data from Supabase
       if (user?.id) {
-        const syncRes = await syncWithCloud(user.id)
+        const syncRes = await requestCoordinatedSync(user.id, { force: true, source: 'cache_purge' })
         addToast(
           `Local cache cleared. Freshly synced ${syncRes.synced} items from cloud.`,
           'success',

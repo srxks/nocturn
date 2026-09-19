@@ -1,5 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient.js'
 import { toUuid } from './idUtils.js'
+import { dedupeRequest } from '../services/syncCoordinator.js'
+import { classifyAndReportError } from '../services/networkStateService.js'
 
 export function mapRowToList(row) {
   if (!row) return null
@@ -40,31 +42,25 @@ export function mapListToRow(list, userId) {
 export async function fetchUserLists(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) return []
 
-  try {
-    const { data, error } = await supabase
-      .from('task_lists')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true })
+  return dedupeRequest(`lists:${userId}`, async () => {
+    try {
+      const { data, error } = await supabase
+        .from('task_lists')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
 
-    if (error) {
-      console.error('[task_lists] SELECT failed:', {
-        table: 'task_lists',
-        operation: 'SELECT',
-        recordId: userId,
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-      })
-      return []
+      if (error) {
+        classifyAndReportError(error)
+        throw new Error(`[task_lists] SELECT failed: ${error.message}`)
+      }
+
+      return (data || []).map(mapRowToList).filter(Boolean)
+    } catch (err) {
+      classifyAndReportError(err)
+      throw err
     }
-
-    return (data || []).map(mapRowToList).filter(Boolean)
-  } catch (err) {
-    console.error('[task_lists] SELECT exception:', err)
-    return []
-  }
+  })
 }
 
 export async function upsertListRemote(list, userId) {

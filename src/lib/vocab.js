@@ -1,5 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient.js'
 import { toUuid } from './idUtils.js'
+import { dedupeRequest } from '../services/syncCoordinator.js'
+import { classifyAndReportError } from '../services/networkStateService.js'
 
 export function mapRowToVocabWord(row) {
   if (!row) return null
@@ -73,23 +75,25 @@ export function mapVocabWordToRow(item, userId) {
 export async function fetchUserVocabWords(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) return []
 
-  try {
-    const { data, error } = await supabase
-      .from('vocab_words')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
+  return dedupeRequest(`vocab:${userId}`, async () => {
+    try {
+      const { data, error } = await supabase
+        .from('vocab_words')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
 
-    if (error) {
-      console.warn('[vocab.js] Error fetching user vocab words:', error.message)
-      return []
+      if (error) {
+        classifyAndReportError(error)
+        throw new Error(`[vocab.js] Error fetching user vocab words: ${error.message}`)
+      }
+
+      return (data || []).map(mapRowToVocabWord)
+    } catch (err) {
+      classifyAndReportError(err)
+      throw err
     }
-
-    return (data || []).map(mapRowToVocabWord)
-  } catch (err) {
-    console.warn('[vocab.js] Network error fetching vocab words:', err)
-    return []
-  }
+  })
 }
 
 export async function upsertVocabWordsRemote(wordsArray, userId) {

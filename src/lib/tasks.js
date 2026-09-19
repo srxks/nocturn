@@ -1,5 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient.js'
 import { toUuid } from './idUtils.js'
+import { dedupeRequest } from '../services/syncCoordinator.js'
+import { classifyAndReportError } from '../services/networkStateService.js'
 
 /**
  * Maps Supabase database row to frontend Task object.
@@ -150,48 +152,46 @@ export function mapTaskToRow(task, userId) {
 export async function fetchUserTasks(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) return []
 
-  try {
-    const { data: taskData, error: taskErr } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-
-    if (taskErr) {
-      console.error('[tasks] SELECT failed:', {
-        table: 'tasks', operation: 'SELECT', userId,
-        code: taskErr.code, message: taskErr.message,
-        details: taskErr.details, hint: taskErr.hint,
-      })
-      return []
-    }
-
-    // Fetch subtasks for this user
-    const subtasksByTaskId = new Map()
+  return dedupeRequest(`tasks:${userId}`, async () => {
     try {
-      const { data: subtaskData, error: subtaskErr } = await supabase
-        .from('subtasks')
+      const { data: taskData, error: taskErr } = await supabase
+        .from('tasks')
         .select('*')
         .eq('user_id', userId)
+        .order('created_at', { ascending: false })
 
-      if (!subtaskErr && Array.isArray(subtaskData)) {
-        for (const st of subtaskData) {
-          const list = subtasksByTaskId.get(st.task_id) || []
-          list.push(st)
-          subtasksByTaskId.set(st.task_id, list)
-        }
-      } else if (subtaskErr && subtaskErr.code !== '42P01') {
-        console.warn('[subtasks] SELECT notice:', subtaskErr.message)
+      if (taskErr) {
+        classifyAndReportError(taskErr)
+        throw new Error(`[tasks] SELECT failed: ${taskErr.message}`)
       }
-    } catch { /* subtasks table gracefully handled */ }
 
-    return (taskData || []).map((row) =>
-      mapRowToTask(row, subtasksByTaskId.get(row.id) || [])
-    )
-  } catch (err) {
-    console.error('[tasks] SELECT exception:', err)
-    return []
-  }
+      // Fetch subtasks for this user
+      const subtasksByTaskId = new Map()
+      try {
+        const { data: subtaskData, error: subtaskErr } = await supabase
+          .from('subtasks')
+          .select('*')
+          .eq('user_id', userId)
+
+        if (!subtaskErr && Array.isArray(subtaskData)) {
+          for (const st of subtaskData) {
+            const list = subtasksByTaskId.get(st.task_id) || []
+            list.push(st)
+            subtasksByTaskId.set(st.task_id, list)
+          }
+        } else if (subtaskErr && subtaskErr.code !== '42P01') {
+          console.warn('[subtasks] SELECT notice:', subtaskErr.message)
+        }
+      } catch { /* subtasks table gracefully handled */ }
+
+      return (taskData || []).map((row) =>
+        mapRowToTask(row, subtasksByTaskId.get(row.id) || [])
+      )
+    } catch (err) {
+      classifyAndReportError(err)
+      throw err
+    }
+  })
 }
 
 /**

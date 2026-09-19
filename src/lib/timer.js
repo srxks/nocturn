@@ -1,5 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient.js'
 import { toUuid } from './idUtils.js'
+import { dedupeRequest } from '../services/syncCoordinator.js'
+import { classifyAndReportError } from '../services/networkStateService.js'
 
 // ─── Clock Drift Management ──────────────────────────────────────────────────
 // Offsets local client clock against Supabase server timestamp to ensure multiple
@@ -48,41 +50,35 @@ export function mapRowToTimerSettings(data) {
 export async function fetchTimerSettingsRemote(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) return null
 
-  try {
-    const { data, error } = await supabase
-      .from('timer_settings')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle()
+  return dedupeRequest(`timer_settings:${userId}`, async () => {
+    try {
+      const { data, error } = await supabase
+        .from('timer_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle()
 
-    if (error) {
-      console.error('[timer_settings] SELECT failed:', {
-        table: 'timer_settings',
-        operation: 'SELECT',
-        recordId: userId,
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-      })
-      return null
-    }
-
-    if (!data) return null
-
-    // Calibrate server clock offset from server updated_at timestamp
-    if (data.updated_at) {
-      const serverMs = new Date(data.updated_at).getTime()
-      if (!isNaN(serverMs)) {
-        setServerClockOffset(serverMs - Date.now())
+      if (error && error.code !== 'PGRST116') {
+        classifyAndReportError(error)
+        throw new Error(`[timer_settings] SELECT failed: ${error.message}`)
       }
-    }
 
-    return mapRowToTimerSettings(data)
-  } catch (err) {
-    console.error('[timer_settings] SELECT exception:', err)
-    return null
-  }
+      if (!data) return null
+
+      // Calibrate server clock offset from server updated_at timestamp
+      if (data.updated_at) {
+        const serverMs = new Date(data.updated_at).getTime()
+        if (!isNaN(serverMs)) {
+          setServerClockOffset(serverMs - Date.now())
+        }
+      }
+
+      return mapRowToTimerSettings(data)
+    } catch (err) {
+      classifyAndReportError(err)
+      throw err
+    }
+  })
 }
 
 /**
@@ -230,27 +226,23 @@ export async function recordPomodoroHistoryRemote(
 export async function fetchUserFocusSessions(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) return []
 
-  try {
-    const { data, error } = await supabase
-      .from('focus_sessions')
-      .select('*')
-      .eq('user_id', userId)
-      .order('end_time', { ascending: false })
+  return dedupeRequest(`focus_sessions:${userId}`, async () => {
+    try {
+      const { data, error } = await supabase
+        .from('focus_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('end_time', { ascending: false })
 
-    if (error) {
-      console.error('[focus_sessions] SELECT failed:', {
-        table: 'focus_sessions',
-        operation: 'SELECT',
-        userId,
-        code: error.code,
-        message: error.message,
-      })
-      return []
+      if (error) {
+        classifyAndReportError(error)
+        throw new Error(`[focus_sessions] SELECT failed: ${error.message}`)
+      }
+
+      return data || []
+    } catch (err) {
+      classifyAndReportError(err)
+      throw err
     }
-
-    return data || []
-  } catch (err) {
-    console.error('[focus_sessions] SELECT exception:', err)
-    return []
-  }
+  })
 }

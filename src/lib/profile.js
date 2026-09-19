@@ -1,4 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient.js'
+import { dedupeRequest } from '../services/syncCoordinator.js'
+import { classifyAndReportError } from '../services/networkStateService.js'
 
 /**
  * Fetches user profile from user_profiles table.
@@ -14,31 +16,40 @@ import { supabase, isSupabaseConfigured } from './supabaseClient.js'
 export async function fetchUserProfileRemote(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) return null
 
-  try {
-    // 1. Query by user_id (unique ownership foreign key)
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle()
+  return dedupeRequest(`profile:${userId}`, async () => {
+    try {
+      // 1. Query by user_id (unique ownership foreign key)
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle()
 
-    if (!error && data) return data
+      if (error && error.code !== 'PGRST116') {
+        classifyAndReportError(error)
+        throw new Error(`[user_profiles] SELECT failed: ${error.message}`)
+      }
 
-    // 2. Fallback query by id in case an earlier record used id = auth.uid()
-    if (!data) {
-      const { data: fallbackData } = await supabase
+      if (data) return data
+
+      // 2. Fallback query by id in case an earlier record used id = auth.uid()
+      const { data: fallbackData, error: fallbackErr } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle()
-      if (fallbackData) return fallbackData
-    }
 
-    return null
-  } catch (err) {
-    console.warn('[user_profiles] SELECT exception:', err.message)
-    return null
-  }
+      if (fallbackErr && fallbackErr.code !== 'PGRST116') {
+        classifyAndReportError(fallbackErr)
+        throw new Error(`[user_profiles] SELECT fallback failed: ${fallbackErr.message}`)
+      }
+
+      return fallbackData || null
+    } catch (err) {
+      classifyAndReportError(err)
+      throw err
+    }
+  })
 }
 
 /**

@@ -9,7 +9,7 @@
 
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient.js'
 import { getStorageItem, setStorageItem, removeStorageItem } from '../utils/storageUtils.js'
-import { setSyncingState, reportNetworkSuccess, classifyAndReportError } from './networkStateService.js'
+import { setSyncingState, reportNetworkSuccess, classifyAndReportError, isNetworkInCooldown } from './networkStateService.js'
 
 const QUEUE_KEY = 'nocturn_sync_queue'
 
@@ -83,6 +83,7 @@ export function enqueueMutation(operation, table, payload) {
 export async function drainSyncQueue() {
   if (!isSupabaseConfigured || !supabase) return { drained: 0, remaining: 0 }
   if (typeof navigator !== 'undefined' && !navigator.onLine) return { drained: 0, remaining: readQueue().length }
+  if (isNetworkInCooldown()) return { drained: 0, remaining: readQueue().length, inCooldown: true }
 
   const queue = readQueue()
   if (queue.length === 0) return { drained: 0, remaining: 0 }
@@ -93,7 +94,9 @@ export async function drainSyncQueue() {
     const remaining = []
     let drainedCount = 0
 
-    for (const entry of queue) {
+    for (let i = 0; i < queue.length; i++) {
+      const entry = queue[i]
+
       // Respect exponential backoff delay
       if (entry.nextRetryAt && entry.nextRetryAt > nowMs) {
         remaining.push(entry)
@@ -120,10 +123,17 @@ export async function drainSyncQueue() {
               console.warn(`[syncQueue] Dropping non-retryable error for ${entry.table}:`, error.message)
             } else {
               entry.attempts = (entry.attempts || 0) + 1
-              // Exponential backoff: 2s, 4s, 8s, 16s... max 60s
               const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
               entry.nextRetryAt = Date.now() + backoffMs
               if (entry.attempts < 8) remaining.push(entry)
+            }
+
+            if (isNetworkInCooldown()) {
+              // Network connection reset/closed - abort loop and preserve remaining queue
+              for (let j = i + 1; j < queue.length; j++) {
+                remaining.push(queue[j])
+              }
+              break
             }
           } else {
             reportNetworkSuccess()
@@ -143,6 +153,13 @@ export async function drainSyncQueue() {
               const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
               entry.nextRetryAt = Date.now() + backoffMs
               if (entry.attempts < 8) remaining.push(entry)
+
+              if (isNetworkInCooldown()) {
+                for (let j = i + 1; j < queue.length; j++) {
+                  remaining.push(queue[j])
+                }
+                break
+              }
             } else {
               reportNetworkSuccess()
               drainedCount++
@@ -162,6 +179,13 @@ export async function drainSyncQueue() {
               const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
               entry.nextRetryAt = Date.now() + backoffMs
               if (entry.attempts < 8) remaining.push(entry)
+
+              if (isNetworkInCooldown()) {
+                for (let j = i + 1; j < queue.length; j++) {
+                  remaining.push(queue[j])
+                }
+                break
+              }
             } else {
               reportNetworkSuccess()
               drainedCount++
@@ -174,6 +198,13 @@ export async function drainSyncQueue() {
         const backoffMs = Math.min(60000, Math.pow(2, entry.attempts) * 1000)
         entry.nextRetryAt = Date.now() + backoffMs
         if (entry.attempts < 8) remaining.push(entry)
+
+        if (isNetworkInCooldown()) {
+          for (let j = i + 1; j < queue.length; j++) {
+            remaining.push(queue[j])
+          }
+          break
+        }
       }
     }
 

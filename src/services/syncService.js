@@ -22,8 +22,9 @@ import { fetchTimerSettingsRemote, upsertTimerSettingsRemote, fetchUserFocusSess
 import { fetchUserVocabWords, upsertVocabWordsRemote, deleteVocabWordRemote, deleteAllVocabWordsRemote } from '../lib/vocab.js'
 import { toUuid } from '../lib/idUtils.js'
 import { resolveConflict, getTombstones, clearTombstone, isTombstoned } from './conflictService.js'
-import { setSyncingState, reportNetworkSuccess, classifyAndReportError } from './networkStateService.js'
+import { setSyncingState, reportNetworkSuccess, classifyAndReportError, isNetworkInCooldown } from './networkStateService.js'
 import { drainSyncQueue } from './syncQueue.js'
+import { runCoordinatedSync } from './syncCoordinator.js'
 
 export async function syncWithCloud(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) {
@@ -33,6 +34,11 @@ export async function syncWithCloud(userId) {
   // Silent offline check: if user is offline, skip cloud network calls safely
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return { success: true, synced: 0, offline: true }
+  }
+
+  // Circuit breaker: if Supabase connection recently failed/reset, suppress full sync
+  if (isNetworkInCooldown()) {
+    return { success: false, synced: 0, offline: true, inCooldown: true }
   }
 
   setSyncingState(true)
@@ -77,6 +83,9 @@ export async function syncWithCloud(userId) {
     }
   } catch (profileErr) {
     console.warn('[syncService] Profile sync notice:', profileErr.message)
+    if (isNetworkInCooldown()) {
+      return { success: false, synced: totalSynced, offline: true, inCooldown: true, error: profileErr }
+    }
   }
 
   // ─── 2. Task Lists Sync (Precedes tasks to satisfy FK constraints) ───────────
@@ -145,7 +154,10 @@ export async function syncWithCloud(userId) {
       }
     }
   } catch (listErr) {
-    console.error('[syncService] Task lists sync failed:', listErr.message)
+    console.warn('[syncService] Task lists sync notice:', listErr.message)
+    if (isNetworkInCooldown()) {
+      return { success: false, synced: totalSynced, offline: true, inCooldown: true, error: listErr }
+    }
   }
 
   // ─── 3. Tasks Sync (Dependency-aware & LWW) ─────────────────────────────────
@@ -229,7 +241,10 @@ export async function syncWithCloud(userId) {
       }
     }
   } catch (taskErr) {
-    console.error('[syncService] Tasks sync failed:', taskErr.message)
+    console.warn('[syncService] Tasks sync notice:', taskErr.message)
+    if (isNetworkInCooldown()) {
+      return { success: false, synced: totalSynced, offline: true, inCooldown: true, error: taskErr }
+    }
   }
 
   // ─── 5. Timer Settings Sync (LWW) ───────────────────────────────────────────
@@ -264,6 +279,9 @@ export async function syncWithCloud(userId) {
     }
   } catch (timerErr) {
     console.warn('[syncService] Timer settings sync notice:', timerErr.message)
+    if (isNetworkInCooldown()) {
+      return { success: false, synced: totalSynced, offline: true, inCooldown: true, error: timerErr }
+    }
   }
 
   // ─── 6. Themes & User Settings Sync ─────────────────────────────────────────
@@ -312,6 +330,9 @@ export async function syncWithCloud(userId) {
     }
   } catch (themeErr) {
     console.warn('[syncService] Themes/settings sync notice:', themeErr.message)
+    if (isNetworkInCooldown()) {
+      return { success: false, synced: totalSynced, offline: true, inCooldown: true, error: themeErr }
+    }
   }
 
   // ─── 7. Vocab Words Sync (Reconciled with LWW & Tombstones) ─────────────────
@@ -374,6 +395,9 @@ export async function syncWithCloud(userId) {
     }
   } catch (vocabErr) {
     console.warn('[syncService] Vocab words sync notice:', vocabErr.message)
+    if (isNetworkInCooldown()) {
+      return { success: false, synced: totalSynced, offline: true, inCooldown: true, error: vocabErr }
+    }
   }
 
   // ─── 8. Focus Sessions Sync ─────────────────────────────────────────────────
@@ -396,6 +420,9 @@ export async function syncWithCloud(userId) {
     }
   } catch (focusErr) {
     console.warn('[syncService] Focus sessions sync notice:', focusErr.message)
+    if (isNetworkInCooldown()) {
+      return { success: false, synced: totalSynced, offline: true, inCooldown: true, error: focusErr }
+    }
   }
 
     reportNetworkSuccess()
@@ -412,9 +439,13 @@ export async function syncLocalDataToSupabase(userId) {
   return syncWithCloud(userId)
 }
 
+export async function requestCoordinatedSync(userId, options = {}) {
+  return runCoordinatedSync(userId, syncWithCloud, options)
+}
+
 export async function forceManualSync(userId) {
   const drainRes = await drainSyncQueue()
-  const syncRes = await syncWithCloud(userId)
+  const syncRes = await runCoordinatedSync(userId, syncWithCloud, { force: true, source: 'manual_force' })
   return {
     drained: drainRes?.drained || 0,
     synced: syncRes?.synced || 0,

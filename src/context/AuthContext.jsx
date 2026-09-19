@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { AuthContext } from './AuthContextObject'
-import { syncWithCloud } from '../services/syncService'
+import { requestCoordinatedSync } from '../services/syncService'
 import { updateUserProfileRemote, fetchUserProfileRemote } from '../lib/profile'
 import { startRealtime, stopRealtime } from '../services/realtimeService'
 import { drainSyncQueue } from '../services/syncQueue'
@@ -53,14 +53,11 @@ export function AuthProvider({ children }) {
       setLoading(false)
     }
 
-    // Guard against hanging indefinitely on net::ERR_CONNECTION_CLOSED / refresh_token outage
-    const timeoutId = setTimeout(() => {
+    // Safety timeout to ensure loading state unblocks even on connection drop / offline hang
+    const safetyTimeoutId = setTimeout(() => {
       const fallbackUser = getCachedAuthUser()
       endLoading(fallbackUser ?? null, null)
-      if (fallbackUser) {
-        handleAuthUser(fallbackUser, 'TIMEOUT_FALLBACK')
-      }
-    }, 2500)
+    }, 4000)
 
     // Handles all setup required after a user signs in
     const handleAuthUser = async (authUser, event = null) => {
@@ -78,19 +75,23 @@ export function AuthProvider({ children }) {
         cleanupLegacyLocalStorage()
 
         // 1. Ensure user profile exists, preserving existing custom display name
-        const existingProfile = await fetchUserProfileRemote(authUser.id)
-        const nameToUse =
-          existingProfile?.display_name ||
-          authUser.user_metadata?.full_name ||
-          authUser.email?.split('@')[0] ||
-          'Nocturn User'
-        setStorageItem('nocturn_user_name', nameToUse)
+        try {
+          const existingProfile = await fetchUserProfileRemote(authUser.id)
+          const nameToUse =
+            existingProfile?.display_name ||
+            authUser.user_metadata?.full_name ||
+            authUser.email?.split('@')[0] ||
+            'Nocturn User'
+          setStorageItem('nocturn_user_name', nameToUse)
 
-        if (!existingProfile?.display_name) {
-          await updateUserProfileRemote(authUser.id, {
-            display_name: nameToUse,
-            avatar_url: authUser.user_metadata?.avatar_url || null,
-          })
+          if (!existingProfile?.display_name) {
+            await updateUserProfileRemote(authUser.id, {
+              display_name: nameToUse,
+              avatar_url: authUser.user_metadata?.avatar_url || null,
+            })
+          }
+        } catch (profileErr) {
+          console.warn('[AuthProvider] Profile check notice:', profileErr.message)
         }
 
         // 2. Start centralized realtime subscriptions for all tables
@@ -99,8 +100,8 @@ export function AuthProvider({ children }) {
         // 3. Drain any offline mutations queued while the user was disconnected
         await drainSyncQueue()
 
-        // 4. Two-way timestamp reconciliation sync (Dexie <-> Supabase)
-        await syncWithCloud(authUser.id)
+        // 4. Two-way timestamp reconciliation sync via Global Sync Coordinator
+        await requestCoordinatedSync(authUser.id, { source: `auth_${event || 'init'}` })
       } catch (err) {
         console.warn('[AuthProvider] Auth user initialization notice:', err)
       } finally {
@@ -108,18 +109,15 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // Get the initial session on mount with timeout and catch guard
+    // Get the initial session on mount with safety timeout and catch guard
     supabase.auth
       .getSession()
       .then(({ data: { session: initSession }, error }) => {
-        clearTimeout(timeoutId)
+        clearTimeout(safetyTimeoutId)
         if (error) {
           console.warn('[AuthProvider] getSession error:', error.message)
           const fallbackUser = getCachedAuthUser()
           endLoading(fallbackUser ?? null, null)
-          if (fallbackUser) {
-            handleAuthUser(fallbackUser, 'OFFLINE_FALLBACK')
-          }
           return
         }
         endLoading(initSession?.user ?? null, initSession ?? null)
@@ -133,20 +131,17 @@ export function AuthProvider({ children }) {
         }
       })
       .catch((err) => {
-        clearTimeout(timeoutId)
+        clearTimeout(safetyTimeoutId)
         console.warn('[AuthProvider] getSession network failure, using cached offline state:', err)
         const fallbackUser = getCachedAuthUser()
         endLoading(fallbackUser ?? null, null)
-        if (fallbackUser) {
-          handleAuthUser(fallbackUser, 'OFFLINE_FALLBACK')
-        }
       })
 
     // Listen for auth state changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, currentSession) => {
-      clearTimeout(timeoutId)
+      clearTimeout(safetyTimeoutId)
       endLoading(currentSession?.user ?? null, currentSession ?? null)
 
       if (currentSession?.user) {
@@ -180,6 +175,9 @@ export function AuthProvider({ children }) {
             // ignore storage error
           }
           startRealtime(refreshedSession.user.id)
+          requestCoordinatedSync(refreshedSession.user.id, { source: 'online_reconnect' }).catch((err) => {
+            console.warn('[AuthProvider] Coordinated sync on reconnect notice:', err)
+          })
         }
       } catch (err) {
         console.warn('[AuthProvider] Online session refresh notice:', err)
@@ -192,7 +190,7 @@ export function AuthProvider({ children }) {
     window.addEventListener('online', handleOnline)
 
     return () => {
-      clearTimeout(timeoutId)
+      clearTimeout(safetyTimeoutId)
       subscription?.unsubscribe()
       window.removeEventListener('online', handleOnline)
     }

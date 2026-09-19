@@ -1,5 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient.js'
 import { toUuid } from './idUtils.js'
+import { dedupeRequest } from '../services/syncCoordinator.js'
+import { classifyAndReportError } from '../services/networkStateService.js'
 
 /**
  * Fetches user settings from user_settings table.
@@ -8,31 +10,25 @@ import { toUuid } from './idUtils.js'
 export async function fetchUserSettings(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) return null
 
-  try {
-    const { data, error } = await supabase
-      .from('user_settings')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle()
+  return dedupeRequest(`user_settings:${userId}`, async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle()
 
-    if (error) {
-      console.error('[user_settings] SELECT failed:', {
-        table: 'user_settings',
-        operation: 'SELECT',
-        recordId: userId,
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-      })
-      return null
+      if (error && error.code !== 'PGRST116') {
+        classifyAndReportError(error)
+        throw new Error(`[user_settings] SELECT failed: ${error.message}`)
+      }
+
+      return data?.settings || null
+    } catch (err) {
+      classifyAndReportError(err)
+      throw err
     }
-
-    return data?.settings || null
-  } catch (err) {
-    console.error('[user_settings] SELECT exception:', err)
-    return null
-  }
+  })
 }
 
 /**
@@ -86,39 +82,33 @@ export async function upsertUserSettings(userId, newSettings = {}) {
 export async function fetchUserThemes(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) return []
 
-  try {
-    const { data, error } = await supabase
-      .from('themes')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true })
+  return dedupeRequest(`themes:${userId}`, async () => {
+    try {
+      const { data, error } = await supabase
+        .from('themes')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
 
-    if (error) {
-      console.error('[themes] SELECT failed:', {
-        table: 'themes',
-        operation: 'SELECT',
-        recordId: userId,
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-      })
-      return []
+      if (error) {
+        classifyAndReportError(error)
+        throw new Error(`[themes] SELECT failed: ${error.message}`)
+      }
+
+      return (data || []).map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        name: row.name,
+        isPreset: false,
+        colors: row.settings || {},
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }))
+    } catch (err) {
+      classifyAndReportError(err)
+      throw err
     }
-
-    return (data || []).map((row) => ({
-      id: row.id,
-      userId: row.user_id,
-      name: row.name,
-      isPreset: false,
-      colors: row.settings || {},
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }))
-  } catch (err) {
-    console.error('[themes] SELECT exception:', err)
-    return []
-  }
+  })
 }
 
 /**

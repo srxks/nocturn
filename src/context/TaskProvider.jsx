@@ -4,8 +4,8 @@ import { db, ensureSeedData } from '../db/db'
 import { TaskContext } from './TaskContext'
 import { formatDateKey } from '../services/calendarService'
 import { useAuth } from './useAuth'
-import { fetchUserTasks, upsertTaskRemote, deleteTaskRemote, upsertSubtaskRemote, deleteSubtaskRemote, mapTaskToRow } from '../lib/tasks'
-import { fetchUserLists, upsertListRemote, deleteListRemote, mapListToRow } from '../lib/lists'
+import { upsertTaskRemote, deleteTaskRemote, upsertSubtaskRemote, deleteSubtaskRemote, mapTaskToRow } from '../lib/tasks'
+import { upsertListRemote, deleteListRemote, mapListToRow } from '../lib/lists'
 import { isRealtimeWrite } from '../services/realtimeService'
 import { recordTombstone, clearTombstone } from '../services/conflictService'
 import { enqueueMutation } from '../services/syncQueue'
@@ -40,38 +40,9 @@ export function TaskProvider({ children }) {
     ensureSeedData()
   }, [])
 
-  // Initial cloud load when user logs in — pulls latest data from Supabase into Dexie.
-  // Realtime subscriptions (started in AuthContext) handle all subsequent updates.
-  useEffect(() => {
-    if (!user?.id) return
-
-    async function loadRemoteData() {
-      try {
-        const [remoteTasks, remoteLists] = await Promise.all([
-          fetchUserTasks(user.id),
-          fetchUserLists(user.id),
-        ])
-
-        if (remoteLists && remoteLists.length > 0) {
-          for (const list of remoteLists) {
-            await db.lists.put(list)
-          }
-        }
-
-        if (remoteTasks && remoteTasks.length > 0) {
-          for (const task of remoteTasks) {
-            await db.tasks.put(task)
-          }
-        }
-      } catch (err) {
-        console.warn('[TaskProvider] Error syncing remote data on login:', err)
-      }
-    }
-
-    loadRemoteData()
-    // NOTE: Realtime subscriptions are managed centrally in realtimeService.js,
-    // started/stopped by AuthContext. No local subscription needed here.
-  }, [user?.id])
+  // NOTE: Initial cloud sync and realtime subscriptions are handled centrally
+  // by AuthProvider and syncCoordinator. Dexie is the local reactive source of truth,
+  // watched below via useLiveQuery. No duplicate REST fetches are needed here.
 
   // Dexie live queries — auto-update whenever Dexie data changes (local OR realtime)
   const liveTasks = useLiveQuery(async () => {

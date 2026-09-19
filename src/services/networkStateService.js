@@ -29,19 +29,52 @@ let currentState =
 let isSyncing = false
 let consecutiveFailures = 0
 let lastFailureReason = null
+let cooldownUntil = 0
+let cooldownTimer = null
 const listeners = new Set()
 
+export function isNetworkInCooldown() {
+  return Date.now() < cooldownUntil
+}
+
+export function getCooldownRemainingSeconds() {
+  return Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000))
+}
+
+export function enterNetworkCooldown(durationMs = 20000) {
+  const now = Date.now()
+  cooldownUntil = Math.max(cooldownUntil, now + durationMs)
+  if (cooldownTimer) clearTimeout(cooldownTimer)
+  cooldownTimer = setTimeout(() => {
+    cooldownTimer = null
+    notifyListeners()
+  }, durationMs)
+  notifyListeners()
+}
+
+export function clearNetworkCooldown() {
+  cooldownUntil = 0
+  if (cooldownTimer) {
+    clearTimeout(cooldownTimer)
+    cooldownTimer = null
+  }
+}
+
 export function getNetworkState() {
+  const inCooldown = Date.now() < cooldownUntil
   return {
     state: currentState,
     isSyncing,
     consecutiveFailures,
     lastFailureReason,
-    isOnline: currentState === ConnectionState.ONLINE,
+    inCooldown,
+    cooldownRemaining: inCooldown ? Math.ceil((cooldownUntil - Date.now()) / 1000) : 0,
+    isOnline: currentState === ConnectionState.ONLINE && !inCooldown,
     isOffline: currentState === ConnectionState.OFFLINE,
     hasError:
       currentState === ConnectionState.NETWORK_ERROR ||
-      currentState === ConnectionState.BACKEND_ERROR,
+      currentState === ConnectionState.BACKEND_ERROR ||
+      inCooldown,
   }
 }
 
@@ -69,6 +102,7 @@ export function subscribeNetworkState(listener) {
 export function reportNetworkSuccess() {
   consecutiveFailures = 0
   lastFailureReason = null
+  clearNetworkCooldown()
   if (currentState !== ConnectionState.ONLINE) {
     currentState = ConnectionState.ONLINE
     notifyListeners()
@@ -139,7 +173,7 @@ export function classifyAndReportError(err) {
     return
   }
 
-  if (
+  const isConnectionDrop =
     msg.includes("failed to fetch") ||
     msg.includes("quic") ||
     msg.includes("connection_reset") ||
@@ -148,8 +182,11 @@ export function classifyAndReportError(err) {
     msg.includes("abort") ||
     msg.includes("functionsfetcherror") ||
     msg.includes("authretryablefetcherror") ||
-    msg.includes("econnreset")
-  ) {
+    msg.includes("econnreset") ||
+    msg.includes("network request failed")
+
+  if (isConnectionDrop) {
+    enterNetworkCooldown(20000)
     reportNetworkError(err)
     return
   }
@@ -165,6 +202,7 @@ if (typeof window !== "undefined") {
   })
 
   window.addEventListener("online", () => {
+    clearNetworkCooldown()
     consecutiveFailures = 0
     currentState = ConnectionState.ONLINE
     notifyListeners()

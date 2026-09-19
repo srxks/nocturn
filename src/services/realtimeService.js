@@ -19,6 +19,7 @@ import { mapRowToList } from '../lib/lists.js'
 import { mapRowToVocabWord } from '../lib/vocab.js'
 import { setStorageItem } from '../utils/storageUtils.js'
 import { getTimestampMs, isTombstoned, recordTombstone } from './conflictService.js'
+import { isNetworkInCooldown } from './networkStateService.js'
 
 // ─── Sync-loop guard ──────────────────────────────────────────────────────────
 let _realtimeWrite = false
@@ -42,6 +43,7 @@ function withRealtimeGuard(fn) {
 let _channel = null
 let _currentUserId = null
 let _reconnectTimer = null
+let _reconnectAttempts = 0
 
 // ─── Table Handlers ───────────────────────────────────────────────────────────
 
@@ -379,8 +381,13 @@ export function startRealtime(userId) {
     return
   }
 
+  // Circuit breaker: do not spam new realtime connections if network is in cooldown
+  if (isNetworkInCooldown()) {
+    return
+  }
+
   _currentUserId = userId
-  stopRealtime()
+  stopRealtime({ keepUser: true })
 
   let channel = supabase.channel(`nocturn-realtime-${userId}`)
 
@@ -404,17 +411,25 @@ export function startRealtime(userId) {
   channel.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
       console.debug('[realtime] ✓ Subscribed to all tables for user', userId)
+      _reconnectAttempts = 0
       if (_reconnectTimer) {
         clearTimeout(_reconnectTimer)
         _reconnectTimer = null
       }
     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-      console.warn('[realtime] Channel status:', status, '— scheduling reconnect...')
+      console.warn('[realtime] Channel status:', status, '— scheduling reconnect with backoff...')
       if (!_reconnectTimer && _currentUserId) {
+        // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
+        const backoffMs = Math.min(5000 * Math.pow(2, _reconnectAttempts), 60000)
+        _reconnectAttempts++
         _reconnectTimer = setTimeout(() => {
           _reconnectTimer = null
-          if (_currentUserId) startRealtime(_currentUserId)
-        }, 3000)
+          if (typeof navigator !== 'undefined' && !navigator.onLine) return
+          if (isNetworkInCooldown()) return
+          if (_currentUserId) {
+            startRealtime(_currentUserId)
+          }
+        }, backoffMs)
       }
     }
   })
@@ -424,11 +439,17 @@ export function startRealtime(userId) {
 
 /**
  * Stop all realtime subscriptions and clean up.
+ * @param {object} [options]
+ * @param {boolean} [options.keepUser=false] - Keep current user reference for reconnection
  */
-export function stopRealtime() {
+export function stopRealtime({ keepUser = false } = {}) {
   if (_reconnectTimer) {
     clearTimeout(_reconnectTimer)
     _reconnectTimer = null
+  }
+  if (!keepUser) {
+    _reconnectAttempts = 0
+    _currentUserId = null
   }
   if (_channel && supabase) {
     try {
@@ -450,7 +471,8 @@ export function isRealtimeActive() {
 // Auto-reconnect when browser comes online
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
-    if (_currentUserId && !_channel) {
+    if (_currentUserId && !_channel && !isNetworkInCooldown()) {
+      _reconnectAttempts = 0
       startRealtime(_currentUserId)
     }
   })
