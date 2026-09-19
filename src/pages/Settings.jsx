@@ -5,6 +5,8 @@ import VocabSettingsCard from '../components/settings/VocabSettingsCard'
 import ThemeSettingsCard from '../components/settings/ThemeSettingsCard'
 import IntegrationCard from '../components/settings/IntegrationCard'
 import SupabaseConnectionCard from '../components/settings/SupabaseConnectionCard'
+import SyncDiagnosticsCard from '../components/settings/SyncDiagnosticsCard'
+import DataManagementCard from '../components/settings/DataManagementCard'
 
 export default function Settings() {
   return (
@@ -33,6 +35,12 @@ export default function Settings() {
 
       {/* Backend Supabase Section */}
       <SupabaseConnectionCard />
+
+      {/* Realtime Sync Diagnostics */}
+      <SyncDiagnosticsCard />
+
+      {/* Data & Backups Management */}
+      <DataManagementCard />
 
       {/* Integrations Section */}
       <section className="space-y-3">

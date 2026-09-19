@@ -23,6 +23,7 @@ import { fetchUserVocabWords, upsertVocabWordsRemote, deleteVocabWordRemote, del
 import { toUuid } from '../lib/idUtils.js'
 import { resolveConflict, getTombstones, clearTombstone, isTombstoned } from './conflictService.js'
 import { setSyncingState, reportNetworkSuccess, classifyAndReportError } from './networkStateService.js'
+import { drainSyncQueue } from './syncQueue.js'
 
 export async function syncWithCloud(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) {
@@ -409,4 +410,15 @@ export async function syncWithCloud(userId) {
 
 export async function syncLocalDataToSupabase(userId) {
   return syncWithCloud(userId)
+}
+
+export async function forceManualSync(userId) {
+  const drainRes = await drainSyncQueue()
+  const syncRes = await syncWithCloud(userId)
+  return {
+    drained: drainRes?.drained || 0,
+    synced: syncRes?.synced || 0,
+    remaining: drainRes?.remaining || 0,
+    success: syncRes?.success ?? true,
+  }
 }

@@ -1,12 +1,13 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Zap } from 'lucide-react'
+import { Zap, Search, Keyboard } from 'lucide-react'
 import { NAV_ITEMS } from './navConfig'
 import { useTheme } from '../../context/useTheme'
 
-export default function SidebarNav() {
+export default function SidebarNav({ onOpenCommandPalette, onOpenShortcutsHelp }) {
   const location = useLocation()
   const { uiStyle } = useTheme()
   const isAngular = uiStyle === 'angular'
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
 
   return (
     <aside
@@ -16,7 +17,7 @@ export default function SidebarNav() {
       }`}
     >
       {/* Top Header / Branding */}
-      <div className="space-y-8">
+      <div className="space-y-6">
         <div className="flex items-center gap-3 px-2">
           <div
             className={`w-10 h-10 bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)] ${
@@ -35,6 +36,23 @@ export default function SidebarNav() {
           </div>
         </div>
 
+        {/* Quick Search / Command Palette Button */}
+        <button
+          type="button"
+          onClick={onOpenCommandPalette}
+          className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs text-nocturn-muted hover:text-white bg-white/5 hover:bg-white/10 border border-nocturn-border/80 transition-all cursor-pointer group ${
+            isAngular ? 'rounded-none angular-chamfer-sm' : 'rounded-2xl'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Search className="w-4 h-4 text-nocturn-muted group-hover:text-nocturn-accent transition-colors shrink-0" />
+            <span className="truncate">{isAngular ? '[ SEARCH ]' : 'Quick Search...'}</span>
+          </div>
+          <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-nocturn-muted group-hover:text-white shrink-0">
+            {isMac ? '⌘K' : 'Ctrl+K'}
+          </kbd>
+        </button>
+
         {/* Navigation Links */}
         <nav className="space-y-1.5" aria-label="Main menu">
           {NAV_ITEMS.map((item) => {
@@ -48,12 +66,6 @@ export default function SidebarNav() {
                 aria-current={active ? 'page' : undefined}
                 className={`flex items-center gap-3.5 px-4 py-3 text-sm font-medium transition-all duration-200 ${
                   isAngular ? 'rounded-none' : 'rounded-2xl'
-                } ${
-                  active
-                    ? isAngular
-                      ? 'bg-nocturn-accent/15 text-nocturn-accent-bright font-bold border border-nocturn-accent/40 shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.25)] translate-x-1 angular-chamfer-sm'
-                      : 'bg-nocturn-accent/15 text-nocturn-accent-bright font-semibold border border-nocturn-accent/35 shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.25)] translate-x-1'
-                    : 'text-nocturn-muted hover:text-white hover:bg-white/5 border border-transparent'
                 }`}
               >
                 <div
@@ -70,8 +82,8 @@ export default function SidebarNav() {
         </nav>
       </div>
 
-      {/* Footer Info */}
-      <div className="pt-4 border-t border-nocturn-border/60 px-2">
+      {/* Footer Info & Shortcuts Trigger */}
+      <div className="pt-4 border-t border-nocturn-border/60 px-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
             className={`w-2 h-2 bg-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.8)] animate-pulse ${
@@ -79,9 +91,17 @@ export default function SidebarNav() {
             }`}
           />
           <span className="text-xs font-medium text-nocturn-muted">
-            {isAngular ? '[SYS.ONLINE // READY]' : 'Workspace Active'}
+            {isAngular ? '[SYS.ONLINE]' : 'Workspace Active'}
           </span>
         </div>
+        <button
+          type="button"
+          onClick={onOpenShortcutsHelp}
+          title="Keyboard Shortcuts (?)"
+          className="p-1.5 text-nocturn-muted hover:text-nocturn-accent hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+        >
+          <Keyboard className="w-4 h-4" />
+        </button>
       </div>
     </aside>
   )

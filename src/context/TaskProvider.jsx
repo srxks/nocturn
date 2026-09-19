@@ -7,10 +7,11 @@ import { useAuth } from './useAuth'
 import { fetchUserTasks, upsertTaskRemote, deleteTaskRemote, upsertSubtaskRemote, deleteSubtaskRemote, mapTaskToRow } from '../lib/tasks'
 import { fetchUserLists, upsertListRemote, deleteListRemote, mapListToRow } from '../lib/lists'
 import { isRealtimeWrite } from '../services/realtimeService'
-import { recordTombstone } from '../services/conflictService'
+import { recordTombstone, clearTombstone } from '../services/conflictService'
 import { enqueueMutation } from '../services/syncQueue'
 import { toUuid } from '../lib/idUtils'
 import { syncTaskReminders, cancelTaskReminder } from '../services/notificationService'
+import { useToast } from './useToast'
 
 const todayKey = formatDateKey(new Date())
 
@@ -30,6 +31,7 @@ function calculateNextRecurrenceDate(currentDateStr, recurrence) {
 
 export function TaskProvider({ children }) {
   const { user } = useAuth()
+  const { addToast } = useToast()
 
   const [activeListId, setActiveListId] = useState('my-day')
   const [selectedTaskId, setSelectedTaskId] = useState(null)
@@ -228,6 +230,17 @@ export function TaskProvider({ children }) {
       }
     }
 
+    if (willBeCompleted) {
+      addToast(`Completed "${target.title}"`, {
+        type: 'success',
+        duration: 4500,
+        action: {
+          label: 'Undo',
+          onClick: () => toggleTask(id),
+        },
+      })
+    }
+
     if (shouldGenerateNext) {
       const nextDueDateKey = calculateNextRecurrenceDate(target.dueDate || todayKey, target.recurrence)
       const isNextDueToday = nextDueDateKey === todayKey
@@ -301,11 +314,35 @@ export function TaskProvider({ children }) {
     await updateTask(id, { title: newTitle })
   }
 
-  const deleteTask = async (id) => {
+  const restoreTask = async (taskSnapshot) => {
+    if (!taskSnapshot || !taskSnapshot.id) return
+    try {
+      await clearTombstone('tasks', taskSnapshot.id)
+      await db.tasks.put(taskSnapshot)
+
+      if (user?.id && !shouldSkipRemote()) {
+        const res = await upsertTaskRemote(taskSnapshot, user.id)
+        if (!res) {
+          const row = mapTaskToRow(taskSnapshot, user.id)
+          if (row) enqueueMutation('upsert', 'tasks', row)
+        }
+      }
+
+      addToast(`Restored "${taskSnapshot.title}"`, 'success', 3000)
+    } catch (err) {
+      console.warn('[TaskProvider] Failed to restore task:', err)
+      addToast('Failed to restore task', 'error', 3000)
+    }
+  }
+
+  const deleteTask = async (id, showToastWithUndo = true) => {
     if (selectedTaskId === id) {
       setSelectedTaskId(null)
     }
     cancelTaskReminder(id)
+
+    const target = await db.tasks.get(id)
+
     await db.tasks.delete(id)
     if (user?.id) {
       await recordTombstone('tasks', id, user.id)
@@ -316,6 +353,17 @@ export function TaskProvider({ children }) {
       if (!ok) {
         enqueueMutation('delete', 'tasks', { id })
       }
+    }
+
+    if (target && showToastWithUndo) {
+      addToast(`Deleted "${target.title}"`, {
+        type: 'info',
+        duration: 6000,
+        action: {
+          label: 'Undo',
+          onClick: () => restoreTask(target),
+        },
+      })
     }
   }
 
@@ -639,6 +687,7 @@ export function TaskProvider({ children }) {
         updateTask,
         editTask,
         deleteTask,
+        restoreTask,
         toggleTask,
         toggleStar,
         toggleMyDay,
