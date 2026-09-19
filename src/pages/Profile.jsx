@@ -1,14 +1,34 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ShieldCheck, Timer, CheckSquare, Flame, Check, ChevronLeft, ChevronRight, Calendar, BarChart2, LogOut, RefreshCw, User as UserIcon } from 'lucide-react'
+import {
+  ShieldCheck,
+  Timer,
+  CheckSquare,
+  Flame,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  BarChart2,
+  LogOut,
+  RefreshCw,
+  User as UserIcon,
+  Clock,
+} from 'lucide-react'
 import { db } from '../db/db'
-import { calculateProductivityStats } from '../services/statsService'
+import {
+  calculateProductivityStats,
+  getSessionDurationMinutes,
+  getActiveSessionMinutes,
+} from '../services/statsService'
+import { formatDateKey } from '../services/calendarService'
 import { useAuth } from '../context/useAuth'
 import { syncLocalDataToSupabase } from '../services/syncService'
 import { fetchUserFocusSessions } from '../lib/timer'
 import { fetchUserProfileRemote, updateUserProfileRemote } from '../lib/profile'
 import { getStorageItem, setStorageItem } from '../utils/storageUtils'
+import { Card, Badge, Button, Tabs } from '../components/ui'
 
 export default function Profile() {
   const navigate = useNavigate()
@@ -114,10 +134,56 @@ export default function Profile() {
     }
   }, [user?.id])
 
-  const sessions = dbSessions || []
-  const tasks = dbTasks || []
+  const sessions = useMemo(() => dbSessions || [], [dbSessions])
+  const tasks = useMemo(() => dbTasks || [], [dbTasks])
 
   const stats = calculateProductivityStats(sessions, tasks, period, periodOffset, dbActiveSession)
+
+  // Real daily activity distribution for the active week
+  const weekDays = useMemo(() => {
+    if (period !== 'week') return []
+    const now = new Date()
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay() + periodOffset * 7)
+    startOfWeek.setHours(0, 0, 0, 0)
+
+    const days = []
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startOfWeek)
+      d.setDate(startOfWeek.getDate() + i)
+      const key = formatDateKey(d)
+
+      const daySessions = sessions.filter((s) => {
+        const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
+        if (!isFocus) return false
+        const dateStr = s.completedAt || s.ended_at || s.createdAt || s.created_at || s.startedAt
+        return dateStr && formatDateKey(new Date(dateStr)) === key
+      })
+
+      const completedMins = daySessions.reduce((acc, s) => acc + getSessionDurationMinutes(s), 0)
+      const isToday = formatDateKey(now) === key
+      const activeMins = isToday && periodOffset === 0 ? getActiveSessionMinutes(dbActiveSession) : 0
+      const totalMins = Math.round((completedMins + activeMins) * 10) / 10
+
+      days.push({
+        date: d,
+        key,
+        dayLabel: dayLabels[i],
+        dateNumber: d.getDate(),
+        isToday,
+        minutes: totalMins,
+        hours: (totalMins / 60).toFixed(1),
+      })
+    }
+    return days
+  }, [period, periodOffset, sessions, dbActiveSession])
+
+  const maxWeekMinutes = useMemo(() => {
+    if (!weekDays.length) return 60
+    const highest = Math.max(...weekDays.map((d) => d.minutes))
+    return Math.max(highest, 30) // Minimum 30 min scale so bars render nicely
+  }, [weekDays])
 
   const handleSaveName = async (e) => {
     e.preventDefault()
@@ -142,7 +208,7 @@ export default function Profile() {
     const result = await syncLocalDataToSupabase(user.id)
     setSyncing(false)
     if (result.success) {
-      setSyncResult(`Synced ${result.synced} items to Supabase`)
+      setSyncResult(`Synced ${result.synced} items to cloud`)
     } else {
       setSyncResult(`Sync notice: ${result.error || 'Check network connection'}`)
     }
@@ -157,229 +223,138 @@ export default function Profile() {
       .toUpperCase()
       .slice(0, 2) || 'NU'
 
+  const periodTabs = [
+    { id: 'week', label: 'Week' },
+    { id: 'month', label: 'Month' },
+    { id: 'year', label: 'Year' },
+  ]
+
   return (
-    <div className="w-full space-y-6 sm:space-y-8">
+    <div className="w-full space-y-6 sm:space-y-8 pb-12">
       {/* Header Section */}
       <header className="space-y-1">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-          Profile
-        </h1>
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
+            Statistics
+          </h1>
+          <Badge variant="accent" size="sm">
+            Live Insights
+          </Badge>
+        </div>
         <p className="text-xs sm:text-sm text-nocturn-muted">
-          Your productivity profile & authentication status.
+          Track your focus sessions, tasks, and consistency over time.
         </p>
       </header>
 
-      {/* Main Profile & Supabase Auth Card */}
-      <div className="nocturn-card p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-nocturn-border">
-        <div className="flex items-center gap-4">
-          {/* Avatar */}
-          <div className="w-14 h-14 rounded-full bg-nocturn-accent/15 border-2 border-nocturn-accent/40 flex items-center justify-center font-bold text-lg text-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.25)] shrink-0">
-            {initials}
+      {/* Global Summary Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <Card className="flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent shrink-0">
+            <Timer className="w-5 h-5 stroke-[2]" />
           </div>
-
-          {/* User Display Info */}
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg sm:text-xl font-bold text-white">
-                {displayName || user?.user_metadata?.full_name || 'Nocturn User'}
-              </h2>
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-nocturn-accent-bright bg-nocturn-accent/15 px-2 py-0.5 rounded-full border border-nocturn-accent/30">
-                <ShieldCheck className="w-3 h-3 stroke-[2.5]" />
-                {user ? 'Authenticated' : 'Local Offline Mode'}
+          <div className="min-w-0">
+            <span className="text-xs text-nocturn-muted block font-medium">Total Focus</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-semibold font-mono text-white tracking-tight">
+                {stats.totalFocusHours}
               </span>
-            </div>
-            <p className="text-xs sm:text-sm text-nocturn-muted">
-              {user ? user.email : 'Guest Mode Workspace'}
-            </p>
-          </div>
-        </div>
-
-        {/* Action Buttons: Sign In / Sign Out & Sync */}
-        <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
-          {user ? (
-            <>
-              <button
-                onClick={handleSyncData}
-                disabled={syncing}
-                className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-nocturn-border transition-colors flex items-center gap-1.5"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                <span>Sync</span>
-              </button>
-              <button
-                onClick={() => signOut()}
-                className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-xs font-semibold border border-rose-500/30 transition-colors flex items-center gap-1.5"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Sign Out</span>
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => navigate('/auth')}
-              className="px-4 py-2 rounded-xl bg-nocturn-accent text-black font-bold text-xs hover:bg-nocturn-accent-bright shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-colors flex items-center gap-1.5"
-            >
-              <UserIcon className="w-3.5 h-3.5" />
-              <span>Sign In / Sign Up</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {syncResult && (
-        <div className="p-3 rounded-2xl bg-nocturn-accent/10 border border-nocturn-accent/30 text-xs text-nocturn-accent font-medium">
-          {syncResult}
-        </div>
-      )}
-
-      {/* Editable Name Section */}
-      <section className="space-y-3">
-        <h2 className="text-sm sm:text-base font-semibold text-white tracking-wide px-1">
-          Account Information
-        </h2>
-        <form
-          onSubmit={handleSaveName}
-          className="nocturn-card p-5 sm:p-6 border border-nocturn-border space-y-4"
-        >
-          <div className="space-y-1.5">
-            <label htmlFor="display-name" className="text-xs sm:text-sm font-medium text-white block">
-              Display Name
-            </label>
-            <div className="relative flex items-center">
-              <input
-                id="display-name"
-                type="text"
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                placeholder="Enter your name"
-                className="w-full nocturn-input text-sm py-2.5 sm:py-3 pr-24"
-              />
-              <button
-                type="submit"
-                disabled={!nameInput.trim() || nameInput.trim() === displayName}
-                className="absolute right-1.5 nocturn-btn-primary px-3.5 py-1.5 text-xs font-semibold disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed inline-flex items-center gap-1"
-              >
-                {isSaved ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                    Saved
-                  </>
-                ) : (
-                  'Save'
-                )}
-              </button>
+              <span className="text-xs text-nocturn-muted">hrs</span>
             </div>
           </div>
-          <p className="text-xs text-nocturn-muted">
-            Display name is persisted locally in database storage.
-          </p>
-        </form>
-      </section>
+        </Card>
 
-      {/* Persistent Productivity Stats Section */}
-      <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-1">
-          <h2 className="text-sm sm:text-base font-semibold text-white tracking-wide flex items-center gap-2">
-            <BarChart2 className="w-4 h-4 text-nocturn-accent" />
-            <span>Productivity Statistics</span>
-          </h2>
-
-          {/* Period Filter Tabs (Week | Month | Year) */}
-          <div className="flex items-center gap-1 bg-nocturn-surface p-1 rounded-xl border border-nocturn-border">
-            {['week', 'month', 'year'].map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => {
-                  setPeriod(p)
-                  setPeriodOffset(0)
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer ${
-                  period === p
-                    ? 'bg-nocturn-accent text-black shadow-sm'
-                    : 'text-nocturn-muted hover:text-white'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
+        <Card className="flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-sky-400 shrink-0">
+            <Clock className="w-5 h-5 stroke-[2]" />
           </div>
-        </div>
-
-        {/* Global Summary Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <div className="nocturn-card p-4 sm:p-5 border border-nocturn-border flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-nocturn-surface border border-nocturn-border flex items-center justify-center text-nocturn-accent shrink-0">
-              <Timer className="w-5 h-5 stroke-[2]" />
-            </div>
-            <div>
-              <span className="text-xs text-nocturn-muted block font-medium">Total Focus</span>
-              <span className="text-lg sm:text-xl font-bold font-mono text-white">
-                {stats.totalFocusHours} <span className="text-xs font-normal text-nocturn-muted">hrs</span>
-              </span>
-            </div>
-          </div>
-
-          <div className="nocturn-card p-4 sm:p-5 border border-nocturn-border flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-nocturn-surface border border-nocturn-border flex items-center justify-center text-nocturn-accent shrink-0">
-              <Timer className="w-5 h-5 stroke-[2]" />
-            </div>
-            <div>
-              <span className="text-xs text-nocturn-muted block font-medium">Focus Sessions</span>
-              <span className="text-lg sm:text-xl font-bold font-mono text-white">
+          <div className="min-w-0">
+            <span className="text-xs text-nocturn-muted block font-medium">Focus Sessions</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-semibold font-mono text-white tracking-tight">
                 {stats.totalFocusSessionsCount}
               </span>
+              <span className="text-xs text-nocturn-muted">sessions</span>
             </div>
           </div>
+        </Card>
 
-          <div className="nocturn-card p-4 sm:p-5 border border-nocturn-border flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-nocturn-surface border border-nocturn-border flex items-center justify-center text-nocturn-accent shrink-0">
-              <CheckSquare className="w-5 h-5 stroke-[2]" />
-            </div>
-            <div>
-              <span className="text-xs text-nocturn-muted block font-medium">Tasks Completed</span>
-              <span className="text-lg sm:text-xl font-bold font-mono text-white">
+        <Card className="flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-emerald-400 shrink-0">
+            <CheckSquare className="w-5 h-5 stroke-[2]" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-xs text-nocturn-muted block font-medium">Tasks Completed</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-semibold font-mono text-white tracking-tight">
                 {stats.totalCompletedTasks}
               </span>
+              <span className="text-xs text-nocturn-muted">completed</span>
             </div>
+          </div>
+        </Card>
+
+        <Card className="flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-amber-400 shrink-0">
+            <Flame className="w-5 h-5 stroke-[2]" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-xs text-nocturn-muted block font-medium">Current Streak</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-2xl font-semibold font-mono text-white tracking-tight">
+                {stats.streak}
+              </span>
+              <span className="text-xs text-nocturn-muted">days</span>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Period Analytics Section */}
+      <section className="space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-0.5">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-nocturn-accent" />
+            <h2 className="text-sm sm:text-base font-medium text-white tracking-tight">
+              Focus Distribution
+            </h2>
           </div>
 
-          <div className="nocturn-card p-4 sm:p-5 border border-nocturn-border flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-nocturn-surface border border-nocturn-border flex items-center justify-center text-nocturn-accent shrink-0">
-              <Flame className="w-5 h-5 stroke-[2]" />
-            </div>
-            <div>
-              <span className="text-xs text-nocturn-muted block font-medium">Current Streak</span>
-              <span className="text-lg sm:text-xl font-bold font-mono text-white">
-                {stats.streak} <span className="text-xs font-normal text-nocturn-muted">days</span>
-              </span>
-            </div>
-          </div>
+          {/* Period Filter Tabs (Week | Month | Year) */}
+          <Tabs
+            tabs={periodTabs}
+            activeTab={period}
+            size="sm"
+            onChange={(newPeriod) => {
+              setPeriod(newPeriod)
+              setPeriodOffset(0)
+            }}
+          />
         </div>
 
-        {/* Period Navigation Card */}
-        <div className="nocturn-card p-4 sm:p-5 border border-nocturn-border space-y-4">
-          <div className="flex items-center justify-between gap-2 border-b border-nocturn-border pb-3">
+        {/* Period Navigation & Detailed Breakdown */}
+        <Card className="space-y-5">
+          {/* Period Selector Bar */}
+          <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pb-3.5">
             <button
               type="button"
               onClick={() => setPeriodOffset((prev) => prev - 1)}
-              className="p-2 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-white hover:border-nocturn-accent/40 border border-nocturn-border cursor-pointer flex items-center justify-center transition-colors"
+              className="p-1.5 rounded-lg bg-white/[0.04] text-nocturn-muted hover:text-white hover:bg-white/[0.08] border border-white/[0.08] cursor-pointer transition-colors"
               title="Previous period"
               aria-label="Previous period"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
 
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-white flex items-center gap-1.5 font-mono">
-                <Calendar className="w-4 h-4 text-nocturn-accent shrink-0" />
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs sm:text-sm font-medium text-white flex items-center gap-1.5 font-mono">
+                <Calendar className="w-3.5 h-3.5 text-nocturn-accent shrink-0" />
                 <span>{stats.periodLabel}</span>
               </span>
               {periodOffset !== 0 && (
                 <button
                   type="button"
                   onClick={() => setPeriodOffset(0)}
-                  className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-nocturn-accent/15 text-nocturn-accent border border-nocturn-accent/30 hover:bg-nocturn-accent/25 transition-colors cursor-pointer"
+                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-nocturn-accent/15 text-nocturn-accent border border-nocturn-accent/30 hover:bg-nocturn-accent/25 transition-colors cursor-pointer"
                 >
                   Current
                 </button>
@@ -390,7 +365,7 @@ export default function Profile() {
               type="button"
               disabled={periodOffset >= 0}
               onClick={() => setPeriodOffset((prev) => prev + 1)}
-              className="p-2 rounded-xl bg-nocturn-surface text-nocturn-muted hover:text-white hover:border-nocturn-accent/40 border border-nocturn-border disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center transition-colors"
+              className="p-1.5 rounded-lg bg-white/[0.04] text-nocturn-muted hover:text-white hover:bg-white/[0.08] border border-white/[0.08] disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer transition-colors"
               title="Next period"
               aria-label="Next period"
             >
@@ -398,29 +373,212 @@ export default function Profile() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-3.5 rounded-xl bg-nocturn-surface/50 border border-nocturn-border/80 space-y-1">
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
               <span className="text-xs font-medium text-nocturn-muted block">Period Focus Duration</span>
-              <span className="text-lg font-bold font-mono text-nocturn-accent">
-                {stats.periodHours} hrs ({stats.periodMinutes} min)
-              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-semibold font-mono text-nocturn-accent">
+                  {stats.periodHours} hrs
+                </span>
+                <span className="text-xs text-nocturn-muted">
+                  ({stats.periodMinutes} min)
+                </span>
+              </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-nocturn-surface/50 border border-nocturn-border/80 space-y-1">
-              <span className="text-xs font-medium text-nocturn-muted block">Period Completed Sessions</span>
-              <span className="text-lg font-bold font-mono text-white">
-                {stats.periodSessionsCount} sessions
-              </span>
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+              <span className="text-xs font-medium text-nocturn-muted block">Sessions Completed</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-semibold font-mono text-white">
+                  {stats.periodSessionsCount}
+                </span>
+                <span className="text-xs text-nocturn-muted">sessions</span>
+              </div>
             </div>
           </div>
 
+          {/* Week Bar Chart (When Period is 'week') */}
+          {period === 'week' && weekDays.length > 0 && (
+            <div className="pt-2 border-t border-white/[0.06] space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-nocturn-muted font-medium">Daily Focus Activity</span>
+                <span className="text-[11px] text-nocturn-muted font-mono">
+                  Scale: {Math.round(maxWeekMinutes)}m max
+                </span>
+              </div>
+
+              <div className="grid grid-cols-7 gap-2 sm:gap-3 items-end h-36 pt-4 px-1">
+                {weekDays.map((d) => {
+                  const heightPercent = Math.max(
+                    6,
+                    Math.round((d.minutes / maxWeekMinutes) * 100)
+                  )
+                  const hasMinutes = d.minutes > 0
+
+                  return (
+                    <div
+                      key={d.key}
+                      className="flex flex-col items-center justify-end h-full gap-2 group relative"
+                    >
+                      {/* Tooltip on hover */}
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 px-2 py-1 rounded-md bg-nocturn-elevated border border-white/10 text-[10px] font-mono text-white whitespace-nowrap pointer-events-none z-20 shadow-lg">
+                        {d.minutes} min ({d.hours}h)
+                      </div>
+
+                      {/* Bar Fill */}
+                      <div className="w-full max-w-[36px] bg-white/[0.04] rounded-lg p-0.5 flex flex-col justify-end h-full">
+                        <div
+                          style={{ height: `${heightPercent}%` }}
+                          className={`w-full rounded-md transition-all duration-300 ${
+                            hasMinutes
+                              ? d.isToday
+                                ? 'bg-nocturn-accent shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.35)]'
+                                : 'bg-nocturn-accent/80 hover:bg-nocturn-accent'
+                              : 'bg-white/[0.06]'
+                          }`}
+                        />
+                      </div>
+
+                      {/* Day Label */}
+                      <div className="text-center">
+                        <span
+                          className={`text-[11px] block font-medium ${
+                            d.isToday ? 'text-nocturn-accent font-semibold' : 'text-nocturn-muted'
+                          }`}
+                        >
+                          {d.dayLabel}
+                        </span>
+                        <span className="text-[10px] text-nocturn-muted/60 font-mono block">
+                          {d.dateNumber}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {stats.periodSessionsCount === 0 && stats.periodTasksCount === 0 && (
-            <p className="text-center text-xs text-nocturn-muted py-1">
+            <p className="text-center text-xs text-nocturn-muted py-2">
               No focus activity recorded for this period.
             </p>
           )}
-        </div>
+        </Card>
+      </section>
+
+      {/* Account & Synchronization Section */}
+      <section className="space-y-4">
+        <h2 className="text-sm sm:text-base font-medium text-white tracking-tight px-0.5">
+          Account & Cloud Workspace
+        </h2>
+
+        {/* User Card */}
+        <Card className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {/* Avatar */}
+            <div className="w-12 h-12 rounded-xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center font-bold text-base text-nocturn-accent-bright shrink-0">
+              {initials}
+            </div>
+
+            {/* User Display Info */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-semibold text-white">
+                  {displayName || user?.user_metadata?.full_name || 'Nocturn User'}
+                </h3>
+                <Badge
+                  variant={user ? 'success' : 'neutral'}
+                  size="sm"
+                  dot
+                  icon={user ? ShieldCheck : undefined}
+                >
+                  {user ? 'Authenticated' : 'Local Offline Mode'}
+                </Badge>
+              </div>
+              <p className="text-xs text-nocturn-muted">
+                {user ? user.email : 'Local Guest Workspace'}
+              </p>
+            </div>
+          </div>
+
+          {/* Action Buttons: Sign In / Sign Out & Sync */}
+          <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+            {user ? (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleSyncData}
+                  disabled={syncing}
+                  icon={RefreshCw}
+                  className={syncing ? '[&_svg]:animate-spin' : ''}
+                >
+                  Sync
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => signOut()}
+                  icon={LogOut}
+                >
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => navigate('/auth')}
+                icon={UserIcon}
+              >
+                Sign In / Sign Up
+              </Button>
+            )}
+          </div>
+        </Card>
+
+        {syncResult && (
+          <div className="p-3 rounded-xl bg-nocturn-accent/10 border border-nocturn-accent/25 text-xs text-nocturn-accent font-medium">
+            {syncResult}
+          </div>
+        )}
+
+        {/* Editable Name Form */}
+        <Card className="space-y-3.5">
+          <form onSubmit={handleSaveName} className="space-y-3">
+            <label htmlFor="display-name" className="text-xs font-medium text-nocturn-muted block">
+              Display Name
+            </label>
+            <div className="relative flex items-center max-w-md">
+              <input
+                id="display-name"
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder="Enter your name"
+                className="w-full nocturn-input text-sm py-2 px-3 pr-24 rounded-xl"
+              />
+              <div className="absolute right-1.5">
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="primary"
+                  disabled={!nameInput.trim() || nameInput.trim() === displayName}
+                  icon={isSaved ? Check : undefined}
+                >
+                  {isSaved ? 'Saved' : 'Save'}
+                </Button>
+              </div>
+            </div>
+            <p className="text-[11px] text-nocturn-muted">
+              Display name is saved locally and synced to your cloud profile.
+            </p>
+          </form>
+        </Card>
       </section>
     </div>
   )
 }
+

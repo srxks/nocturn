@@ -288,72 +288,68 @@ export default function PlanMyDay() {
       className="w-full max-w-4xl mx-auto space-y-6 sm:space-y-8"
     >
       {/* Header Section */}
-      <header className="space-y-1.5">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent shrink-0">
-            <Sparkles className="w-4 h-4 stroke-[2.2]" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-            Plan My Day
-          </h1>
-        </div>
+      <header className="space-y-1">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+          <Sparkles className="w-6 h-6 sm:w-7 sm:h-7 text-nocturn-accent stroke-[2]" />
+          <span>Plan My Day</span>
+        </h1>
         <p className="text-xs sm:text-sm text-nocturn-muted">
-          Turn your commitments, classes, and goals into a realistic time-blocked focus schedule.
+          Tell Nocturn what you need to get done.
         </p>
       </header>
 
       {/* Date & Context Bar */}
-      <div className="nocturn-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 border border-nocturn-border">
+      <div className="bg-nocturn-card border border-nocturn-border rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-nocturn-surface border border-nocturn-border flex items-center justify-center text-nocturn-accent shrink-0">
-            <Calendar className="w-5 h-5 stroke-[2]" />
+          <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent shrink-0">
+            <Calendar className="w-4.5 h-4.5 stroke-[2]" />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-nocturn-accent uppercase tracking-wider block">
-              Today
+            <span className="text-[10px] font-medium text-nocturn-muted uppercase tracking-wider block">
+              Today's Schedule
             </span>
-            <span className="text-sm sm:text-base font-bold text-white">
+            <span className="text-sm sm:text-base font-semibold text-white">
               {dateString}
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-white/5 border border-nocturn-border text-nocturn-muted">
+          <span className="text-xs font-medium px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-nocturn-muted">
             {existingActiveTasks.length > 0
-              ? `${existingActiveTasks.length} existing task${existingActiveTasks.length > 1 ? 's' : ''} in context`
-              : '0 existing tasks • Gemini will build a fresh day plan'}
+              ? `${existingActiveTasks.length} task${existingActiveTasks.length > 1 ? 's' : ''} in context`
+              : '0 tasks in context'}
           </span>
         </div>
       </div>
 
       {/* Planning Prompt Card */}
-      <div className="nocturn-card p-5 sm:p-6 space-y-4 border border-nocturn-border">
-        <div className="space-y-1.5">
-          <label htmlFor="plan-prompt" className="text-xs sm:text-sm font-bold text-white flex items-center justify-between">
+      <div className="bg-nocturn-card border border-nocturn-border rounded-2xl p-5 sm:p-6 space-y-4 shadow-sm">
+        <div className="space-y-2">
+          <label htmlFor="plan-prompt" className="text-xs sm:text-sm font-medium text-white flex items-center justify-between">
             <span>What does your day look like?</span>
-            <span className="text-[11px] font-normal text-nocturn-muted">Natural language input</span>
+            <span className="text-[11px] font-normal text-nocturn-muted">Natural language prompt</span>
           </label>
           <textarea
             id="plan-prompt"
             rows={4}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g. I have class from 9 to 2, gym at 6, need to study DSA, finish my project, revise vocabulary and complete today's assignments."
-            className="w-full nocturn-input text-sm p-3.5 leading-relaxed resize-none focus:border-nocturn-accent transition-colors"
+            placeholder="Tell me everything you need to accomplish today..."
+            className="w-full bg-nocturn-surface border border-nocturn-border rounded-xl text-sm p-3.5 text-white placeholder:text-nocturn-muted/60 leading-relaxed resize-y focus:border-nocturn-accent focus:ring-2 focus:ring-nocturn-accent/20 outline-none transition-all"
           />
         </div>
 
         {/* Quick Example Chips */}
         <div className="space-y-1.5">
-          <span className="text-[11px] font-semibold text-nocturn-muted block">Example prompts:</span>
+          <span className="text-[11px] font-medium text-nocturn-muted block">Example prompts:</span>
           <div className="flex flex-wrap gap-2">
             {EXAMPLE_PROMPTS.map((ex, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={() => setPrompt(ex)}
-                className="text-left text-xs px-3 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-nocturn-text border border-nocturn-border/80 hover:border-nocturn-accent/40 transition-all cursor-pointer"
+                className="text-left text-xs px-3 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-nocturn-muted hover:text-white border border-white/[0.06] hover:border-white/15 transition-all duration-150 cursor-pointer"
               >
                 {ex.length > 60 ? ex.slice(0, 60) + '...' : ex}
               </button>
@@ -367,7 +363,7 @@ export default function PlanMyDay() {
             <button
               type="button"
               onClick={() => setPrompt('')}
-              className="text-xs text-nocturn-muted hover:text-white transition-colors"
+              className="text-xs text-nocturn-muted hover:text-white transition-colors cursor-pointer"
             >
               Clear prompt
             </button>
@@ -376,17 +372,17 @@ export default function PlanMyDay() {
             type="button"
             disabled={isGenerating || !prompt.trim()}
             onClick={handleGeneratePlan}
-            className="ml-auto py-3 px-6 rounded-2xl bg-nocturn-accent text-black font-bold text-sm hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.35)] transition-all duration-200 flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="ml-auto py-2.5 px-5 rounded-xl bg-nocturn-accent text-white font-medium text-sm hover:bg-nocturn-accent-bright transition-all duration-150 flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm active:scale-95"
           >
             {isGenerating ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Generating Schedule...</span>
+                <span>Generating plan...</span>
               </>
             ) : (
               <>
-                <Sparkles className="w-4 h-4 stroke-[2.5]" />
-                <span>{plan ? 'Regenerate Plan' : 'Generate Plan'}</span>
+                <Sparkles className="w-4 h-4" />
+                <span>Generate Plan</span>
               </>
             )}
           </button>
@@ -591,42 +587,47 @@ export default function PlanMyDay() {
                 return (
                   <div
                     key={block.id || idx}
-                    className={`p-4 sm:p-5 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                    onClick={() => {
+                      if (!isBlockActive && (isFocus || isBreak)) {
+                        handleApplyTimerAndFocus(block)
+                      }
+                    }}
+                    className={`p-4 sm:p-5 rounded-2xl border transition-all duration-150 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer ${
                       isBlockActive
-                        ? 'bg-rose-950/25 border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.2)]'
+                        ? 'bg-rose-950/20 border-rose-500/40'
                         : isFocus
-                        ? 'bg-nocturn-card border-nocturn-accent/40 shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.1)]'
+                        ? 'bg-nocturn-card border-nocturn-border hover:border-nocturn-accent/40 shadow-sm'
                         : isBreak
-                        ? 'bg-indigo-950/20 border-indigo-500/30'
-                        : isEvent
-                        ? 'bg-nocturn-surface/40 border-nocturn-border'
-                        : 'bg-nocturn-card border-nocturn-border'
+                        ? 'bg-white/[0.02] border-white/[0.05] hover:border-white/10'
+                        : 'bg-nocturn-card border-nocturn-border hover:border-white/15'
                     }`}
                   >
                     {/* Left Details: Time + Title */}
                     <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
                       {/* Checkbox for existing task */}
                       {isExisting && block.taskId ? (
-                        <button
-                          type="button"
-                          onClick={() => toggleTask(block.taskId)}
-                          className={`w-5 h-5 mt-0.5 sm:mt-0 rounded-lg border flex items-center justify-center transition-colors shrink-0 ${
-                            isCompleted
-                              ? 'bg-nocturn-accent border-nocturn-accent text-black'
-                              : 'border-nocturn-border hover:border-nocturn-accent/60'
-                          }`}
-                        >
-                          {isCompleted && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                        </button>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => toggleTask(block.taskId)}
+                            className={`w-5 h-5 mt-0.5 sm:mt-0 rounded-lg border flex items-center justify-center transition-colors shrink-0 ${
+                              isCompleted
+                                ? 'bg-nocturn-accent border-nocturn-accent text-white'
+                                : 'border-nocturn-border hover:border-nocturn-accent/60'
+                            }`}
+                          >
+                            {isCompleted && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          </button>
+                        </div>
                       ) : (
                         <div
                           className={`w-5 h-5 mt-0.5 sm:mt-0 rounded-lg flex items-center justify-center shrink-0 ${
                             isBlockActive
                               ? 'text-rose-400'
                               : isFocus
-                              ? 'text-nocturn-accent'
+                              ? 'text-nocturn-accent-bright'
                               : isBreak
-                              ? 'text-indigo-400'
+                              ? 'text-amber-400'
                               : 'text-nocturn-muted'
                           }`}
                         >
@@ -637,8 +638,8 @@ export default function PlanMyDay() {
                       <div className="space-y-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3
-                            className={`text-sm sm:text-base font-bold truncate ${
-                              isCompleted ? 'line-through text-nocturn-muted' : 'text-white'
+                            className={`text-sm sm:text-base font-semibold truncate ${
+                              isCompleted ? 'line-through text-nocturn-dim' : 'text-white'
                             }`}
                           >
                             {block.title}
@@ -646,33 +647,33 @@ export default function PlanMyDay() {
 
                           {/* Block Type Badge & Active Badge */}
                           {isBlockActive && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-500/15 text-rose-300 border border-rose-500/30">
                               Active Now
                             </span>
                           )}
                           {isFocus && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-nocturn-accent/15 text-nocturn-accent border border-nocturn-accent/30">
-                              Focus Session
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-nocturn-accent/15 text-nocturn-accent-bright border border-nocturn-accent/30">
+                              Focus
                             </span>
                           )}
                           {isBreak && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
                               Break
                             </span>
                           )}
                           {isEvent && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/5 text-nocturn-muted border border-nocturn-border">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/[0.04] text-nocturn-muted border border-white/[0.06]">
                               Event
                             </span>
                           )}
                           {isExisting && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                               Existing Task
                             </span>
                           )}
                           {!isExisting && !isBreak && !isEvent && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                              {isTaskApplied ? 'Added to Tasks' : 'Suggested Task'}
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/[0.04] text-nocturn-muted border border-white/[0.06]">
+                              {isTaskApplied ? 'Added to Tasks' : 'Suggested'}
                             </span>
                           )}
                         </div>
@@ -686,9 +687,9 @@ export default function PlanMyDay() {
                     </div>
 
                     {/* Right Details: Time Range + Action Buttons */}
-                    <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
+                    <div className="flex items-center gap-3 self-end sm:self-auto shrink-0" onClick={(e) => e.stopPropagation()}>
                       <div className="text-right">
-                        <span className="text-xs font-bold font-mono text-white block">
+                        <span className="text-xs font-semibold font-mono text-white block">
                           {block.startTime} – {block.endTime}
                         </span>
                         <span className="text-[11px] text-nocturn-muted block">
@@ -700,10 +701,10 @@ export default function PlanMyDay() {
                         <button
                           type="button"
                           onClick={() => terminateTimer()}
-                          className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(244,63,94,0.3)]"
+                          className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
                         >
                           <Square className="w-3 h-3 fill-current" />
-                          <span>Terminate</span>
+                          <span>Stop</span>
                         </button>
                       ) : (
                         <>
@@ -711,10 +712,10 @@ export default function PlanMyDay() {
                             <button
                               type="button"
                               onClick={() => handleApplyTimerAndFocus(block)}
-                              className="px-3 py-1.5 rounded-xl bg-nocturn-accent/20 hover:bg-nocturn-accent/30 text-nocturn-accent border border-nocturn-accent/40 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                              className="px-3 py-1.5 rounded-xl bg-nocturn-accent text-white hover:bg-nocturn-accent-bright text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
                             >
                               <Play className="w-3 h-3 fill-current" />
-                              <span>Focus</span>
+                              <span>Start Focus</span>
                             </button>
                           )}
 
@@ -722,10 +723,10 @@ export default function PlanMyDay() {
                             <button
                               type="button"
                               onClick={() => handleApplyTimerAndFocus(block)}
-                              className="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                              className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer"
                             >
                               <Coffee className="w-3 h-3" />
-                              <span>Break</span>
+                              <span>Take Break</span>
                             </button>
                           )}
                         </>
@@ -735,7 +736,7 @@ export default function PlanMyDay() {
                         <button
                           type="button"
                           onClick={() => handleAddSingleTask(block.title, block.priority)}
-                          className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-nocturn-muted hover:text-white border border-nocturn-border text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
+                          className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-nocturn-muted hover:text-white border border-white/[0.06] text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
                         >
                           <Plus className="w-3 h-3 text-nocturn-accent" />
                           <span>Add Task</span>

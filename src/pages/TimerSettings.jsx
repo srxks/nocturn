@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useTimerSettings } from '../context/useTimerSettings'
 import TimerSettingsRow from '../components/timer/TimerSettingsRow'
+import { Card, Button, Switch } from '../components/ui'
 
 export default function TimerSettings() {
   const navigate = useNavigate()
@@ -67,29 +68,29 @@ export default function TimerSettings() {
   }
 
   return (
-    <div className="w-full space-y-6 sm:space-y-8">
+    <div className="w-full space-y-6 sm:space-y-8 max-w-2xl mx-auto pb-12">
       {/* Header with Back Button */}
-      <header className="flex items-center gap-4">
+      <header className="flex items-center gap-3">
         <button
           type="button"
           onClick={handleCancel}
           aria-label="Back to timer"
-          className="p-2.5 rounded-2xl bg-nocturn-surface border border-nocturn-border hover:border-nocturn-accent/40 text-nocturn-muted hover:text-white transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent"
+          className="p-2 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] text-nocturn-muted hover:text-white transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-5 h-5 stroke-[2.2]" />
+          <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="space-y-0.5">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
             Timer Settings
           </h1>
           <p className="text-xs sm:text-sm text-nocturn-muted">
-            Customize your focus sessions.
+            Configure focus intervals, breaks, and session cycles.
           </p>
         </div>
       </header>
 
       {/* Settings Rows List */}
-      <div className="space-y-3.5">
+      <div className="space-y-3">
         <TimerSettingsRow
           label="Focus Duration"
           value={localSettings.focusDuration}
@@ -135,92 +136,52 @@ export default function TimerSettings() {
         />
 
         {/* Auto-start Breaks Toggle */}
-        <div className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-nocturn-card border border-nocturn-border hover:border-nocturn-accent/30 transition-all duration-200 shadow-md shadow-black/40">
-          <div className="space-y-0.5 min-w-0 flex-1 pr-2">
-            <span className="text-sm sm:text-base font-semibold text-white block truncate">
-              Auto-start Breaks
-            </span>
-            <span className="text-xs text-nocturn-muted font-normal block">
-              Automatically start break timers after focus sessions
-            </span>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={localSettings.autoStartBreaks}
-            aria-label="Toggle auto-start breaks"
-            onClick={() =>
+        <Card className="p-4 sm:p-5">
+          <Switch
+            label="Auto-start Breaks"
+            description="Automatically start break countdown when a focus session completes."
+            checked={localSettings.autoStartBreaks}
+            onChange={(checked) =>
               setLocalSettings((prev) => ({
                 ...prev,
-                autoStartBreaks: !prev.autoStartBreaks,
+                autoStartBreaks: checked,
               }))
             }
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent ${
-              localSettings.autoStartBreaks
-                ? 'bg-nocturn-accent'
-                : 'bg-nocturn-surface border-nocturn-border'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                localSettings.autoStartBreaks ? 'translate-x-5 bg-black' : 'translate-x-0'
-              }`}
-            />
-          </button>
-        </div>
+          />
+        </Card>
 
         {/* Auto-start Focus Toggle */}
-        <div className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-nocturn-card border border-nocturn-border hover:border-nocturn-accent/30 transition-all duration-200 shadow-md shadow-black/40">
-          <div className="space-y-0.5 min-w-0 flex-1 pr-2">
-            <span className="text-sm sm:text-base font-semibold text-white block truncate">
-              Auto-start Focus Sessions
-            </span>
-            <span className="text-xs text-nocturn-muted font-normal block">
-              Automatically start focus timers after break sessions
-            </span>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={localSettings.autoStartPomo}
-            aria-label="Toggle auto-start focus sessions"
-            onClick={() =>
+        <Card className="p-4 sm:p-5">
+          <Switch
+            label="Auto-start Focus Sessions"
+            description="Automatically transition back to focus after a break concludes."
+            checked={localSettings.autoStartPomo}
+            onChange={(checked) =>
               setLocalSettings((prev) => ({
                 ...prev,
-                autoStartPomo: !prev.autoStartPomo,
+                autoStartPomo: checked,
               }))
             }
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent ${
-              localSettings.autoStartPomo
-                ? 'bg-nocturn-accent'
-                : 'bg-nocturn-surface border-nocturn-border'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                localSettings.autoStartPomo ? 'translate-x-5 bg-black' : 'translate-x-0'
-              }`}
-            />
-          </button>
-        </div>
+          />
+        </Card>
       </div>
 
       {/* Bottom Save / Cancel Actions */}
-      <div className="flex items-center justify-end gap-3 pt-4 border-t border-nocturn-border/60">
-        <button
-          type="button"
+      <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-white/[0.06]">
+        <Button
+          variant="secondary"
+          size="md"
           onClick={handleCancel}
-          className="nocturn-btn-secondary px-6 py-2.5 text-sm font-medium cursor-pointer"
         >
           Cancel
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="primary"
+          size="md"
           onClick={handleSave}
-          className="nocturn-btn-primary px-8 py-2.5 text-sm font-semibold shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.35)] cursor-pointer"
         >
           Save Changes
-        </button>
+        </Button>
       </div>
     </div>
   )

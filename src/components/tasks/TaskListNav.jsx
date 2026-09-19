@@ -77,22 +77,22 @@ export default function TaskListNav() {
                 key={view.id}
                 type="button"
                 onClick={() => setActiveListId(view.id)}
-                className={`flex-1 sm:flex-none flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all cursor-pointer shrink-0 ${
+                className={`flex-1 sm:flex-none flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-150 cursor-pointer shrink-0 ${
                   active
-                    ? 'bg-nocturn-accent/15 text-nocturn-accent-bright font-semibold border border-nocturn-accent/35 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.2)]'
-                    : 'text-nocturn-muted hover:text-white hover:bg-white/5 border border-transparent'
+                    ? 'bg-nocturn-accent/12 text-white font-medium border border-nocturn-accent/25 shadow-sm'
+                    : 'text-nocturn-muted hover:text-white hover:bg-white/[0.04] border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <Icon className={`w-4 h-4 stroke-[2.2] ${active ? 'text-nocturn-accent' : ''}`} />
+                  <Icon className={`w-4 h-4 stroke-[2] ${active ? 'text-nocturn-accent-bright' : ''}`} />
                   <span>{view.name}</span>
                 </div>
                 {view.count > 0 && (
                   <span
-                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
                       active
-                        ? 'bg-nocturn-accent text-black'
-                        : 'bg-nocturn-surface text-nocturn-muted border border-nocturn-border'
+                        ? 'bg-nocturn-accent/25 text-nocturn-accent-bright font-medium'
+                        : 'bg-white/[0.05] text-nocturn-muted border border-white/[0.06]'
                     }`}
                   >
                     {view.count}

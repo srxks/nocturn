@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import TaskListNav from '../components/tasks/TaskListNav'
 import TaskItemRow from '../components/tasks/TaskItemRow'
@@ -6,15 +7,20 @@ import TaskDetailDrawer from '../components/tasks/TaskDetailDrawer'
 import EmptyTasks from '../components/tasks/EmptyTasks'
 import AddTask from '../components/tasks/AddTask'
 import BulkTaskMenu from '../components/tasks/BulkTaskMenu'
+import { Progress } from '../components/ui/Progress'
 import { useTasks } from '../context/useTasks'
 import { formatDateKey } from '../services/calendarService'
-import { Sun, ListTodo, CheckCircle2, CheckSquare } from 'lucide-react'
+import { Sun, ListTodo, CheckCircle2, CheckSquare, Sparkles } from 'lucide-react'
 
 export default function Tasks() {
+  const [searchParams] = useSearchParams()
+  const viewParam = searchParams.get('view')
+
   const {
     tasks,
     lists,
     activeListId,
+    setActiveListId,
     selectedTask,
     setSelectedTask,
     addTask,
@@ -27,10 +33,35 @@ export default function Tasks() {
     deleteSubtask,
   } = useTasks()
 
+  // Sync route query parameter ?view=myday or ?view=all with activeListId
+  useEffect(() => {
+    if (viewParam === 'myday' && activeListId !== 'my-day') {
+      setActiveListId('my-day')
+    } else if (viewParam === 'all' && activeListId !== 'all') {
+      setActiveListId('all')
+    }
+  }, [viewParam, activeListId, setActiveListId])
+
   const todayKey = formatDateKey(new Date())
   const tomorrowDate = new Date()
   tomorrowDate.setDate(tomorrowDate.getDate() + 1)
   const tomorrowKey = formatDateKey(tomorrowDate)
+
+  // Contextual greeting and formatted date for My Day centerpiece
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 17) return 'Good afternoon'
+    return 'Good evening'
+  }, [])
+
+  const formattedToday = useMemo(() => {
+    return new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    })
+  }, [])
 
   // Get active view/list information
   const currentListObj = useMemo(() => {
@@ -86,21 +117,22 @@ export default function Tasks() {
   }
 
   const HeaderIcon = currentListObj?.icon || CheckSquare
+  const isMyDay = activeListId === 'my-day'
 
   return (
     <div className="w-full space-y-6 sm:space-y-8">
       {/* Page Header with Bulk Task Action Menu */}
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <span className="text-xs sm:text-sm font-medium text-nocturn-muted uppercase tracking-wider">
-            Task Manager
+          <span className="text-xs sm:text-sm font-medium text-nocturn-muted">
+            {isMyDay ? formattedToday : 'Task Manager'}
           </span>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
             <HeaderIcon className="w-6 h-6 sm:w-7 sm:h-7 text-nocturn-accent" />
-            <span>{currentListObj?.name}</span>
+            <span>{isMyDay ? `${greeting}` : currentListObj?.name}</span>
           </h1>
           <p className="text-xs sm:text-sm text-nocturn-muted flex items-center gap-2 flex-wrap">
-            <span>{currentListObj?.description}</span>
+            <span>{isMyDay ? "Focus on what matters most today." : currentListObj?.description}</span>
             {totalCount > 0 && (
               <>
                 <span className="text-nocturn-border">•</span>
@@ -118,6 +150,27 @@ export default function Tasks() {
           totalCount={totalCount}
         />
       </header>
+
+      {/* My Day Centerpiece Progress Card */}
+      {isMyDay && totalCount > 0 && (
+        <div className="bg-nocturn-card border border-nocturn-border rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white">
+              <Sparkles className="w-4 h-4 text-nocturn-accent" />
+              <span>Today's Progress</span>
+            </div>
+            <span className="text-xs font-mono text-nocturn-muted">
+              {completedCount} / {totalCount} ({Math.round((completedCount / totalCount) * 100)}%)
+            </span>
+          </div>
+          <Progress
+            value={completedCount}
+            max={totalCount}
+            size="sm"
+            variant="accent"
+          />
+        </div>
+      )}
 
       {/* Main Grid Layout: Navigation Sidebar + Task List Content */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
@@ -160,6 +213,7 @@ export default function Tasks() {
                           onToggleComplete={toggleTask}
                           onToggleStar={toggleStar}
                           onSelectTask={setSelectedTask}
+                          onDeleteTask={deleteTask}
                           isSelected={selectedTask?.id === task.id}
                         />
                       </motion.div>
@@ -190,6 +244,7 @@ export default function Tasks() {
                             onToggleComplete={toggleTask}
                             onToggleStar={toggleStar}
                             onSelectTask={setSelectedTask}
+                            onDeleteTask={deleteTask}
                             isSelected={selectedTask?.id === task.id}
                           />
                         </motion.div>

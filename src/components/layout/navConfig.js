@@ -1,12 +1,21 @@
-import { CheckSquare, Calendar, Sparkles, Timer, BookOpen, Settings, User } from 'lucide-react'
+import { Sun, CheckSquare, Calendar, Sparkles, Timer, BookOpen, BarChart3, Settings } from 'lucide-react'
 
 export const NAV_ITEMS = [
   {
+    id: 'my-day',
+    name: 'Today',
+    path: '/tasks?view=myday',
+    icon: Sun,
+    isActive: (pathname, search = '') =>
+      pathname.startsWith('/tasks') && (search.includes('view=myday') || (!search.includes('view=all') && !search.includes('view=completed'))),
+  },
+  {
     id: 'tasks',
     name: 'Tasks',
-    path: '/tasks',
+    path: '/tasks?view=all',
     icon: CheckSquare,
-    isActive: (pathname) => pathname.startsWith('/tasks'),
+    isActive: (pathname, search = '') =>
+      pathname.startsWith('/tasks') && search.includes('view=all'),
   },
   {
     id: 'calendar',
@@ -31,10 +40,17 @@ export const NAV_ITEMS = [
   },
   {
     id: 'vocab',
-    name: 'Vocab',
+    name: 'Vocabulary',
     path: '/vocab',
     icon: BookOpen,
     isActive: (pathname) => pathname.startsWith('/vocab'),
+  },
+  {
+    id: 'profile',
+    name: 'Statistics',
+    path: '/profile',
+    icon: BarChart3,
+    isActive: (pathname) => pathname.startsWith('/profile'),
   },
   {
     id: 'settings',
@@ -43,11 +59,5 @@ export const NAV_ITEMS = [
     icon: Settings,
     isActive: (pathname) => pathname.startsWith('/settings'),
   },
-  {
-    id: 'profile',
-    name: 'Profile',
-    path: '/profile',
-    icon: User,
-    isActive: (pathname) => pathname.startsWith('/profile'),
-  },
 ]
+

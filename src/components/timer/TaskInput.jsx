@@ -16,7 +16,7 @@ export default function TaskInput({ taskName, setTaskName }) {
           value={taskName}
           onChange={(e) => setTaskName(e.target.value)}
           placeholder="What are you working on?"
-          className="w-full bg-nocturn-card/90 text-white text-xs sm:text-sm pl-10 pr-4 py-2.5 rounded-full border border-nocturn-border hover:border-nocturn-accent/30 focus:border-nocturn-accent focus:outline-none focus:ring-1 focus:ring-nocturn-accent transition-all duration-200 placeholder:text-nocturn-muted/60 text-center sm:text-left"
+          className="w-full bg-white/[0.03] text-white text-xs sm:text-sm pl-10 pr-4 py-2 rounded-full border border-white/[0.08] hover:border-white/15 focus:border-nocturn-accent/80 focus:outline-none focus:ring-2 focus:ring-nocturn-accent/20 transition-all duration-150 placeholder:text-nocturn-muted/60 text-center sm:text-left shadow-sm"
         />
       </div>
     </div>

@@ -53,22 +53,22 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
           type="submit"
           aria-label="Submit new task"
           disabled={!title.trim()}
-          className="absolute right-2 p-2 rounded-xl bg-nocturn-accent text-black hover:bg-nocturn-accent-bright disabled:opacity-40 disabled:hover:bg-nocturn-accent transition-all duration-200 cursor-pointer disabled:cursor-not-allowed shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.4)]"
+          className="absolute right-2.5 p-2 rounded-xl bg-nocturn-accent text-white hover:bg-nocturn-accent-bright disabled:opacity-40 disabled:hover:bg-nocturn-accent transition-all duration-150 cursor-pointer disabled:cursor-not-allowed shadow-sm active:scale-95"
         >
-          <Plus className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+          <Plus className="w-4 h-4 stroke-[2.5]" />
         </button>
       </div>
 
       {/* Target Day / Date Toggle & Explicit My Day Toggle */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs text-nocturn-muted font-medium">Due:</span>
-        <div className="inline-flex items-center bg-nocturn-card p-0.5 rounded-xl border border-nocturn-border">
+        <div className="inline-flex items-center bg-white/[0.03] p-0.5 rounded-xl border border-nocturn-border">
           <button
             type="button"
             onClick={() => setDay('none')}
-            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer ${
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
               day === 'none'
-                ? 'bg-nocturn-accent text-black font-semibold shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.3)]'
+                ? 'bg-white/[0.1] text-white border border-white/[0.12] shadow-sm font-semibold'
                 : 'text-nocturn-muted hover:text-white'
             }`}
           >
@@ -77,9 +77,9 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
           <button
             type="button"
             onClick={() => setDay('today')}
-            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer ${
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
               day === 'today'
-                ? 'bg-nocturn-accent text-black font-semibold shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.3)]'
+                ? 'bg-nocturn-accent/20 text-nocturn-accent-bright border border-nocturn-accent/30 font-semibold shadow-sm'
                 : 'text-nocturn-muted hover:text-white'
             }`}
           >
@@ -88,9 +88,9 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
           <button
             type="button"
             onClick={() => setDay('tomorrow')}
-            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer ${
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
               day === 'tomorrow'
-                ? 'bg-nocturn-accent text-black font-semibold shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.3)]'
+                ? 'bg-nocturn-accent/20 text-nocturn-accent-bright border border-nocturn-accent/30 font-semibold shadow-sm'
                 : 'text-nocturn-muted hover:text-white'
             }`}
           >
@@ -100,9 +100,9 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
             <button
               type="button"
               onClick={() => dateInputRef.current?.showPicker ? dateInputRef.current.showPicker() : dateInputRef.current?.focus()}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
                 day === 'custom' && customDate
-                  ? 'bg-nocturn-accent text-black font-semibold shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.3)]'
+                  ? 'bg-nocturn-accent/20 text-nocturn-accent-bright border border-nocturn-accent/30 font-semibold shadow-sm'
                   : 'text-nocturn-muted hover:text-white'
               }`}
             >
@@ -125,10 +125,10 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
         <button
           type="button"
           onClick={() => setInMyDay((prev) => !prev)}
-          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-medium border transition-all duration-200 cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-medium border transition-all duration-150 cursor-pointer ${
             inMyDay
-              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
-              : 'bg-nocturn-card text-nocturn-muted hover:text-white border-nocturn-border'
+              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+              : 'bg-white/[0.03] text-nocturn-muted hover:text-white border-nocturn-border'
           }`}
         >
           <Sun className={`w-3.5 h-3.5 ${inMyDay ? 'text-amber-400 fill-amber-400' : ''}`} />

@@ -14,6 +14,7 @@ import { useVocab } from '../hooks/useVocab'
 import { getWordStatus } from '../services/vocabService'
 import VocabDetailModal from '../components/vocab/VocabDetailModal'
 import VocabWordModal from '../components/vocab/VocabWordModal'
+import { Card, Badge, Button, Tabs } from '../components/ui'
 
 export default function VocabList() {
   const navigate = useNavigate()
@@ -59,107 +60,99 @@ export default function VocabList() {
     })
   }, [allWords, activeFilter, searchQuery])
 
+  const filterTabs = [
+    { id: 'all', label: 'All', count: allWords.length },
+    {
+      id: 'learning',
+      label: 'In Progress',
+      count: allWords.filter((w) => getWordStatus(w) === 'learning').length,
+    },
+    {
+      id: 'settled',
+      label: 'Mastered',
+      count: allWords.filter((w) => getWordStatus(w) === 'settled').length,
+    },
+    {
+      id: 'due_for_refresh',
+      label: 'Due for Refresh',
+      count: allWords.filter((w) => getWordStatus(w) === 'due_for_refresh').length,
+    },
+  ]
+
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-6 sm:space-y-8 pb-12">
       {/* Header & Back Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <button
             onClick={() => navigate('/vocab')}
-            className="inline-flex items-center gap-2 text-xs font-semibold text-nocturn-muted hover:text-white transition-colors mb-2"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-nocturn-muted hover:text-white transition-colors mb-1 cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Vocab</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Vocabulary</span>
           </button>
 
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
             Word Library
           </h1>
-          <p className="text-nocturn-muted text-sm">
-            All learned GRE vocabulary words & progress tracker.
+          <p className="text-nocturn-muted text-xs sm:text-sm">
+            All learned GRE vocabulary words and mastery status.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
-          <button
-            type="button"
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setIsAddModalOpen(true)}
-            className="px-4 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors flex items-center gap-2 text-xs cursor-pointer"
+            icon={Plus}
           >
-            <Plus className="w-4 h-4 text-nocturn-accent" />
-            <span>Add Word</span>
-          </button>
+            Add Word
+          </Button>
 
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => navigate('/vocab/learn')}
-            className="px-4 py-2.5 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)] transition-colors flex items-center gap-2 text-xs cursor-pointer"
+            icon={Sparkles}
           >
-            <Sparkles className="w-4 h-4" />
-            <span>Learn Words</span>
-          </button>
+            Learn Words
+          </Button>
 
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setIsConfirmDeleteAllOpen(true)}
             disabled={allWords.length === 0}
-            className="px-4 py-2.5 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition-colors flex items-center gap-2 text-xs font-semibold cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            icon={Trash2}
+            className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
           >
-            <Trash2 className="w-4 h-4 text-rose-400" />
-            <span>Delete All Words</span>
-          </button>
+            Delete All
+          </Button>
         </div>
       </div>
 
       {/* Search Bar & Filter Tabs */}
       <div className="space-y-4">
-        <div className="relative">
-          <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-nocturn-muted" />
+        <div className="relative max-w-xl">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-nocturn-muted" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search words or definitions..."
-            className="w-full pl-12 pr-4 py-3.5 bg-nocturn-card border border-nocturn-border rounded-2xl text-white placeholder:text-nocturn-muted focus:outline-none focus:border-nocturn-accent transition-colors"
+            className="w-full pl-10 pr-4 py-2.5 bg-white/[0.04] border border-white/[0.08] focus:border-nocturn-accent/60 rounded-xl text-sm text-white placeholder:text-nocturn-muted outline-none transition-colors"
           />
         </div>
 
         {/* Category Tabs */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {[
-            { id: 'all', label: `All (${allWords.length})` },
-            {
-              id: 'learning',
-              label: `In Progress (${
-                allWords.filter((w) => getWordStatus(w) === 'learning').length
-              })`,
-            },
-            {
-              id: 'settled',
-              label: `Mastered (${
-                allWords.filter((w) => getWordStatus(w) === 'settled').length
-              })`,
-            },
-            {
-              id: 'due_for_refresh',
-              label: `Due for Refresh (${
-                allWords.filter((w) => getWordStatus(w) === 'due_for_refresh')
-                  .length
-              })`,
-            },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveFilter(tab.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
-                activeFilter === tab.id
-                  ? 'bg-nocturn-accent/15 text-nocturn-accent border border-nocturn-accent/30 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.2)]'
-                  : 'bg-nocturn-card text-nocturn-muted hover:text-white border border-nocturn-border'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          <Tabs
+            tabs={filterTabs}
+            activeTab={activeFilter}
+            onChange={setActiveFilter}
+            size="sm"
+          />
         </div>
         <p className="text-[11px] text-nocturn-muted">
           Mastery: 5 successful reviews. Mastered words remain permanently in your library.
@@ -168,17 +161,17 @@ export default function VocabList() {
 
       {/* Word Grid */}
       {filteredWords.length === 0 ? (
-        <div className="p-12 text-center bg-nocturn-card border border-nocturn-border rounded-3xl space-y-3">
-          <BookOpen className="w-12 h-12 text-nocturn-muted mx-auto opacity-50" />
-          <h3 className="text-lg font-bold text-white">No Words Found</h3>
-          <p className="text-sm text-nocturn-muted max-w-sm mx-auto">
+        <Card className="p-12 text-center space-y-3">
+          <BookOpen className="w-10 h-10 text-nocturn-muted mx-auto opacity-40" />
+          <h3 className="text-base font-semibold text-white">No Words Found</h3>
+          <p className="text-xs text-nocturn-muted max-w-sm mx-auto">
             {searchQuery
               ? `No words matched "${searchQuery}"`
               : 'You have not learned any words in this category yet.'}
           </p>
-        </div>
+        </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           <AnimatePresence>
             {filteredWords.map((wordItem) => {
               const status = getWordStatus(wordItem)
@@ -192,45 +185,50 @@ export default function VocabList() {
                   exit={{ opacity: 0, scale: 0.98 }}
                   transition={{ duration: 0.15 }}
                   onClick={() => setSelectedWord(wordItem)}
-                  className="p-5 rounded-3xl bg-nocturn-card border border-nocturn-border hover:border-nocturn-accent/40 cursor-pointer transition-all duration-200 space-y-3 flex flex-col justify-between group shadow-[0_4px_20px_rgba(0,0,0,0.4)]"
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-xl font-bold text-white group-hover:text-nocturn-accent transition-colors">
-                        {wordItem.word}
-                      </h3>
+                  <Card
+                    variant="interactive"
+                    padding="sm"
+                    className="space-y-3 flex flex-col justify-between group h-full"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-lg font-semibold text-white group-hover:text-nocturn-accent transition-colors">
+                          {wordItem.word}
+                        </h3>
 
-                      {/* Status Badge */}
-                      {status === 'settled' ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                          Mastered
-                        </span>
-                      ) : status === 'due_for_refresh' ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                          Refresh
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-nocturn-accent/15 text-nocturn-accent border border-nocturn-accent/30">
-                          In Progress
-                        </span>
-                      )}
+                        {/* Status Badge */}
+                        {status === 'settled' ? (
+                          <Badge variant="success" size="sm" dot>
+                            Mastered
+                          </Badge>
+                        ) : status === 'due_for_refresh' ? (
+                          <Badge variant="warning" size="sm" dot>
+                            Refresh
+                          </Badge>
+                        ) : (
+                          <Badge variant="neutral" size="sm" dot>
+                            In Progress
+                          </Badge>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-nocturn-muted line-clamp-2 leading-relaxed">
+                        {wordItem.definition}
+                      </p>
                     </div>
 
-                    <p className="text-xs text-nocturn-text/80 line-clamp-2 leading-relaxed">
-                      {wordItem.definition}
-                    </p>
-                  </div>
+                    {/* Footer Mastery Bar */}
+                    <div className="pt-2.5 border-t border-white/[0.06] flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-nocturn-muted capitalize">
+                        {wordItem.part_of_speech || 'noun'}
+                      </span>
 
-                  {/* Footer Mastery Bar */}
-                  <div className="pt-3 border-t border-nocturn-border/60 flex items-center justify-between text-xs">
-                    <span className="text-nocturn-muted">
-                      {wordItem.part_of_speech || 'noun'}
-                    </span>
-
-                    <span className="font-bold text-nocturn-accent">
-                      {wordItem.correct_count >= 5 ? 'Mastered' : `${wordItem.correct_count || 0} of 5 reviews passed`}
-                    </span>
-                  </div>
+                      <span className="text-[11px] font-mono font-medium text-nocturn-accent">
+                        {wordItem.correct_count >= 5 ? 'Mastered' : `${wordItem.correct_count || 0}/5 reviews`}
+                      </span>
+                    </div>
+                  </Card>
                 </motion.div>
               )
             })}
@@ -257,33 +255,33 @@ export default function VocabList() {
       {/* Delete All Words Confirmation Modal */}
       {isConfirmDeleteAllOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-nocturn-card border border-rose-500/30 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl">
+          <div className="w-full max-w-md bg-nocturn-card border border-rose-500/30 rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl">
             <div className="flex items-center gap-3 text-rose-400">
-              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5" />
               </div>
-              <h3 className="text-lg font-bold text-white">Delete All Vocabulary Words?</h3>
+              <h3 className="text-base font-semibold text-white">Delete All Vocabulary Words?</h3>
             </div>
-            <p className="text-sm text-nocturn-muted">
+            <p className="text-xs sm:text-sm text-nocturn-muted">
               Delete all vocabulary words? This cannot be undone.
             </p>
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => setIsConfirmDeleteAllOpen(false)}
                 disabled={isDeletingAll}
-                className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-nocturn-border cursor-pointer transition-colors"
               >
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
                 onClick={handleDeleteAllConfirm}
                 disabled={isDeletingAll}
-                className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-[0_0_15px_rgba(244,63,94,0.4)] cursor-pointer transition-colors disabled:opacity-50"
               >
                 {isDeletingAll ? 'Deleting...' : 'Delete All'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

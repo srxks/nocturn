@@ -16,6 +16,7 @@ import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
 import { getTodayDateKey, saveDailyVocabLog } from '../services/vocabService'
 import VocabWordModal from '../components/vocab/VocabWordModal'
+import { Card, Badge, Button, Progress } from '../components/ui'
 
 export default function VocabLearn() {
   const navigate = useNavigate()
@@ -270,41 +271,41 @@ export default function VocabLearn() {
         <button
           type="button"
           onClick={() => navigate('/vocab')}
-          className="inline-flex items-center gap-2 text-sm text-nocturn-muted hover:text-white transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-nocturn-muted hover:text-white transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Vocab</span>
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Vocabulary</span>
         </button>
 
-        <div className="p-8 rounded-3xl bg-nocturn-card border border-emerald-500/30 space-y-4 text-center shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
-            <CheckCircle2 className="w-7 h-7" />
+        <Card className="p-8 space-y-5 text-center">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 mx-auto">
+            <CheckCircle2 className="w-6 h-6" />
           </div>
-          <div className="space-y-1">
-            <h2 className="text-xl font-bold text-white">
-              Today's Daily Set is Complete!
+          <div className="space-y-1.5">
+            <h2 className="text-xl font-semibold text-white tracking-tight">
+              Today's Daily Set is Complete
             </h2>
-            <p className="text-sm text-nocturn-muted max-w-sm mx-auto">
+            <p className="text-xs sm:text-sm text-nocturn-muted max-w-sm mx-auto">
               You've completed your daily target of {effectiveDailyTarget} {effectiveDailyTarget === 1 ? 'word' : 'words'}. Head over to Review to practice and retain what you've learned.
             </p>
           </div>
-          <div className="pt-2 flex flex-col sm:flex-row justify-center gap-3">
-            <button
-              type="button"
+          <div className="pt-2 flex flex-col sm:flex-row justify-center gap-2.5">
+            <Button
+              variant="primary"
+              size="md"
               onClick={() => navigate('/vocab/review')}
-              className="px-6 py-2.5 rounded-xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright transition-colors cursor-pointer"
             >
               Go to Review Queue
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
               onClick={() => navigate('/vocab')}
-              className="px-6 py-2.5 rounded-xl bg-white/5 text-white font-medium hover:bg-white/10 transition-colors border border-nocturn-border cursor-pointer"
             >
-              Back to Vocab
-            </button>
+              Back to Vocabulary
+            </Button>
           </div>
-        </div>
+        </Card>
       </div>
     )
   }
@@ -312,61 +313,63 @@ export default function VocabLearn() {
   // Completion View
   if (isCompletedView) {
     return (
-      <div className="max-w-2xl mx-auto space-y-8 py-6">
-        <div className="text-center space-y-3">
-          <div className="w-16 h-16 rounded-3xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto shadow-[0_0_30px_rgba(16,185,129,0.3)]">
-            <CheckCircle2 className="w-8 h-8" />
+      <div className="max-w-2xl mx-auto space-y-6 py-6">
+        <div className="text-center space-y-2">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 mx-auto">
+            <CheckCircle2 className="w-7 h-7" />
           </div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">
-            Today's {dailyWords.length > 0 ? `${dailyWords.length} Words` : 'Set'} Completed!
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
+            Today's {dailyWords.length > 0 ? `${dailyWords.length} Words` : 'Set'} Completed
           </h1>
-          <p className="text-nocturn-muted text-sm max-w-md mx-auto">
+          <p className="text-nocturn-muted text-xs sm:text-sm max-w-md mx-auto">
             Great job! You've learned today's vocabulary set. They are saved in your library and ready for review.
           </p>
         </div>
 
         {/* Word Summary List */}
-        <div className="bg-nocturn-card border border-nocturn-border rounded-3xl p-6 space-y-3 shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
-          <h3 className="text-xs uppercase font-bold tracking-wider text-nocturn-muted mb-2">
+        <Card className="p-5 sm:p-6 space-y-3">
+          <h3 className="text-xs uppercase font-semibold tracking-wider text-nocturn-muted mb-2">
             Today's Words ({dailyWords.length})
           </h3>
           {dailyWords.map((item, idx) => (
             <div
               key={item.id || idx}
-              className="p-4 rounded-2xl bg-white/[0.02] border border-nocturn-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+              className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-2"
             >
               <div>
-                <span className="text-base font-bold text-white">
+                <span className="text-sm font-semibold text-white">
                   {item.word}
                 </span>
-                <span className="ml-2 text-xs font-medium text-nocturn-muted">
+                <span className="ml-2 text-xs font-normal text-nocturn-muted">
                   ({item.part_of_speech || 'noun'})
                 </span>
-                <p className="text-xs text-nocturn-text/80 line-clamp-1 mt-0.5">
+                <p className="text-xs text-nocturn-muted line-clamp-1 mt-0.5">
                   {item.definition}
                 </p>
               </div>
-              <span className="self-start sm:self-auto px-2.5 py-1 rounded-full text-[11px] font-semibold bg-nocturn-accent/15 text-nocturn-accent border border-nocturn-accent/30 shrink-0">
+              <Badge variant="accent" size="sm" dot>
                 Learned
-              </span>
+              </Badge>
             </div>
           ))}
-        </div>
+        </Card>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
-          <button
-            type="button"
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => {
               setBrowsingCards(true)
               setCurrentIndex(0)
             }}
-            className="py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors text-center cursor-pointer text-xs sm:text-sm"
+            className="justify-center"
           >
             Review Flashcards
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={async () => {
               try {
                 await generateNewWords()
@@ -376,29 +379,27 @@ export default function VocabLearn() {
               }
             }}
             disabled={isGenerating}
-            className="py-3 px-4 rounded-2xl bg-nocturn-accent/15 hover:bg-nocturn-accent/25 text-nocturn-accent border border-nocturn-accent/30 transition-colors text-center cursor-pointer text-xs sm:text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            icon={isGenerating ? RefreshCw : Sparkles}
+            className={`justify-center ${isGenerating ? '[&_svg]:animate-spin' : ''}`}
           >
-            {isGenerating ? (
-              <RefreshCw className="w-4 h-4 animate-spin text-nocturn-accent" />
-            ) : (
-              <Sparkles className="w-4 h-4 text-nocturn-accent" />
-            )}
             <span>Learn More Words</span>
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => navigate('/vocab')}
-            className="py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors text-center cursor-pointer text-xs sm:text-sm"
+            className="justify-center"
           >
-            Back to Vocab Home
-          </button>
-          <button
-            type="button"
+            Back to Vocabulary
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => navigate('/vocab/review')}
-            className="py-3 px-4 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-colors text-center cursor-pointer text-xs sm:text-sm"
+            className="justify-center"
           >
             Start Review Queue
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -411,130 +412,125 @@ export default function VocabLearn() {
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigate('/vocab')}
-          className="inline-flex items-center gap-2 text-sm text-nocturn-muted hover:text-white transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-nocturn-muted hover:text-white transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back</span>
         </button>
 
         {/* Step Indicator */}
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-nocturn-card border border-nocturn-border text-xs font-bold text-white">
-          <Sparkles className="w-3.5 h-3.5 text-nocturn-accent" />
-          <span>
-            {safeIndex + 1} / {dailyWords.length}
-          </span>
-        </div>
+        <Badge variant="neutral" size="sm" icon={Sparkles}>
+          {safeIndex + 1} of {dailyWords.length}
+        </Badge>
       </div>
 
       {/* Progress Bar */}
-      <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden border border-nocturn-border/50">
-        <div
-          className="h-full bg-nocturn-accent transition-all duration-300 rounded-full"
-          style={{
-            width: `${((safeIndex + 1) / Math.max(1, dailyWords.length)) * 100}%`,
-          }}
-        />
-      </div>
+      <Progress
+        value={((safeIndex + 1) / Math.max(1, dailyWords.length)) * 100}
+      />
 
       {/* Flashcard Component with AnimatePresence */}
       <AnimatePresence mode="wait">
         <motion.div
           key={safeIndex}
-          initial={{ opacity: 0, x: 15 }}
+          initial={{ opacity: 0, x: 12 }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -15 }}
+          exit={{ opacity: 0, x: -12 }}
           transition={{ duration: 0.15, ease: 'easeOut' }}
-          className="bg-nocturn-card border border-nocturn-border rounded-3xl p-6 sm:p-10 shadow-[0_12px_40px_rgba(0,0,0,0.8)] space-y-6"
         >
-          {/* Top Word Badges */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {currentWord?.part_of_speech && (
-                <span className="px-3 py-1 rounded-full text-xs font-semibold text-nocturn-accent bg-nocturn-accent/15 border border-nocturn-accent/30">
-                  {currentWord.part_of_speech}
-                </span>
-              )}
-              {currentWord?.difficulty && (
-                <span className="px-3 py-1 rounded-full text-xs font-semibold text-amber-400 bg-amber-500/15 border border-amber-500/30">
-                  {currentWord.difficulty}
-                </span>
-              )}
+          <Card variant="elevated" className="p-6 sm:p-9 space-y-6">
+            {/* Top Word Badges */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {currentWord?.part_of_speech && (
+                  <Badge variant="accent" size="sm">
+                    {currentWord.part_of_speech}
+                  </Badge>
+                )}
+                {currentWord?.difficulty && (
+                  <Badge variant="warning" size="sm">
+                    {currentWord.difficulty}
+                  </Badge>
+                )}
+              </div>
+              <span className="text-[11px] font-mono text-nocturn-muted">GRE Level</span>
             </div>
-            <span className="text-xs text-nocturn-muted">GRE Level</span>
-          </div>
 
-          {/* Word Heading */}
-          <div>
-            <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
-              {currentWord?.word}
-            </h1>
-          </div>
+            {/* Word Heading */}
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
+                {currentWord?.word}
+              </h1>
+            </div>
 
-          {/* Definition */}
-          <div className="space-y-2 pt-2">
-            <h3 className="text-xs uppercase font-bold tracking-wider text-nocturn-muted">
-              Definition
-            </h3>
-            <p className="text-lg sm:text-xl text-nocturn-text leading-relaxed font-medium">
-              {currentWord?.definition}
-            </p>
-          </div>
-
-          {/* Example Sentence */}
-          {currentWord?.example_sentence && (
-            <div className="p-5 rounded-2xl bg-nocturn-accent/5 border-l-4 border-nocturn-accent space-y-1">
-              <h3 className="text-xs uppercase font-bold tracking-wider text-nocturn-accent">
-                Example Sentence
-              </h3>
-              <p className="text-base text-white/95 italic">
-                "{currentWord.example_sentence}"
+            {/* Definition */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-xs uppercase font-semibold tracking-wider text-nocturn-muted block">
+                Definition
+              </span>
+              <p className="text-base sm:text-lg text-white/90 leading-relaxed font-normal">
+                {currentWord?.definition}
               </p>
             </div>
-          )}
 
-          {/* Synonyms */}
-          {Array.isArray(currentWord?.synonyms) && currentWord.synonyms.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-xs uppercase font-bold tracking-wider text-nocturn-muted">
-                Synonyms
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {currentWord.synonyms.map((syn, idx) => (
-                  <span
-                    key={idx}
-                    className="px-3 py-1 rounded-xl text-xs text-nocturn-text bg-white/5 border border-nocturn-border/60"
-                  >
-                    {syn}
-                  </span>
-                ))}
+            {/* Example Sentence */}
+            {currentWord?.example_sentence && (
+              <div className="p-4 rounded-xl bg-white/[0.02] border-l-2 border-nocturn-accent space-y-1">
+                <span className="text-[11px] uppercase font-semibold tracking-wider text-nocturn-accent block">
+                  Example Sentence
+                </span>
+                <p className="text-sm text-white/90 italic">
+                  "{currentWord.example_sentence}"
+                </p>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Synonyms */}
+            {Array.isArray(currentWord?.synonyms) && currentWord.synonyms.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-xs uppercase font-semibold tracking-wider text-nocturn-muted block">
+                  Synonyms
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {currentWord.synonyms.map((syn, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2.5 py-1 rounded-lg text-xs text-nocturn-muted bg-white/[0.03] border border-white/[0.06]"
+                    >
+                      {syn}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
         </motion.div>
       </AnimatePresence>
 
       {/* Control Buttons */}
-      <div className="flex items-center justify-between gap-4 pt-2">
-        <button
+      <div className="flex items-center justify-between gap-4 pt-1">
+        <Button
+          variant="secondary"
+          size="md"
           onClick={handlePrev}
           disabled={safeIndex === 0}
-          className="py-3.5 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-semibold border border-nocturn-border transition-colors flex items-center gap-2 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+          icon={ChevronLeft}
         >
-          <ChevronLeft className="w-5 h-5" />
-          <span>Previous</span>
-        </button>
+          Previous
+        </Button>
 
-        <button
+        <Button
+          variant="primary"
+          size="md"
           onClick={handleNext}
-          className="py-3.5 px-8 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-all duration-200 flex items-center gap-2 cursor-pointer"
         >
           <span>
             {safeIndex === dailyWords.length - 1
               ? 'Complete Daily Set'
               : 'Next Word'}
           </span>
-          <ChevronRight className="w-5 h-5" />
-        </button>
+          <ChevronRight className="w-4 h-4 ml-1.5" />
+        </Button>
       </div>
     </div>
   )

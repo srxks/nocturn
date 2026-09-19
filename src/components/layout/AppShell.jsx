@@ -21,7 +21,7 @@ export default function AppShell() {
   })
 
   return (
-    <div className="h-screen min-h-[100dvh] lg:h-screen lg:overflow-hidden flex flex-col lg:flex-row bg-nocturn-bg text-nocturn-text antialiased selection:bg-nocturn-accent selection:text-black">
+    <div className="h-screen min-h-[100dvh] lg:h-screen lg:overflow-hidden flex flex-col lg:flex-row bg-nocturn-bg text-nocturn-text antialiased selection:bg-nocturn-accent/30 selection:text-white">
       {/* Desktop Sidebar Navigation */}
       <SidebarNav
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}

@@ -44,6 +44,7 @@ function AppRoutes() {
         <Route path="/vocab/list" element={<VocabList />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/stats" element={<Profile />} />
       </Route>
 
       {/* Catch-all route */}

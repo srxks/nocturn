@@ -16,12 +16,12 @@ export default function SessionDots({ currentSession, totalSessions = 4, isBreak
           <div
             key={sessionNumber}
             aria-label={`Session ${sessionNumber}${isCompleted ? ' completed' : isCurrent ? ' current' : ' upcoming'}`}
-            className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-300 ${
+            className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 ${
               isCompleted
-                ? 'bg-nocturn-accent text-black shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.4)]'
+                ? 'bg-nocturn-accent text-white shadow-sm'
                 : isCurrent
-                  ? 'bg-nocturn-surface border-2 border-nocturn-accent shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.5)] scale-110'
-                  : 'bg-nocturn-surface/50 border border-nocturn-border/80'
+                  ? 'bg-white/[0.04] border-2 border-nocturn-accent/80 scale-105'
+                  : 'bg-white/[0.03] border border-white/[0.08]'
             }`}
           >
             {isCompleted ? (

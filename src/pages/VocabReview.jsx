@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
 import { getReviewQueueWords, generateQuizOptions, getTodayDateKey } from '../services/vocabService'
+import { Card, Badge, Button, Progress } from '../components/ui'
 
 export default function VocabReview() {
   const navigate = useNavigate()
@@ -194,52 +195,54 @@ export default function VocabReview() {
     const accuracy = totalReviewed > 0 ? Math.round((score.correct / totalReviewed) * 100) : 0
 
     return (
-      <div className="max-w-xl mx-auto space-y-8 py-8">
-        <div className="text-center space-y-3">
-          <div className="w-16 h-16 rounded-3xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto shadow-[0_0_30px_rgba(251,191,36,0.3)]">
-            <Award className="w-8 h-8" />
+      <div className="max-w-xl mx-auto space-y-6 py-8">
+        <div className="text-center space-y-2">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-400 mx-auto">
+            <Award className="w-7 h-7" />
           </div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">
-            Review Complete!
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
+            Review Complete
           </h1>
-          <p className="text-nocturn-muted text-sm">
+          <p className="text-nocturn-muted text-xs sm:text-sm">
             Your review performance has been saved.
           </p>
         </div>
 
         {/* Score Summary Card */}
-        <div className="bg-nocturn-card border border-nocturn-border rounded-3xl p-6 sm:p-8 space-y-6 shadow-[0_12px_40px_rgba(0,0,0,0.8)]">
-          <div className="text-center pb-4 border-b border-nocturn-border/60">
-            <span className="text-4xl sm:text-5xl font-extrabold text-nocturn-accent">
+        <Card className="p-6 sm:p-8 space-y-6">
+          <div className="text-center pb-4 border-b border-white/[0.06]">
+            <span className="text-4xl sm:text-5xl font-bold font-mono text-nocturn-accent">
               {accuracy}%
             </span>
-            <p className="text-xs uppercase font-bold tracking-wider text-nocturn-muted mt-1">
+            <p className="text-xs uppercase font-medium tracking-wider text-nocturn-muted mt-1">
               Accuracy Score
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div className="p-4 rounded-2xl bg-white/[0.02] border border-nocturn-border/60">
-              <p className="text-2xl font-bold text-white">{totalReviewed}</p>
-              <p className="text-xs text-nocturn-muted mt-0.5">Reviewed</p>
+          <div className="grid grid-cols-3 gap-3.5 text-center">
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+              <p className="text-xl font-semibold font-mono text-white">{totalReviewed}</p>
+              <p className="text-[11px] text-nocturn-muted mt-0.5">Reviewed</p>
             </div>
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
-              <p className="text-2xl font-bold text-emerald-400">{score.correct}</p>
-              <p className="text-xs text-emerald-400/80 mt-0.5">Correct</p>
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+              <p className="text-xl font-semibold font-mono text-emerald-400">{score.correct}</p>
+              <p className="text-[11px] text-emerald-400/80 mt-0.5">Correct</p>
             </div>
-            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30">
-              <p className="text-2xl font-bold text-rose-400">{score.incorrect}</p>
-              <p className="text-xs text-rose-400/80 mt-0.5">Incorrect</p>
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+              <p className="text-xl font-semibold font-mono text-rose-400">{score.incorrect}</p>
+              <p className="text-[11px] text-rose-400/80 mt-0.5">Incorrect</p>
             </div>
           </div>
-        </div>
+        </Card>
 
-        <button
+        <Button
+          variant="primary"
+          size="lg"
           onClick={() => navigate('/vocab')}
-          className="w-full py-4 px-6 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_25px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-all duration-200 text-center"
+          className="w-full justify-center"
         >
-          Back to Vocab
-        </button>
+          Back to Vocabulary
+        </Button>
       </div>
     )
   }
@@ -251,74 +254,68 @@ export default function VocabReview() {
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigate('/vocab')}
-          className="inline-flex items-center gap-2 text-sm text-nocturn-muted hover:text-white transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-nocturn-muted hover:text-white transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-3.5 h-3.5" />
           <span>Exit Review</span>
         </button>
 
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-nocturn-card border border-nocturn-border text-xs font-bold text-white">
-          <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-          <span>
-            Question {currentIndex + 1} of {quizWords.length}
-          </span>
-        </div>
+        <Badge variant="neutral" size="sm" icon={HelpCircle}>
+          Question {currentIndex + 1} of {quizWords.length}
+        </Badge>
       </div>
 
       {/* Progress Bar */}
-      <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden border border-nocturn-border/50">
-        <div
-          className="h-full bg-amber-400 transition-all duration-300 rounded-full"
-          style={{
-            width: `${((currentIndex + 1) / quizWords.length) * 100}%`,
-          }}
-        />
-      </div>
+      <Progress
+        value={((currentIndex + 1) / quizWords.length) * 100}
+      />
 
       {/* Question Card */}
       <AnimatePresence mode="wait">
         <motion.div
           key={currentIndex}
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
+          exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.15, ease: 'easeOut' }}
-          className="space-y-6"
+          className="space-y-5"
         >
           {/* Target Word Display */}
-          <div className="bg-nocturn-card border border-nocturn-border rounded-3xl p-6 sm:p-8 text-center space-y-3 shadow-[0_12px_40px_rgba(0,0,0,0.8)]">
-            <span className="text-xs uppercase font-bold tracking-wider text-nocturn-muted">
+          <Card variant="elevated" className="p-6 sm:p-8 text-center space-y-2.5">
+            <span className="text-xs uppercase font-semibold tracking-wider text-nocturn-muted">
               Select the correct definition
             </span>
-            <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+            <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
               {currentWord.word}
             </h1>
             {currentWord.part_of_speech && (
-              <span className="inline-block px-3 py-0.5 rounded-full text-xs font-medium text-nocturn-muted bg-white/5 border border-nocturn-border">
-                {currentWord.part_of_speech}
-              </span>
+              <div>
+                <Badge variant="neutral" size="sm">
+                  {currentWord.part_of_speech}
+                </Badge>
+              </div>
             )}
-          </div>
+          </Card>
 
           {/* Answer Choices (4 Options) */}
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {options.map((option, idx) => {
               const isSelected = selectedOption === option
               const isCorrectAnswer = option.isCorrect
 
               let optionStyle =
-                'bg-nocturn-card border-nocturn-border text-nocturn-text hover:border-white/30 hover:bg-white/[0.03]'
+                'bg-nocturn-card border-white/[0.08] text-white/90 hover:border-white/20 hover:bg-white/[0.03]'
 
               if (isAnswered) {
                 if (isCorrectAnswer) {
                   optionStyle =
-                    'bg-emerald-500/20 border-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                    'bg-emerald-500/15 border-emerald-500/40 text-white'
                 } else if (isSelected && !isCorrectAnswer) {
                   optionStyle =
-                    'bg-rose-500/20 border-rose-500 text-rose-200'
+                    'bg-rose-500/15 border-rose-500/40 text-rose-200'
                 } else {
                   optionStyle =
-                    'bg-nocturn-card/50 border-nocturn-border/40 text-nocturn-muted opacity-50'
+                    'bg-nocturn-card/40 border-white/[0.04] text-nocturn-muted opacity-40'
                 }
               }
 
@@ -327,28 +324,28 @@ export default function VocabReview() {
                   key={idx}
                   onClick={() => handleSelectOption(option)}
                   disabled={isAnswered}
-                  className={`w-full p-4 sm:p-5 rounded-2xl border text-left font-medium transition-all duration-200 flex items-start gap-4 ${optionStyle}`}
+                  className={`w-full p-4 sm:p-4.5 rounded-xl border text-left font-medium transition-all duration-150 flex items-start gap-3.5 cursor-pointer disabled:cursor-default ${optionStyle}`}
                 >
                   <div
-                    className={`w-7 h-7 rounded-xl border flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
+                    className={`w-6 h-6 rounded-lg border flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5 ${
                       isAnswered && isCorrectAnswer
                         ? 'bg-emerald-500 text-black border-emerald-400'
                         : isAnswered && isSelected && !isCorrectAnswer
                         ? 'bg-rose-500 text-white border-rose-400'
-                        : 'border-nocturn-border text-nocturn-muted bg-white/5'
+                        : 'border-white/[0.1] text-nocturn-muted bg-white/[0.04]'
                     }`}
                   >
                     {isAnswered && isCorrectAnswer ? (
-                      <CheckCircle2 className="w-4 h-4" />
+                      <CheckCircle2 className="w-3.5 h-3.5" />
                     ) : isAnswered && isSelected && !isCorrectAnswer ? (
-                      <XCircle className="w-4 h-4" />
+                      <XCircle className="w-3.5 h-3.5" />
                     ) : (
                       String.fromCharCode(65 + idx)
                     )}
                   </div>
 
                   <div className="flex-1">
-                    <p className="text-sm sm:text-base leading-relaxed">
+                    <p className="text-xs sm:text-sm leading-relaxed">
                       {option.text}
                     </p>
                   </div>
@@ -362,35 +359,35 @@ export default function VocabReview() {
       {/* Answer Feedback Banner & Next Button */}
       {isAnswered && (
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4"
         >
           <div className="flex items-center gap-2">
             {selectedOption?.isCorrect ? (
-              <span className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-400">
-                <CheckCircle2 className="w-5 h-5" />
+              <Badge variant="success" size="md" dot icon={CheckCircle2}>
                 Correct! Mastery increased.
-              </span>
+              </Badge>
             ) : (
-              <span className="inline-flex items-center gap-1.5 text-sm font-bold text-rose-400">
-                <XCircle className="w-5 h-5" />
+              <Badge variant="danger" size="md" dot icon={XCircle}>
                 Incorrect. Review the correct answer above.
-              </span>
+              </Badge>
             )}
           </div>
 
-          <button
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleNextQuestion}
-            className="w-full sm:w-auto py-3.5 px-8 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto"
           >
             <span>
               {currentIndex < quizWords.length - 1
                 ? 'Next Question'
                 : 'Complete Review'}
             </span>
-            <ChevronRight className="w-5 h-5" />
-          </button>
+            <ChevronRight className="w-4 h-4 ml-1.5" />
+          </Button>
         </motion.div>
       )}
     </div>
