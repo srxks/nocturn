@@ -11,13 +11,14 @@ export default function TimerSettingsRow({
   onDecrease,
   onIncrease,
 }) {
-  const [prevValue, setPrevValue] = useState(value)
-  const [inputValue, setInputValue] = useState(String(value))
+  const safeValue = Number.isFinite(Number(value)) && Number(value) >= min ? Number(value) : min
+  const [prevValue, setPrevValue] = useState(safeValue)
+  const [inputValue, setInputValue] = useState(String(safeValue))
 
   // Render-phase sync when parent value prop changes (e.g. via +/- buttons)
-  if (value !== prevValue) {
-    setPrevValue(value)
-    setInputValue(String(value))
+  if (safeValue !== prevValue) {
+    setPrevValue(safeValue)
+    setInputValue(String(safeValue))
   }
 
   const handleInputChange = (e) => {
@@ -52,8 +53,8 @@ export default function TimerSettingsRow({
     }
   }
 
-  const isMin = value <= min
-  const isMax = max != null && value >= max
+  const isMin = safeValue <= min
+  const isMax = max != null && safeValue >= max
 
   return (
     <div className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-nocturn-card border border-nocturn-border hover:border-nocturn-accent/30 transition-all duration-200 shadow-md shadow-black/40">

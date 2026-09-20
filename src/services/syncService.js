@@ -255,7 +255,10 @@ export async function syncWithCloud(userId) {
     if (remoteTimer && localTimer) {
       const conflict = resolveConflict(localTimer, remoteTimer)
       if (conflict === 'local') {
-        await upsertTimerSettingsRemote(localTimer, userId)
+        const saved = await upsertTimerSettingsRemote(localTimer, userId)
+        if (saved?.updatedAt) {
+          await db.timerSettings.put({ ...localTimer, id: 'default', userId, updatedAt: saved.updatedAt })
+        }
         totalSynced++
       } else {
         await db.timerSettings.put({ id: 'default', userId, ...remoteTimer })
@@ -263,7 +266,10 @@ export async function syncWithCloud(userId) {
     } else if (remoteTimer) {
       await db.timerSettings.put({ id: 'default', userId, ...remoteTimer })
     } else if (localTimer) {
-      await upsertTimerSettingsRemote(localTimer, userId)
+      const saved = await upsertTimerSettingsRemote(localTimer, userId)
+      if (saved?.updatedAt) {
+        await db.timerSettings.put({ ...localTimer, id: 'default', userId, updatedAt: saved.updatedAt })
+      }
       totalSynced++
     } else {
       const defaultTimerSettings = {
@@ -274,8 +280,13 @@ export async function syncWithCloud(userId) {
         autoStartBreaks: false,
         autoStartPomo: false,
       }
-      await upsertTimerSettingsRemote(defaultTimerSettings, userId)
-      await db.timerSettings.put({ id: 'default', userId, ...defaultTimerSettings })
+      const saved = await upsertTimerSettingsRemote(defaultTimerSettings, userId)
+      await db.timerSettings.put({
+        id: 'default',
+        userId,
+        ...defaultTimerSettings,
+        updatedAt: saved?.updatedAt || new Date().toISOString(),
+      })
     }
   } catch (timerErr) {
     console.warn('[syncService] Timer settings sync notice:', timerErr.message)

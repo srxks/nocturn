@@ -22,25 +22,51 @@ export function getServerNowMs() {
   return Date.now() + _serverClockOffsetMs
 }
 
+export const DEFAULT_TIMER_SETTINGS = {
+  focusDuration: 25,
+  shortBreakDuration: 5,
+  longBreakDuration: 15,
+  sessions: 4,
+  autoStartBreaks: false,
+  autoStartPomo: false,
+  timerState: null,
+}
+
+export function sanitizeTimerSettings(raw) {
+  if (!raw) return { ...DEFAULT_TIMER_SETTINGS }
+  const focus = Number(raw.focusDuration)
+  const shortBreak = Number(raw.shortBreakDuration)
+  const longBreak = Number(raw.longBreakDuration)
+  const sessions = Number(raw.sessions)
+
+  return {
+    ...DEFAULT_TIMER_SETTINGS,
+    ...raw,
+    id: 'default',
+    focusDuration: Number.isFinite(focus) && focus > 0 ? focus : DEFAULT_TIMER_SETTINGS.focusDuration,
+    shortBreakDuration: Number.isFinite(shortBreak) && shortBreak > 0 ? shortBreak : DEFAULT_TIMER_SETTINGS.shortBreakDuration,
+    longBreakDuration: Number.isFinite(longBreak) && longBreak > 0 ? longBreak : DEFAULT_TIMER_SETTINGS.longBreakDuration,
+    sessions: Number.isFinite(sessions) && sessions > 0 ? sessions : DEFAULT_TIMER_SETTINGS.sessions,
+    autoStartBreaks: Boolean(raw.autoStartBreaks),
+    autoStartPomo: Boolean(raw.autoStartPomo),
+    timerState: raw.timerState || null,
+  }
+}
+
 export function mapRowToTimerSettings(data) {
   if (!data) return null
   const s = data.settings || {}
 
-  const focusDuration = Number(s.focusDuration)
-  const shortBreak = Number(s.shortBreakDuration)
-  const longBreak = Number(s.longBreakDuration)
-  const sessions = Number(s.sessions)
-
-  return {
-    focusDuration: Number.isFinite(focusDuration) && focusDuration > 0 ? focusDuration : 25,
-    shortBreakDuration: Number.isFinite(shortBreak) && shortBreak > 0 ? shortBreak : 5,
-    longBreakDuration: Number.isFinite(longBreak) && longBreak > 0 ? longBreak : 15,
-    sessions: Number.isFinite(sessions) && sessions > 0 ? sessions : 4,
-    autoStartBreaks: Boolean(data.auto_start_breaks ?? s.autoStartBreaks),
-    autoStartPomo: Boolean(s.autoStartPomo),
+  return sanitizeTimerSettings({
+    focusDuration: s.focusDuration,
+    shortBreakDuration: s.shortBreakDuration,
+    longBreakDuration: s.longBreakDuration,
+    sessions: s.sessions,
+    autoStartBreaks: data.auto_start_breaks ?? s.autoStartBreaks,
+    autoStartPomo: s.autoStartPomo,
     timerState: s.timerState || null,
     updatedAt: data.updated_at || data.created_at || null,
-  }
+  })
 }
 
 /**

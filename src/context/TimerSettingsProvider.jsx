@@ -3,18 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, ensureSeedData } from '../db/db'
 import { TimerSettingsContext } from './TimerSettingsContext'
 import { useAuth } from './useAuth'
-import { upsertTimerSettingsRemote } from '../lib/timer'
+import { fetchTimerSettingsRemote, upsertTimerSettingsRemote, DEFAULT_TIMER_SETTINGS as DEFAULT_SETTINGS, sanitizeTimerSettings } from '../lib/timer'
 import { isRealtimeWrite } from '../services/realtimeService'
-
-const DEFAULT_SETTINGS = {
-  focusDuration: 25,
-  shortBreakDuration: 5,
-  longBreakDuration: 15,
-  sessions: 4,
-  autoStartBreaks: false,
-  autoStartPomo: false,
-  timerState: null,
-}
 
 export function TimerSettingsProvider({ children }) {
   const { user } = useAuth()
@@ -23,13 +13,44 @@ export function TimerSettingsProvider({ children }) {
     ensureSeedData()
   }, [])
 
-  // NOTE: Timer settings are synchronized centrally via syncCoordinator
-  // and AuthProvider, and received via realtimeService. Dexie is the local reactive
-  // source of truth, watched below via useLiveQuery. No duplicate REST calls needed here.
+  // Proactive cloud hydration on user session start if local settings haven't synced yet
+  useEffect(() => {
+    if (!user?.id) return
+    let isMounted = true
+
+    async function hydrateRemoteTimerSettings() {
+      try {
+        const local = await db.timerSettings.get('default')
+        if (!local || !local.updatedAt) {
+          const remote = await fetchTimerSettingsRemote(user.id)
+          if (remote && isMounted) {
+            const sanitized = sanitizeTimerSettings(remote)
+            await db.timerSettings.put({
+              ...sanitized,
+              userId: user.id,
+              updatedAt: remote.updatedAt || new Date().toISOString(),
+            })
+          }
+        }
+      } catch (err) {
+        console.warn('[TimerSettingsProvider] Remote hydration notice:', err?.message || err)
+      }
+    }
+
+    hydrateRemoteTimerSettings()
+    return () => {
+      isMounted = false
+    }
+  }, [user?.id])
 
   const dbSettings = useLiveQuery(async () => {
-    const record = await db.timerSettings.get('default')
-    return record || DEFAULT_SETTINGS
+    try {
+      const record = await db.timerSettings.get('default')
+      return sanitizeTimerSettings(record)
+    } catch (err) {
+      console.warn('[TimerSettingsProvider] Error reading local timer settings:', err)
+      return DEFAULT_SETTINGS
+    }
   }, [])
 
   const settings = dbSettings || DEFAULT_SETTINGS
@@ -77,34 +98,44 @@ export function TimerSettingsProvider({ children }) {
       }
     }
 
-    const updated = {
+    const updated = sanitizeTimerSettings({
       ...settings,
       ...newConfig,
       timerState: newTimerState,
       id: 'default',
       updatedAt: now,
-    }
+    })
     await db.timerSettings.put(updated)
 
     if (user?.id && !isRealtimeWrite()) {
-      await upsertTimerSettingsRemote(updated, user.id)
+      try {
+        await upsertTimerSettingsRemote(updated, user.id)
+      } catch (err) {
+        console.warn('[TimerSettingsProvider] Remote upsert error:', err?.message || err)
+      }
     }
+    return updated
   }
 
   // Update live timer state (running, paused, expectedEndAt, etc.) without clobbering configuration
   const updateTimerState = async (timerState) => {
     const now = new Date().toISOString()
-    const updated = {
+    const updated = sanitizeTimerSettings({
       ...settings,
       timerState,
       id: 'default',
       updatedAt: now,
-    }
+    })
     await db.timerSettings.put(updated)
 
     if (user?.id && !isRealtimeWrite()) {
-      await upsertTimerSettingsRemote(updated, user.id)
+      try {
+        await upsertTimerSettingsRemote(updated, user.id)
+      } catch (err) {
+        console.warn('[TimerSettingsProvider] Remote timerState upsert error:', err?.message || err)
+      }
     }
+    return updated
   }
 
   return (

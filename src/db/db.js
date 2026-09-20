@@ -99,15 +99,44 @@ if (typeof window !== 'undefined') {
 
 export async function ensureSeedData() {
   try {
-    const settingsCount = await db.timerSettings.count()
-    if (settingsCount === 0) {
-      await db.timerSettings.add({
+    const existingSettings = await db.timerSettings.get('default')
+    if (!existingSettings) {
+      await db.timerSettings.put({
         id: 'default',
         focusDuration: 25,
         shortBreakDuration: 5,
         longBreakDuration: 15,
         sessions: 4,
+        autoStartBreaks: false,
+        autoStartPomo: false,
+        timerState: null,
+        updatedAt: new Date().toISOString(),
       })
+    } else {
+      const focus = Number(existingSettings.focusDuration)
+      const short = Number(existingSettings.shortBreakDuration)
+      const long = Number(existingSettings.longBreakDuration)
+      const sessions = Number(existingSettings.sessions)
+      const needsRepair =
+        !Number.isFinite(focus) || focus <= 0 ||
+        !Number.isFinite(short) || short <= 0 ||
+        !Number.isFinite(long) || long <= 0 ||
+        !Number.isFinite(sessions) || sessions <= 0 ||
+        existingSettings.autoStartBreaks === undefined ||
+        existingSettings.autoStartPomo === undefined
+
+      if (needsRepair) {
+        await db.timerSettings.put({
+          ...existingSettings,
+          id: 'default',
+          focusDuration: Number.isFinite(focus) && focus > 0 ? focus : 25,
+          shortBreakDuration: Number.isFinite(short) && short > 0 ? short : 5,
+          longBreakDuration: Number.isFinite(long) && long > 0 ? long : 15,
+          sessions: Number.isFinite(sessions) && sessions > 0 ? sessions : 4,
+          autoStartBreaks: Boolean(existingSettings.autoStartBreaks),
+          autoStartPomo: Boolean(existingSettings.autoStartPomo),
+        })
+      }
     }
 
     const themeSettingsCount = await db.themeSettings.count()
