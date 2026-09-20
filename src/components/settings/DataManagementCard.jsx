@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Download, Trash2, AlertTriangle, ShieldCheck, Database, X } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Download, Upload, Trash2, AlertTriangle, ShieldCheck, Database, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { db } from '../../db/db'
 import { useAuth } from '../../context/useAuth'
@@ -14,8 +14,10 @@ export default function DataManagementCard() {
   const isAngular = uiStyle === 'angular'
 
   const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
   const [isPurging, setIsPurging] = useState(false)
   const [showConfirmPurge, setShowConfirmPurge] = useState(false)
+  const fileInputRef = useRef(null)
 
   // 1. Export Data to JSON
   const handleExportData = async () => {
@@ -84,7 +86,75 @@ export default function DataManagementCard() {
     }
   }
 
-  // 2. Purge Local Cache & Re-sync from Supabase
+  // 2. Import Data from JSON
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsImporting(true)
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      const data = parsed.data || parsed
+
+      let tasksCount = 0
+      let listsCount = 0
+      let vocabCount = 0
+
+      if (Array.isArray(data.tasks)) {
+        for (const t of data.tasks) {
+          if (t && t.id) {
+            await db.tasks.put(t)
+            tasksCount++
+          }
+        }
+      }
+
+      if (Array.isArray(data.lists)) {
+        for (const l of data.lists) {
+          if (l && l.id) {
+            await db.lists.put(l)
+            listsCount++
+          }
+        }
+      }
+
+      if (Array.isArray(data.vocab)) {
+        for (const v of data.vocab) {
+          if (v && v.id) {
+            await db.vocab.put(v)
+            vocabCount++
+          }
+        }
+      }
+
+      if (Array.isArray(data.pomodoroSessions)) {
+        for (const s of data.pomodoroSessions) {
+          if (s && s.id) {
+            await db.pomodoroSessions.put(s)
+          }
+        }
+      }
+
+      addToast(
+        `Successfully restored ${tasksCount} tasks, ${listsCount} lists, and ${vocabCount} words`,
+        'success',
+        4000
+      )
+    } catch (err) {
+      console.error('[DataManagementCard] Import error:', err)
+      addToast(
+        'Failed to import backup. Please ensure the file is a valid Nocturn JSON backup.',
+        'error',
+        4500
+      )
+    } finally {
+      setIsImporting(false)
+      if (e.target) e.target.value = ''
+    }
+  }
+
+  // 3. Purge Local Cache & Re-sync from Supabase
   const handlePurgeAndResync = async () => {
     if (isPurging) return
     setIsPurging(true)
@@ -153,6 +223,41 @@ export default function DataManagementCard() {
           >
             <Download className="w-3.5 h-3.5 text-nocturn-accent" />
             <span>{isExporting ? 'Exporting...' : 'Export Backup'}</span>
+          </button>
+        </div>
+
+        {/* Import JSON Option */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-nocturn-border/50">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-nocturn-surface border border-nocturn-border flex items-center justify-center text-nocturn-accent shrink-0">
+              <Upload className="w-5 h-5 stroke-[2]" />
+            </div>
+            <div>
+              <span className="text-sm sm:text-base font-bold text-white block">
+                Restore from Backup (JSON)
+              </span>
+              <span className="text-xs text-nocturn-muted block mt-0.5">
+                Import and restore tasks, lists, and vocabulary from a previously exported Nocturn JSON file.
+              </span>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-nocturn-border transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95 shrink-0"
+          >
+            <Upload className="w-3.5 h-3.5 text-nocturn-accent" />
+            <span>{isImporting ? 'Restoring...' : 'Import Backup'}</span>
           </button>
         </div>
 
