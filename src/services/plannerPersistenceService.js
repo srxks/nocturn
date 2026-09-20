@@ -60,3 +60,92 @@ export async function getPlanSchedule(dateKey = null) {
     return null
   }
 }
+
+export async function markPlanBlockCompleted(blockId, dateKey = null) {
+  try {
+    const key = dateKey || formatDateKey(new Date())
+    const schedule = await getPlanSchedule(key)
+    if (!schedule || !Array.isArray(schedule.blocks)) return null
+
+    let found = false
+    const updatedBlocks = schedule.blocks.map((b) => {
+      if (b.id === blockId || (b.taskId && b.taskId === blockId)) {
+        found = true
+        return { ...b, completed: true, completedAt: new Date().toISOString() }
+      }
+      return b
+    })
+
+    if (!found) return null
+
+    schedule.blocks = updatedBlocks
+    schedule.updatedAt = new Date().toISOString()
+    await db.planSchedules.put(schedule)
+    return schedule
+  } catch (err) {
+    console.error('plannerPersistenceService.markPlanBlockCompleted failed:', err)
+    return null
+  }
+}
+
+export async function updatePlanBlock(blockId, updates, dateKey = null) {
+  try {
+    const key = dateKey || formatDateKey(new Date())
+    const schedule = await getPlanSchedule(key)
+    if (!schedule || !Array.isArray(schedule.blocks)) return null
+
+    const updatedBlocks = schedule.blocks.map((b) => {
+      if (b.id === blockId) {
+        return { ...b, ...updates }
+      }
+      return b
+    })
+
+    schedule.blocks = updatedBlocks
+    schedule.updatedAt = new Date().toISOString()
+    await db.planSchedules.put(schedule)
+    return schedule
+  } catch (err) {
+    console.error('plannerPersistenceService.updatePlanBlock failed:', err)
+    return null
+  }
+}
+
+export async function deletePlanBlock(blockId, dateKey = null) {
+  try {
+    const key = dateKey || formatDateKey(new Date())
+    const schedule = await getPlanSchedule(key)
+    if (!schedule || !Array.isArray(schedule.blocks)) return null
+
+    schedule.blocks = schedule.blocks.filter((b) => b.id !== blockId)
+    schedule.updatedAt = new Date().toISOString()
+    await db.planSchedules.put(schedule)
+    return schedule
+  } catch (err) {
+    console.error('plannerPersistenceService.deletePlanBlock failed:', err)
+    return null
+  }
+}
+
+export async function addPlanBlock(newBlock, dateKey = null) {
+  try {
+    const key = dateKey || formatDateKey(new Date())
+    let schedule = await getPlanSchedule(key)
+    if (!schedule) {
+      schedule = {
+        id: `schedule-${key}`,
+        date: key,
+        blocks: [],
+        updatedAt: new Date().toISOString(),
+      }
+    }
+
+    schedule.blocks = [...(schedule.blocks || []), newBlock]
+    schedule.updatedAt = new Date().toISOString()
+    await db.planSchedules.put(schedule)
+    return schedule
+  } catch (err) {
+    console.error('plannerPersistenceService.addPlanBlock failed:', err)
+    return null
+  }
+}

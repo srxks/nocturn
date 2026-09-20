@@ -15,12 +15,16 @@ import {
   Check,
   Sliders,
   Square,
+  Edit3,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react'
 import { useTasks } from '../context/useTasks'
 import { useTimerSession } from '../context/useTimerSession'
 import { generateDailyPlan } from '../services/geminiPlannerService'
 import { savePlanSchedule, getPlanSchedule } from '../services/plannerPersistenceService'
 import { formatDateKey } from '../services/calendarService'
+import { Modal } from '../components/ui/Modal'
 
 const EXAMPLE_PROMPTS = [
   "I have class from 9 to 2, gym at 6, need to study DSA, finish my project, revise vocabulary and complete today's assignments.",
@@ -30,8 +34,8 @@ const EXAMPLE_PROMPTS = [
 
 export default function PlanMyDay() {
   const navigate = useNavigate()
-  const { tasks, addTask, toggleTask } = useTasks()
-  const { startPlanSession, isRunning, taskName, terminateTimer } = useTimerSession()
+  const { tasks, addTask, toggleTask, deleteTask } = useTasks()
+  const { startPlanSession, isRunning, taskName, terminateTimer, justCompletedBlockId } = useTimerSession()
 
   const [prompt, setPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -45,6 +49,20 @@ export default function PlanMyDay() {
   const [customBreakDuration, setCustomBreakDuration] = useState(10)
   const [customLongBreakDuration, setCustomLongBreakDuration] = useState(20)
   const [customSessions, setCustomSessions] = useState(4)
+
+  // Plan overwrite confirmation modal
+  const [showReplaceModal, setShowReplaceModal] = useState(false)
+
+  // Block editing modal
+  const [editingBlock, setEditingBlock] = useState(null)
+
+  // Add block modal
+  const [isAddBlockOpen, setIsAddBlockOpen] = useState(false)
+  const [newBlockTitle, setNewBlockTitle] = useState('')
+  const [newBlockType, setNewBlockType] = useState('focus')
+  const [newBlockStartTime, setNewBlockStartTime] = useState('10:00')
+  const [newBlockEndTime, setNewBlockEndTime] = useState('10:45')
+  const [newBlockDuration, setNewBlockDuration] = useState(45)
 
   const todayKey = useMemo(() => formatDateKey(new Date()), [])
   const dateString = useMemo(() => {
@@ -95,8 +113,61 @@ export default function PlanMyDay() {
     return (tasks || []).filter((t) => !t.completed)
   }, [tasks])
 
-  // Generate Plan Handler
-  const handleGeneratePlan = async () => {
+  // Identify next upcoming incomplete focus block
+  const nextFocusBlock = useMemo(() => {
+    if (!plan?.blocks) return null
+    return plan.blocks.find((b) => {
+      if (b.type !== 'focus' && b.blockType !== 'focus') return false
+      if (b.completed) return false
+      if (b.taskId) {
+        const matchingTask = tasks.find((t) => t.id === b.taskId)
+        if (matchingTask?.completed) return false
+      }
+      return true
+    })
+  }, [plan, tasks])
+
+  // Initiate Plan Generation: asks confirmation if replacing an active unfinished plan
+  const handleInitiateGeneratePlan = () => {
+    if (!prompt.trim()) return
+    const hasUnfinishedBlocks =
+      plan &&
+      Array.isArray(plan.blocks) &&
+      plan.blocks.length > 0 &&
+      plan.blocks.some((b) => !b.completed)
+
+    if (hasUnfinishedBlocks) {
+      setShowReplaceModal(true)
+    } else {
+      executePlanGeneration([])
+    }
+  }
+
+  // Confirmed Plan Replacement
+  const handleConfirmReplacePlan = async () => {
+    setShowReplaceModal(false)
+
+    // 1. Keep completed focus blocks
+    const completedBlocks = (plan?.blocks || []).filter((b) => b.completed)
+
+    // 2. Remove unfinished plan-generated tasks ONLY (never delete user-created tasks)
+    const tasksToRemove = (tasks || []).filter(
+      (t) => t.source === 'plan_generated' && !t.completed
+    )
+    for (const t of tasksToRemove) {
+      try {
+        await deleteTask(t.id, false)
+      } catch (err) {
+        console.warn('Could not delete old plan-generated task:', t.id, err)
+      }
+    }
+
+    // 3. Generate new plan
+    await executePlanGeneration(completedBlocks)
+  }
+
+  // Core generation execution
+  const executePlanGeneration = async (completedBlocksToKeep = []) => {
     setErrorMsg(null)
     setIsGenerating(true)
     setFeedbackMsg(null)
@@ -112,7 +183,14 @@ export default function PlanMyDay() {
         throw new Error('Could not generate schedule. Please try a different prompt.')
       }
 
-      setPlan(generated)
+      // Merge historical completed blocks if any
+      const mergedBlocks = [...completedBlocksToKeep, ...generated.blocks]
+      const finalPlan = {
+        ...generated,
+        blocks: mergedBlocks,
+      }
+
+      setPlan(finalPlan)
       if (generated.recommendedTimer) {
         if (generated.recommendedTimer.focusDuration) setCustomFocusDuration(Number(generated.recommendedTimer.focusDuration) || 50)
         if (generated.recommendedTimer.shortBreakDuration) setCustomBreakDuration(Number(generated.recommendedTimer.shortBreakDuration) || 10)
@@ -120,13 +198,40 @@ export default function PlanMyDay() {
         if (generated.recommendedTimer.sessions) setCustomSessions(Number(generated.recommendedTimer.sessions) || 4)
       }
 
+      // Automatically create real tasks with source: 'plan_generated'
+      const newAppliedTitles = new Set(appliedTaskTitles)
+      const updatedBlocks = [...finalPlan.blocks]
+
+      for (const item of finalPlan.suggestedNewTasks || []) {
+        if (!newAppliedTitles.has(item.title)) {
+          try {
+            const created = await addTask(item.title, 'tasks', todayKey, item.priority || 'medium', false, true, 'plan_generated')
+            newAppliedTitles.add(item.title)
+            if (created?.id) {
+              for (const b of updatedBlocks) {
+                if (!b.taskId && b.title.toLowerCase() === item.title.toLowerCase()) {
+                  b.taskId = created.id
+                  b.task_id = created.id
+                  b.isExisting = true
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('[PlanMyDay] auto-add suggested task notice:', err)
+          }
+        }
+      }
+
+      setAppliedTaskTitles(newAppliedTitles)
+      finalPlan.blocks = updatedBlocks
+
       // Persist to Dexie
       await savePlanSchedule({
-        summary: generated.summary,
-        recommendedTimer: generated.recommendedTimer,
-        blocks: generated.blocks,
-        suggestedNewTasks: generated.suggestedNewTasks,
-        appliedTaskTitles: Array.from(appliedTaskTitles),
+        summary: finalPlan.summary,
+        recommendedTimer: finalPlan.recommendedTimer,
+        blocks: finalPlan.blocks,
+        suggestedNewTasks: finalPlan.suggestedNewTasks,
+        appliedTaskTitles: Array.from(newAppliedTitles),
         userInstruction: prompt,
       })
     } catch (err) {
@@ -134,6 +239,63 @@ export default function PlanMyDay() {
     } finally {
       setIsGenerating(false)
     }
+  }
+
+  // Block Editing Handlers
+  const handleSaveBlockEdit = async () => {
+    if (!editingBlock || !editingBlock.id) return
+    const updatedBlocks = (plan?.blocks || []).map((b) =>
+      b.id === editingBlock.id ? { ...b, ...editingBlock } : b
+    )
+    const updatedPlan = { ...plan, blocks: updatedBlocks }
+    setPlan(updatedPlan)
+    setEditingBlock(null)
+    await savePlanSchedule(updatedPlan).catch(console.error)
+  }
+
+  const handleDeleteBlock = async (blockId) => {
+    const updatedBlocks = (plan?.blocks || []).filter((b) => b.id !== blockId)
+    const updatedPlan = { ...plan, blocks: updatedBlocks }
+    setPlan(updatedPlan)
+    setEditingBlock(null)
+    await savePlanSchedule(updatedPlan).catch(console.error)
+  }
+
+  const handleAddNewBlock = async () => {
+    if (!newBlockTitle.trim()) return
+    const newBlock = {
+      id: 'block-' + Date.now(),
+      taskId: null,
+      task_id: null,
+      taskTitle: newBlockTitle.trim(),
+      title: newBlockTitle.trim(),
+      startTime: newBlockStartTime || '10:00',
+      endTime: newBlockEndTime || '10:45',
+      durationMinutes: Number(newBlockDuration) || 45,
+      duration: Number(newBlockDuration) || 45,
+      type: newBlockType || 'focus',
+      blockType: newBlockType || 'focus',
+      focusDuration: Number(newBlockDuration) || 45,
+      breakDuration: 10,
+      sessionNumber: null,
+      completed: false,
+      sourcePlanId: plan?.id || 'plan-' + Date.now(),
+      isExisting: false,
+      priority: 'medium',
+      notes: '',
+    }
+
+    const updatedBlocks = [...(plan?.blocks || []), newBlock].sort((a, b) => {
+      const [ha, ma] = (a.startTime || '00:00').split(':').map(Number)
+      const [hb, mb] = (b.startTime || '00:00').split(':').map(Number)
+      return (ha * 60 + ma) - (hb * 60 + mb)
+    })
+
+    const updatedPlan = { ...plan, blocks: updatedBlocks }
+    setPlan(updatedPlan)
+    setIsAddBlockOpen(false)
+    setNewBlockTitle('')
+    await savePlanSchedule(updatedPlan).catch(console.error)
   }
 
   // Apply Timer Settings and Launch Focus or Break Session
@@ -162,6 +324,9 @@ export default function PlanMyDay() {
           totalSessions: totalFocusCycles,
           taskName: block.title || 'Break Session',
           taskId: null,
+          planBlockId: block.id || null,
+          planId: plan?.id || null,
+          blockTimeRange: (block.startTime && block.endTime) ? `${block.startTime} — ${block.endTime}` : null,
           mode: breakMode,
         })
       } else {
@@ -205,6 +370,9 @@ export default function PlanMyDay() {
           totalSessions: totalFocusCycles,
           taskName: targetTitle,
           taskId: targetTaskId,
+          planBlockId: targetBlock?.id || null,
+          planId: plan?.id || null,
+          blockTimeRange: (targetBlock?.startTime && targetBlock?.endTime) ? `${targetBlock.startTime} — ${targetBlock.endTime}` : null,
           mode: 'focus',
         })
       }
@@ -371,7 +539,7 @@ export default function PlanMyDay() {
           <button
             type="button"
             disabled={isGenerating || !prompt.trim()}
-            onClick={handleGeneratePlan}
+            onClick={handleInitiateGeneratePlan}
             className="ml-auto py-2.5 px-5 rounded-xl bg-nocturn-accent text-white font-medium text-sm hover:bg-nocturn-accent-bright transition-all duration-150 flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm active:scale-95"
           >
             {isGenerating ? (
@@ -561,9 +729,26 @@ export default function PlanMyDay() {
                 <Clock className="w-4 h-4 text-nocturn-accent" />
                 <span>Timeline Timetable</span>
               </h2>
-              <span className="text-xs text-nocturn-muted">
-                {plan.blocks.length} time blocks
-              </span>
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs text-nocturn-muted">
+                  {plan.blocks.length} block{plan.blocks.length !== 1 ? 's' : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewBlockTitle('')
+                    setNewBlockType('focus')
+                    setNewBlockStartTime('10:00')
+                    setNewBlockEndTime('10:45')
+                    setNewBlockDuration(45)
+                    setIsAddBlockOpen(true)
+                  }}
+                  className="px-2.5 py-1 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/[0.08] text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-nocturn-accent" />
+                  <span>Add Block</span>
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -583,6 +768,24 @@ export default function PlanMyDay() {
                 // Task completion state if existing
                 const existingTaskObj = isExisting && block.taskId ? tasks.find((t) => t.id === block.taskId) : null
                 const isCompleted = existingTaskObj ? Boolean(existingTaskObj.completed) : false
+                const isCompletedBlock = Boolean(block.completed || isCompleted || (justCompletedBlockId && block.id === justCompletedBlockId))
+
+                // Overdue status check
+                const now = new Date()
+                const currentMinutes = now.getHours() * 60 + now.getMinutes()
+                let isOverdue = false
+                if (block.endTime && !isCompletedBlock) {
+                  const [eh, em] = block.endTime.split(':').map(Number)
+                  if (!isNaN(eh) && !isNaN(em)) {
+                    const endMinutes = eh * 60 + em
+                    if (currentMinutes > endMinutes) {
+                      isOverdue = true
+                    }
+                  }
+                }
+
+                // Next up check
+                const isNextUp = Boolean(nextFocusBlock && block.id === nextFocusBlock.id && !isBlockActive && !isCompletedBlock)
 
                 return (
                   <div
@@ -593,8 +796,14 @@ export default function PlanMyDay() {
                       }
                     }}
                     className={`p-4 sm:p-5 rounded-2xl border transition-all duration-150 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer ${
-                      isBlockActive
-                        ? 'bg-rose-950/20 border-rose-500/40'
+                      isCompletedBlock
+                        ? 'bg-nocturn-card/50 border-nocturn-border/40 opacity-75'
+                        : isBlockActive
+                        ? 'bg-rose-950/25 border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.15)] ring-1 ring-rose-500/30'
+                        : isOverdue
+                        ? 'bg-red-950/15 border-red-500/40 shadow-sm'
+                        : isNextUp
+                        ? 'bg-nocturn-card border-indigo-500/40 shadow-sm'
                         : isFocus
                         ? 'bg-nocturn-card border-nocturn-border hover:border-nocturn-accent/40 shadow-sm'
                         : isBreak
@@ -611,18 +820,20 @@ export default function PlanMyDay() {
                             type="button"
                             onClick={() => toggleTask(block.taskId)}
                             className={`w-5 h-5 mt-0.5 sm:mt-0 rounded-lg border flex items-center justify-center transition-colors shrink-0 ${
-                              isCompleted
+                              isCompletedBlock
                                 ? 'bg-nocturn-accent border-nocturn-accent text-white'
                                 : 'border-nocturn-border hover:border-nocturn-accent/60'
                             }`}
                           >
-                            {isCompleted && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            {isCompletedBlock && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                           </button>
                         </div>
                       ) : (
                         <div
                           className={`w-5 h-5 mt-0.5 sm:mt-0 rounded-lg flex items-center justify-center shrink-0 ${
-                            isBlockActive
+                            isCompletedBlock
+                              ? 'text-emerald-400'
+                              : isBlockActive
                               ? 'text-rose-400'
                               : isFocus
                               ? 'text-nocturn-accent-bright'
@@ -631,7 +842,15 @@ export default function PlanMyDay() {
                               : 'text-nocturn-muted'
                           }`}
                         >
-                          {isBreak ? <Coffee className="w-4 h-4" /> : isFocus ? <Zap className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                          {isCompletedBlock ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          ) : isBreak ? (
+                            <Coffee className="w-4 h-4" />
+                          ) : isFocus ? (
+                            <Zap className="w-4 h-4" />
+                          ) : (
+                            <Clock className="w-4 h-4" />
+                          )}
                         </div>
                       )}
 
@@ -639,18 +858,34 @@ export default function PlanMyDay() {
                         <div className="flex flex-wrap items-center gap-2">
                           <h3
                             className={`text-sm sm:text-base font-semibold truncate ${
-                              isCompleted ? 'line-through text-nocturn-dim' : 'text-white'
+                              isCompletedBlock ? 'line-through text-nocturn-dim' : 'text-white'
                             }`}
                           >
                             {block.title}
                           </h3>
 
-                          {/* Block Type Badge & Active Badge */}
+                          {/* Block Status Badges */}
+                          {isCompletedBlock && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                              Completed
+                            </span>
+                          )}
                           {isBlockActive && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
                               Active Now
                             </span>
                           )}
+                          {isOverdue && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/20 text-red-300 border border-red-500/40">
+                              Overdue
+                            </span>
+                          )}
+                          {isNextUp && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                              Next Up
+                            </span>
+                          )}
+
                           {isFocus && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-nocturn-accent/15 text-nocturn-accent-bright border border-nocturn-accent/30">
                               Focus
@@ -687,8 +922,8 @@ export default function PlanMyDay() {
                     </div>
 
                     {/* Right Details: Time Range + Action Buttons */}
-                    <div className="flex items-center gap-3 self-end sm:self-auto shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <div className="text-right">
+                    <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <div className="text-right mr-1">
                         <span className="text-xs font-semibold font-mono text-white block">
                           {block.startTime} – {block.endTime}
                         </span>
@@ -696,6 +931,26 @@ export default function PlanMyDay() {
                           {block.durationMinutes} min
                         </span>
                       </div>
+
+                      {/* Edit Block Button */}
+                      <button
+                        type="button"
+                        onClick={() => setEditingBlock({ ...block })}
+                        title="Edit Block"
+                        className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-nocturn-muted hover:text-white border border-white/[0.06] transition-colors cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Delete Block Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteBlock(block.id)}
+                        title="Delete Block"
+                        className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-rose-500/15 text-nocturn-muted hover:text-rose-300 border border-white/[0.06] hover:border-rose-500/30 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
 
                       {isBlockActive ? (
                         <button
@@ -708,7 +963,7 @@ export default function PlanMyDay() {
                         </button>
                       ) : (
                         <>
-                          {isFocus && (
+                          {isFocus && !isCompletedBlock && (
                             <button
                               type="button"
                               onClick={() => handleApplyTimerAndFocus(block)}
@@ -719,7 +974,7 @@ export default function PlanMyDay() {
                             </button>
                           )}
 
-                          {isBreak && (
+                          {isBreak && !isCompletedBlock && (
                             <button
                               type="button"
                               onClick={() => handleApplyTimerAndFocus(block)}
@@ -750,6 +1005,218 @@ export default function PlanMyDay() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Overwriting Active Plan */}
+      <Modal
+        isOpen={showReplaceModal}
+        onClose={() => setShowReplaceModal(false)}
+        title="Replace Today's Plan?"
+        description="You have unfinished focus blocks in your current schedule."
+      >
+        <div className="space-y-4">
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs sm:text-sm flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Keeping Completed Tasks & Sessions</p>
+              <p className="text-xs text-amber-300/80 mt-1">
+                Generating a new plan will replace remaining unfinished schedule blocks. Any tasks you've already completed or user-created tasks will not be deleted.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowReplaceModal(false)}
+              className="px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white text-xs font-medium transition-colors cursor-pointer"
+            >
+              Keep Current Plan
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmReplacePlan}
+              className="px-4 py-2 rounded-xl bg-nocturn-accent hover:bg-nocturn-accent-bright text-white text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95"
+            >
+              Replace Plan
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Block Modal */}
+      <Modal
+        isOpen={Boolean(editingBlock)}
+        onClose={() => setEditingBlock(null)}
+        title="Edit Time Block"
+        description="Update block details in your timetable."
+      >
+        {editingBlock && (
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-nocturn-muted block mb-1">Title</label>
+              <input
+                type="text"
+                value={editingBlock.title || ''}
+                onChange={(e) => setEditingBlock({ ...editingBlock, title: e.target.value })}
+                className="nocturn-input text-xs sm:text-sm w-full py-2 px-3"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-nocturn-muted block mb-1">Start Time</label>
+                <input
+                  type="time"
+                  value={editingBlock.startTime || '10:00'}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, startTime: e.target.value })}
+                  className="nocturn-input text-xs sm:text-sm w-full py-2 px-3 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-nocturn-muted block mb-1">End Time</label>
+                <input
+                  type="time"
+                  value={editingBlock.endTime || '10:45'}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, endTime: e.target.value })}
+                  className="nocturn-input text-xs sm:text-sm w-full py-2 px-3 font-mono"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-nocturn-muted block mb-1">Duration (minutes)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="360"
+                  value={editingBlock.durationMinutes || 45}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, durationMinutes: Number(e.target.value) || 1 })}
+                  className="nocturn-input text-xs sm:text-sm w-full py-2 px-3 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-nocturn-muted block mb-1">Type</label>
+                <select
+                  value={editingBlock.type || 'focus'}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, type: e.target.value, blockType: e.target.value })}
+                  className="nocturn-input text-xs sm:text-sm w-full py-2 px-3 bg-nocturn-surface"
+                >
+                  <option value="focus">Focus</option>
+                  <option value="break">Break</option>
+                  <option value="event">Event</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-nocturn-muted block mb-1">Notes (optional)</label>
+              <input
+                type="text"
+                value={editingBlock.notes || ''}
+                onChange={(e) => setEditingBlock({ ...editingBlock, notes: e.target.value })}
+                className="nocturn-input text-xs sm:text-sm w-full py-2 px-3"
+                placeholder="Additional context or goals"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingBlock(null)}
+                className="px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white text-xs font-medium transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveBlockEdit(editingBlock)}
+                className="px-4 py-2 rounded-xl bg-nocturn-accent hover:bg-nocturn-accent-bright text-white text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Add Block Modal */}
+      <Modal
+        isOpen={isAddBlockOpen}
+        onClose={() => setIsAddBlockOpen(false)}
+        title="Add Time Block"
+        description="Create a manual block in today's timetable."
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-medium text-nocturn-muted block mb-1">Title</label>
+            <input
+              type="text"
+              value={newBlockTitle}
+              onChange={(e) => setNewBlockTitle(e.target.value)}
+              placeholder="e.g. Code Review or Gym Workout"
+              className="nocturn-input text-xs sm:text-sm w-full py-2 px-3"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-nocturn-muted block mb-1">Start Time</label>
+              <input
+                type="time"
+                value={newBlockStartTime}
+                onChange={(e) => setNewBlockStartTime(e.target.value)}
+                className="nocturn-input text-xs sm:text-sm w-full py-2 px-3 font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-nocturn-muted block mb-1">End Time</label>
+              <input
+                type="time"
+                value={newBlockEndTime}
+                onChange={(e) => setNewBlockEndTime(e.target.value)}
+                className="nocturn-input text-xs sm:text-sm w-full py-2 px-3 font-mono"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-nocturn-muted block mb-1">Duration (minutes)</label>
+              <input
+                type="number"
+                min="1"
+                max="360"
+                value={newBlockDuration}
+                onChange={(e) => setNewBlockDuration(Math.max(1, Number(e.target.value) || 1))}
+                className="nocturn-input text-xs sm:text-sm w-full py-2 px-3 font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-nocturn-muted block mb-1">Type</label>
+              <select
+                value={newBlockType}
+                onChange={(e) => setNewBlockType(e.target.value)}
+                className="nocturn-input text-xs sm:text-sm w-full py-2 px-3 bg-nocturn-surface"
+              >
+                <option value="focus">Focus</option>
+                <option value="break">Break</option>
+                <option value="event">Event</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsAddBlockOpen(false)}
+              className="px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white text-xs font-medium transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!newBlockTitle.trim()}
+              onClick={handleAddNewBlock}
+              className="px-4 py-2 rounded-xl bg-nocturn-accent hover:bg-nocturn-accent-bright text-white text-xs font-semibold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm active:scale-95"
+            >
+              Add Block
+            </button>
+          </div>
+        </div>
+      </Modal>
     </motion.div>
   )
 }

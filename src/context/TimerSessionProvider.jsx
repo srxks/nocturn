@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTimerSettings } from './useTimerSettings'
 import { TimerSessionContext } from './TimerSessionContext'
+import { useToast } from './useToast'
 import {
   getActiveSession,
   recordActiveSession,
@@ -8,8 +10,15 @@ import {
   recordPomodoroSession,
 } from '../services/timerService'
 import { getServerNowMs } from '../lib/timer'
+import { db } from '../db/db'
+import { markPlanBlockCompleted } from '../services/plannerPersistenceService'
+import { notifyTimerFiveMinuteWarning, notifyTimerEnded } from '../services/notificationService'
+import { mapTaskToRow } from '../lib/tasks'
+import { enqueueMutation } from '../services/syncQueue'
 
 export function TimerSessionProvider({ children }) {
+  const navigate = useNavigate()
+  const { addToast } = useToast()
   const { settings, updateTimerState, updateSettings } = useTimerSettings()
 
   const [mode, setMode] = useState('focus') // 'focus' | 'shortBreak' | 'longBreak'
@@ -17,6 +26,18 @@ export function TimerSessionProvider({ children }) {
   const [isPaused, setIsPaused] = useState(false)
   const [currentSession, setCurrentSession] = useState(1)
   const [taskName, setTaskName] = useState('')
+
+  // Track if 5-minute warning was already notified for current session
+  const hasWarned5mRef = useRef(false)
+
+  // Plan My Day block highlight after completion
+  const [justCompletedBlockId, setJustCompletedBlockId] = useState(() => {
+    try {
+      return sessionStorage.getItem('nocturn_just_completed_block') || null
+    } catch {
+      return null
+    }
+  })
 
   // Canonical timing anchor: virtual start timestamp in ms where elapsed = 0
   const [canonicalStartTime, setCanonicalStartTime] = useState(null)
@@ -338,6 +359,7 @@ export function TimerSessionProvider({ children }) {
 
       setIsRunning(false)
       setIsPaused(false)
+      setCanonicalStartTime(null)
 
       const actionId = crypto.randomUUID()
       lastActionIdRef.current = actionId
@@ -347,6 +369,7 @@ export function TimerSessionProvider({ children }) {
       const currentSess = currentSession
       const currentTask = taskName
       const currentTaskId = activeSessionRef.current?.taskId || null
+      const currentPlanBlockId = activeSessionRef.current?.planBlockId || null
       const totalCycles = Number(settings?.sessions) || 4
 
       if (currentMode === 'focus') {
@@ -356,99 +379,138 @@ export function TimerSessionProvider({ children }) {
           new Date(getServerNowMs() - currentTotal * 1000).toISOString()
         const sessionId = `focus-${sessionStartedAt}`
 
-        // Record completed focus session with deterministic ID (deduplicated across instances)
+        // 1. Record completed focus session in Dexie with completed: true & actual duration
         await recordPomodoroSession({
           taskId: currentTaskId,
           duration: focusMins,
+          durationSeconds: currentTotal,
           sessionType: 'focus',
           startedAt: sessionStartedAt,
           taskTitle: currentTask,
           sessionId,
+          completed: true,
         })
 
+        // 2. Automatically mark associated Task completed in Dexie and queue Supabase sync
+        if (currentTaskId) {
+          try {
+            const taskObj = await db.tasks.get(currentTaskId)
+            if (taskObj && !taskObj.completed) {
+              const updatedTask = {
+                ...taskObj,
+                completed: true,
+                completedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }
+              await db.tasks.update(currentTaskId, {
+                completed: true,
+                completedAt: updatedTask.completedAt,
+                updatedAt: updatedTask.updatedAt,
+              })
+              const row = mapTaskToRow(updatedTask, taskObj.userId)
+              if (row) enqueueMutation('upsert', 'tasks', row)
+            }
+          } catch (tErr) {
+            console.warn('[TimerSessionProvider] Auto-complete task error:', tErr)
+          }
+        }
+
+        // 3. Automatically mark associated Plan My Day block completed in Dexie
+        if (currentPlanBlockId) {
+          try {
+            await markPlanBlockCompleted(currentPlanBlockId)
+            setJustCompletedBlockId(currentPlanBlockId)
+            try {
+              sessionStorage.setItem('nocturn_just_completed_block', currentPlanBlockId)
+            } catch { /* ignore */ }
+          } catch (pErr) {
+            console.warn('[TimerSessionProvider] Auto-complete plan block error:', pErr)
+          }
+        }
+
+        // 4. Clear active session in Dexie
         await clearActiveSession()
         updateActiveSession(null)
 
-        const nextMode = currentSess < totalCycles ? 'shortBreak' : 'longBreak'
-        const breakSecs = getModeDurationSeconds(nextMode)
+        // 5. Fire native OS notification
+        notifyTimerEnded(currentTask, sessionId)
 
-        setMode(nextMode)
-        setTotalSeconds(breakSecs)
-        setRemainingSeconds(breakSecs)
-        setCanonicalStartTime(null)
+        // 6. Show tasteful toast
+        const taskTitleDisplay = currentTask ? currentTask : 'Focus Session'
+        addToast(`Session ended: ${taskTitleDisplay} — ${focusMins} min completed`, {
+          type: 'success',
+          duration: 5000,
+        })
+
+        // 7. Reset timer to clean IDLE state (NEVER auto-restart or loop!)
+        const nextResetSecs = getModeDurationSeconds('focus')
+        setMode('focus')
+        setTotalSeconds(nextResetSecs)
+        setRemainingSeconds(nextResetSecs)
         setElapsedSeconds(0)
-
-        const autoStart = Boolean(settings?.autoStartBreaks)
-        const nextStatus = autoStart ? 'running' : 'idle'
-        const nextStartTime = autoStart ? getServerNowMs() : null
-
-        if (autoStart) {
-          setIsRunning(true)
-          setCanonicalStartTime(nextStartTime)
-        }
 
         if (updateTimerState) {
           await updateTimerState({
             actionId,
-            status: nextStatus,
-            mode: nextMode,
+            status: 'idle',
+            mode: 'focus',
             currentSession: currentSess,
             totalSessions: totalCycles,
-            canonicalStartTime: nextStartTime,
+            canonicalStartTime: null,
             elapsedSeconds: 0,
-            configuredDuration: breakSecs,
-            totalSeconds: breakSecs,
-            remainingSecondsWhenPaused: breakSecs,
+            configuredDuration: nextResetSecs,
+            totalSeconds: nextResetSecs,
+            remainingSecondsWhenPaused: nextResetSecs,
             taskName: '',
             taskId: null,
-            startedAt: autoStart ? new Date(nextStartTime).toISOString() : null,
+            planBlockId: null,
+            startedAt: null,
             lastActionAt: new Date().toISOString(),
           })
         }
+
+        // 8. Auto-navigate to Plan My Day
+        try {
+          navigate('/plan-my-day')
+        } catch {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/plan-my-day'
+          }
+        }
       } else {
-        // Break session completed
+        // Break session completed: do NOT silently start next focus session!
         await clearActiveSession()
         updateActiveSession(null)
 
-        const nextSession =
-          currentMode === 'shortBreak'
-            ? currentSess < totalCycles
-              ? currentSess + 1
-              : 1
-            : 1
-        const focusSecs = getModeDurationSeconds('focus')
+        notifyTimerEnded('Break', `break-${Date.now()}`)
+        addToast('Break ended. Ready for your next focus session when you are.', {
+          type: 'info',
+          duration: 4000,
+        })
 
-        setCurrentSession(nextSession)
+        const focusSecs = getModeDurationSeconds('focus')
         setMode('focus')
         setTotalSeconds(focusSecs)
         setRemainingSeconds(focusSecs)
         setCanonicalStartTime(null)
         setElapsedSeconds(0)
 
-        const autoStart = Boolean(settings?.autoStartPomo)
-        const nextStatus = autoStart ? 'running' : 'idle'
-        const nextStartTime = autoStart ? getServerNowMs() : null
-
-        if (autoStart) {
-          setIsRunning(true)
-          setCanonicalStartTime(nextStartTime)
-        }
-
         if (updateTimerState) {
           await updateTimerState({
             actionId,
-            status: nextStatus,
+            status: 'idle',
             mode: 'focus',
-            currentSession: nextSession,
+            currentSession: currentSess < totalCycles ? currentSess + 1 : 1,
             totalSessions: totalCycles,
-            canonicalStartTime: nextStartTime,
+            canonicalStartTime: null,
             elapsedSeconds: 0,
             configuredDuration: focusSecs,
             totalSeconds: focusSecs,
             remainingSecondsWhenPaused: focusSecs,
             taskName: '',
             taskId: null,
-            startedAt: autoStart ? new Date(nextStartTime).toISOString() : null,
+            planBlockId: null,
+            startedAt: null,
             lastActionAt: new Date().toISOString(),
           })
         }
@@ -458,7 +520,17 @@ export function TimerSessionProvider({ children }) {
         isAdvancingRef.current = false
       }, 500)
     }
-  }, [settings, mode, currentSession, totalSeconds, taskName, getModeDurationSeconds, updateTimerState])
+  }, [
+    settings,
+    mode,
+    currentSession,
+    totalSeconds,
+    taskName,
+    getModeDurationSeconds,
+    updateTimerState,
+    addToast,
+    navigate,
+  ])
 
   // 4. Timestamp-based Countdown Effect (Ticks locally every 1s in memory, ZERO continuous DB calls)
   useEffect(() => {
@@ -473,6 +545,12 @@ export function TimerSessionProvider({ children }) {
         setRemainingSeconds(remaining)
         setElapsedSeconds(elapsed)
 
+        // 5-minute warning notification
+        if (remaining <= 300 && remaining > 0 && !hasWarned5mRef.current && mode === 'focus') {
+          hasWarned5mRef.current = true
+          notifyTimerFiveMinuteWarning(taskName, activeSessionRef.current?.sessionId)
+        }
+
         if (remaining <= 0) {
           handleSessionCompletion()
         }
@@ -482,7 +560,7 @@ export function TimerSessionProvider({ children }) {
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [isRunning, canonicalStartTime, totalSeconds, handleSessionCompletion])
+  }, [isRunning, canonicalStartTime, totalSeconds, mode, taskName, handleSessionCompletion])
 
   // 5. Start Session Action
   const startTimer = async (
@@ -599,7 +677,11 @@ export function TimerSessionProvider({ children }) {
     taskName: planTaskName = '',
     taskId = null,
     mode: planMode = 'focus',
+    planBlockId = null,
+    planId = null,
+    blockTimeRange = null,
   }) => {
+    hasWarned5mRef.current = false
     const nowMs = getServerNowMs()
     const currentElapsed = canonicalStartTime
       ? Math.max(0, Math.floor((nowMs - canonicalStartTime) / 1000))
@@ -660,6 +742,9 @@ export function TimerSessionProvider({ children }) {
       canonicalStartTime: nowMs,
       status: 'active',
       currentSession: targetSession,
+      planBlockId: planBlockId || null,
+      planId: planId || null,
+      blockTimeRange: blockTimeRange || null,
     }
 
     updateActiveSession(sessionObj)
@@ -688,6 +773,9 @@ export function TimerSessionProvider({ children }) {
       remainingSecondsWhenPaused: null,
       taskName: planTaskName || '',
       taskId: taskId || null,
+      planBlockId: planBlockId || null,
+      planId: planId || null,
+      blockTimeRange: blockTimeRange || null,
       startedAt: new Date(nowMs).toISOString(),
       lastActionAt: new Date().toISOString(),
     }
@@ -1092,6 +1180,11 @@ export function TimerSessionProvider({ children }) {
         terminateTimer,
         startPlanSession,
         activeSession,
+        planBlockId: activeSession?.planBlockId || null,
+        planId: activeSession?.planId || null,
+        blockTimeRange: activeSession?.blockTimeRange || null,
+        justCompletedBlockId,
+        setJustCompletedBlockId,
       }}
     >
       {children}

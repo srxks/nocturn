@@ -1,4 +1,4 @@
-import { formatDateKey } from '../services/calendarService'
+import { formatDateKey } from '../services/calendarService.js'
 
 /**
  * Reusable utility for task deadline status and color coding.

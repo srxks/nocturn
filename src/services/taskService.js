@@ -17,7 +17,8 @@ export async function createTask(
   listId = 'tasks',
   dueDate = null,
   priority = 'medium',
-  starred = false
+  starred = false,
+  source = 'user'
 ) {
   try {
     const isMyDayList = listId === 'my-day'
@@ -36,6 +37,7 @@ export async function createTask(
       dueDate: resolvedDueDate,
       myDayDate: myDayDate,
       inMyDay: Boolean(myDayDate || isDueToday),
+      source: source || 'user',
       reminder: null,
       recurrence: 'none',
       priority,

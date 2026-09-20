@@ -17,6 +17,156 @@ import { formatDateKey } from './calendarService.js'
 // In-memory map of active timer IDs keyed by taskId
 const scheduledTimers = new Map()
 
+// In-memory set of deduplicated event keys
+const firedNotificationKeys = new Set()
+
+function isDeduplicated(key) {
+  if (firedNotificationKeys.has(key)) return true
+  try {
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(`nocturn_notif_${key}`)) {
+      firedNotificationKeys.add(key)
+      return true
+    }
+  } catch {
+    // sessionStorage fallback
+  }
+  return false
+}
+
+function markDeduplicated(key) {
+  firedNotificationKeys.add(key)
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(`nocturn_notif_${key}`, Date.now().toString())
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function playNotificationChime(frequency = 587.33) {
+  if (typeof window === 'undefined') return
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextClass) return
+    const ctx = new AudioContextClass()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.setValueAtTime(frequency, ctx.currentTime)
+    gain.gain.setValueAtTime(0.12, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.6)
+  } catch {
+    // Audio optional
+  }
+}
+
+export const playCompletionChime = () => playNotificationChime(880.0)
+
+/**
+ * 5 Minutes Before Timer Ends Notification
+ */
+export function notifyTimerFiveMinuteWarning(taskTitle = '', sessionId = '') {
+  const dedupKey = `timer_5m_${sessionId || taskTitle}`
+  if (isDeduplicated(dedupKey)) return
+  markDeduplicated(dedupKey)
+
+  playNotificationChime(659.25) // E5
+
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification('Nocturn', {
+        body: `${taskTitle || 'Focus'} focus ends in 5 minutes.`,
+        icon: '/favicon.ico',
+        tag: `nocturn-5m-${sessionId}`,
+      })
+    } catch {
+      // ignore
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('nocturn:timer-warning', {
+        detail: { taskTitle, minutesRemaining: 5 },
+      })
+    )
+  }
+}
+
+/**
+ * Timer Ends Notification
+ */
+export function notifyTimerEnded(taskTitle = '', sessionId = '') {
+  const dedupKey = `timer_end_${sessionId || taskTitle || Date.now()}`
+  if (isDeduplicated(dedupKey)) return
+  markDeduplicated(dedupKey)
+
+  playNotificationChime(880.0) // A5
+
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      const n = new Notification('Nocturn', {
+        body: `Focus session ended — ${taskTitle || 'Focus Session'}`,
+        icon: '/favicon.ico',
+        tag: `nocturn-end-${sessionId}`,
+      })
+      n.onclick = () => {
+        try {
+          window.focus()
+          window.location.href = '/plan-my-day'
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('nocturn:timer-ended', {
+        detail: { taskTitle },
+      })
+    )
+  }
+}
+
+/**
+ * Plan Block Becomes Due Notification
+ */
+export function notifyPlanBlockDue(taskTitle = '', blockId = '', dateKey = '') {
+  const dedupKey = `plan_due_${dateKey}_${blockId}`
+  if (isDeduplicated(dedupKey)) return
+  markDeduplicated(dedupKey)
+
+  playNotificationChime(523.25) // C5
+
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      const n = new Notification('Nocturn', {
+        body: `Your ${taskTitle || 'scheduled'} focus block starts now.`,
+        icon: '/favicon.ico',
+        tag: `nocturn-block-${blockId}`,
+      })
+      n.onclick = () => {
+        try {
+          window.focus()
+          window.location.href = '/plan-my-day'
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+}
+
 /**
  * Request notification permission from the browser.
  */

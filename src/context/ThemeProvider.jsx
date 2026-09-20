@@ -64,9 +64,12 @@ export function ThemeProvider({ children }) {
   const presetThemes = allThemes.filter((t) => t.isPreset)
   const savedThemes = allThemes.filter((t) => !t.isPreset)
 
-  // Resolve current active theme object (migrate legacy cyber-cyan to warm-amber)
+  // Resolve current active theme object (migrate legacy cyber-cyan or warm-amber to midnight-violet)
   const rawActiveThemeId = activeThemeSetting?.activeThemeId || DEFAULT_NOCTURN_THEME.id
-  const activeThemeId = rawActiveThemeId === 'preset-cyber-cyan' ? 'preset-warm-amber' : rawActiveThemeId
+  const activeThemeId =
+    rawActiveThemeId === 'preset-cyber-cyan' || rawActiveThemeId === 'preset-warm-amber'
+      ? 'preset-midnight-violet'
+      : rawActiveThemeId
   let activeTheme = allThemes.find((t) => t.id === activeThemeId) || DEFAULT_NOCTURN_THEME
 
   // If custom colors were temporarily applied (live preview)

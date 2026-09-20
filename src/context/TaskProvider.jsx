@@ -89,7 +89,8 @@ export function TaskProvider({ children }) {
     dueDate = null,
     priority = 'medium',
     starred = false,
-    inMyDayOverride = null
+    inMyDayOverride = null,
+    source = 'user'
   ) => {
     const isMyDayList = listId === 'my-day'
     const actualListId =
@@ -111,6 +112,7 @@ export function TaskProvider({ children }) {
       dueDate: dueDate || null,
       myDayDate: myDayDate,
       inMyDay: shouldBeInMyDay,
+      source: source || 'user',
       reminder: null,
       recurrence: 'none',
       priority: resolvedPriority,
@@ -143,6 +145,33 @@ export function TaskProvider({ children }) {
         if (row) enqueueMutation('upsert', 'tasks', row)
       }
     }
+
+    return newTask
+  }
+
+  const completeTaskFromTimer = async (id) => {
+    if (!id) return null
+    const target = await db.tasks.get(id)
+    if (!target) return null
+    if (target.completed) return target
+
+    cancelTaskReminder(id)
+    const updatedFields = {
+      completed: true,
+      completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    const updatedTask = { ...target, ...updatedFields }
+    await db.tasks.update(id, updatedFields)
+
+    if (user?.id && !shouldSkipRemote()) {
+      const res = await upsertTaskRemote(updatedTask, user.id)
+      if (!res) {
+        const row = mapTaskToRow(updatedTask, user.id)
+        if (row) enqueueMutation('upsert', 'tasks', row)
+      }
+    }
+    return updatedTask
   }
 
   const updateTask = async (id, fields) => {
@@ -671,6 +700,7 @@ export function TaskProvider({ children }) {
         clearCompleted,
         clearList,
         deleteMultipleTasks,
+        completeTaskFromTimer,
       }}
     >
       {children}

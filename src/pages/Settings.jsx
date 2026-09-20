@@ -19,6 +19,7 @@ import IntegrationCard from '../components/settings/IntegrationCard'
 import SupabaseConnectionCard from '../components/settings/SupabaseConnectionCard'
 import SyncDiagnosticsCard from '../components/settings/SyncDiagnosticsCard'
 import DataManagementCard from '../components/settings/DataManagementCard'
+import NotificationSettingsCard from '../components/settings/NotificationSettingsCard'
 import { Card, Badge, Button, Tabs } from '../components/ui'
 
 export default function Settings() {
@@ -119,6 +120,7 @@ export default function Settings() {
             </Button>
           </Card>
 
+          <NotificationSettingsCard />
           <VocabSettingsCard />
         </section>
       )}

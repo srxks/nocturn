@@ -79,17 +79,29 @@ export default function TaskItemRow({
               </span>
             )}
 
-            {/* Due Date Badge */}
-            {task.dueDate && (
+            {/* Due Date & Deadline Status Badges */}
+            {task.dueDate ? (
               <span
                 className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border font-medium ${
                   task.completed
                     ? 'bg-white/[0.03] border-white/[0.06] text-nocturn-muted'
+                    : deadlineConfig.status === 'overdue'
+                    ? 'bg-red-500/15 text-red-400 border-red-500/30'
+                    : deadlineConfig.status === 'today'
+                    ? 'bg-nocturn-accent/15 text-nocturn-accent-bright border-nocturn-accent/30'
                     : deadlineConfig.badgeClass
                 }`}
               >
                 <Calendar className="w-3 h-3 stroke-[2]" />
-                {deadlineConfig.formattedLabel}
+                {deadlineConfig.status === 'overdue'
+                  ? 'OVERDUE'
+                  : deadlineConfig.status === 'today'
+                  ? 'DUE TODAY'
+                  : deadlineConfig.formattedLabel}
+              </span>
+            ) : (
+              <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-md border font-medium bg-white/[0.02] border-white/[0.05] text-nocturn-muted/60">
+                NO DEADLINE
               </span>
             )}
 

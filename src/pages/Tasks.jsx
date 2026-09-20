@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import TaskListNav from '../components/tasks/TaskListNav'
@@ -10,7 +10,7 @@ import BulkTaskMenu from '../components/tasks/BulkTaskMenu'
 import { Progress } from '../components/ui/Progress'
 import { useTasks } from '../context/useTasks'
 import { formatDateKey } from '../services/calendarService'
-import { Sun, ListTodo, CheckCircle2, CheckSquare, Sparkles } from 'lucide-react'
+import { Sun, ListTodo, CheckCircle2, CheckSquare, Sparkles, ChevronDown } from 'lucide-react'
 
 export default function Tasks() {
   const [searchParams] = useSearchParams()
@@ -32,6 +32,8 @@ export default function Tasks() {
     toggleSubtask,
     deleteSubtask,
   } = useTasks()
+
+  const [isCompletedOpen, setIsCompletedOpen] = useState(false)
 
   // Sync route query parameter ?view=myday or ?view=all with activeListId
   useEffect(() => {
@@ -77,15 +79,24 @@ export default function Tasks() {
   const filteredTasks = useMemo(() => {
     if (activeListId === 'my-day') {
       return tasks.filter((t) => {
-        // Strict rule: ONLY tasks explicitly added to My Day belong in My Day
-        const isExplicitlyInMyDay = Boolean(t.inMyDay || t.myDayDate === todayKey)
-        if (!isExplicitlyInMyDay) return false
-
-        // If it has a due date, it must be today or tomorrow (tasks due later do not belong in My Day)
-        if (t.dueDate) {
-          return t.dueDate === todayKey || t.dueDate === tomorrowKey
+        // Exclude future-only tasks unless explicitly added to My Day
+        if (t.dueDate && t.dueDate > todayKey && !t.inMyDay) {
+          return false
         }
-        return true
+
+        // 1. Tasks due today
+        if (t.dueDate === todayKey) return true
+
+        // 2. Overdue incomplete tasks from previous days
+        if (t.dueDate && t.dueDate < todayKey && !t.completed) return true
+
+        // 3. Incomplete tasks in My Day
+        if ((t.inMyDay || t.myDayDate === todayKey) && !t.completed) return true
+
+        // 4. Completed tasks for today / in My Day
+        if (t.completed && (t.inMyDay || t.myDayDate === todayKey || t.dueDate === todayKey)) return true
+
+        return false
       })
     }
     if (activeListId === 'all') {
@@ -95,7 +106,7 @@ export default function Tasks() {
       return tasks.filter((t) => t.completed)
     }
     return tasks.filter((t) => t.listId === activeListId)
-  }, [tasks, activeListId, todayKey, tomorrowKey])
+  }, [tasks, activeListId, todayKey])
 
   const activeTasks = useMemo(() => filteredTasks.filter((t) => !t.completed), [filteredTasks])
   const completedTasks = useMemo(() => filteredTasks.filter((t) => t.completed), [filteredTasks])
@@ -222,23 +233,34 @@ export default function Tasks() {
                 </div>
               )}
 
-              {/* Completed Tasks Group */}
+              {/* Completed Tasks Group (Collapsible) */}
               {completedTasks.length > 0 && (
                 <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between text-xs font-semibold text-nocturn-muted border-b border-nocturn-border/60 pb-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsCompletedOpen((prev) => !prev)}
+                    className="flex items-center gap-2 text-xs font-semibold text-nocturn-muted hover:text-white border-b border-nocturn-border/60 pb-1.5 w-full text-left cursor-pointer transition-colors"
+                  >
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                        isCompletedOpen ? '' : '-rotate-90'
+                      }`}
+                    />
                     <span>Completed ({completedTasks.length})</span>
-                  </div>
-                  <div className="space-y-2.5">
-                    <AnimatePresence mode="popLayout">
-                      {completedTasks.map((task) => (
-                        <motion.div
-                          key={task.id}
-                          initial={{ opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.98, y: -2 }}
-                          transition={{ duration: 0.15, ease: 'easeOut' }}
-                        >
+                  </button>
+
+                  <AnimatePresence>
+                    {isCompletedOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.18 }}
+                        className="space-y-2.5 overflow-hidden"
+                      >
+                        {completedTasks.map((task) => (
                           <TaskItemRow
+                            key={task.id}
                             task={task}
                             lists={lists}
                             onToggleComplete={toggleTask}
@@ -247,10 +269,10 @@ export default function Tasks() {
                             onDeleteTask={deleteTask}
                             isSelected={selectedTask?.id === task.id}
                           />
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-                  </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
             </div>

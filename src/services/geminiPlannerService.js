@@ -30,9 +30,11 @@ export function validatePlanResponse(data) {
   // Time blocks
   const rawBlocks = Array.isArray(data.blocks) ? data.blocks : []
   const blocks = []
+  const planId = data.id || ('plan-' + Date.now())
 
   let autoStartHour = 9
   let autoStartMin = 0
+  let focusCount = 1
 
   for (let i = 0; i < rawBlocks.length; i++) {
     const b = rawBlocks[i]
@@ -75,16 +77,26 @@ export function validatePlanResponse(data) {
     const taskId = b.taskId || null
     const priority = ['high', 'medium', 'low'].includes(b.priority) ? b.priority : 'medium'
     const notes = typeof b.notes === 'string' ? b.notes.trim() : ''
+    const sessionNumber = type === 'focus' ? focusCount++ : (b.sessionNumber || null)
 
     blocks.push({
       id: b.id || ('block-' + Date.now() + '-' + i),
+      taskId,
+      task_id: taskId,
+      taskTitle: title,
       title,
       startTime,
       endTime: endTime || '10:00',
       durationMinutes,
+      duration: durationMinutes,
       type,
+      blockType: type,
+      focusDuration: type === 'focus' ? durationMinutes : (Number(b.focusDuration) || focusDuration),
+      breakDuration: type === 'break' ? durationMinutes : (Number(b.breakDuration) || shortBreakDuration),
+      sessionNumber,
+      completed: Boolean(b.completed || false),
+      sourcePlanId: b.sourcePlanId || planId,
       isExisting,
-      taskId,
       priority,
       notes,
     })
@@ -137,7 +149,9 @@ export function generateOfflinePlan(userPrompt = '', existingTasks = [], current
   const blocks = []
   const suggestedNewTasks = []
 
-  let currentMinutes = currentTime.getHours() * 60 + Math.ceil(currentTime.getMinutes() / 15) * 15
+  const dateObj = currentTime instanceof Date ? currentTime : new Date(currentTime || Date.now())
+  const validDate = isNaN(dateObj.getTime()) ? new Date() : dateObj
+  let currentMinutes = validDate.getHours() * 60 + Math.ceil(validDate.getMinutes() / 15) * 15
   if (currentMinutes < 9 * 60) currentMinutes = 9 * 60
 
   const formatTime = (mins) => {
@@ -267,7 +281,7 @@ export function generateOfflinePlan(userPrompt = '', existingTasks = [], current
     return (ha * 60 + ma) - (hb * 60 + mb)
   })
 
-  return {
+  const rawPlan = {
     summary: 'Productivity plan with scheduled commitments, focused deep-work blocks, and recovery.',
     recommendedTimer: {
       focusDuration: 50,
@@ -278,6 +292,9 @@ export function generateOfflinePlan(userPrompt = '', existingTasks = [], current
     blocks,
     suggestedNewTasks,
   }
+
+  const validated = validatePlanResponse(rawPlan)
+  return validated.valid ? validated.plan : rawPlan
 }
 
 /**
