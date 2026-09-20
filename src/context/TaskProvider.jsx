@@ -63,6 +63,7 @@ export function TaskProvider({ children }) {
 
   const tasks = useMemo(() => liveTasks || [], [liveTasks])
   const lists = useMemo(() => liveLists || [], [liveLists])
+  const isLoading = liveTasks === undefined || liveLists === undefined
 
   // Derived selected task object
   const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) || null : null
@@ -678,6 +679,7 @@ export function TaskProvider({ children }) {
   return (
     <TaskContext.Provider
       value={{
+        isLoading,
         tasks,
         lists,
         activeListId,

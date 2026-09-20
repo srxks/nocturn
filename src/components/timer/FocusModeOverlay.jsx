@@ -84,6 +84,8 @@ export default function FocusModeOverlay({
               totalSeconds={totalSeconds}
               modeLabel={modeLabel}
               isRunning={isRunning}
+              isPaused={isPaused}
+              isCompleted={remainingSeconds === 0}
             />
           </div>
 

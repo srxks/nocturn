@@ -6,17 +6,20 @@ import TaskItemRow from '../components/tasks/TaskItemRow'
 import TaskDetailDrawer from '../components/tasks/TaskDetailDrawer'
 import EmptyTasks from '../components/tasks/EmptyTasks'
 import AddTask from '../components/tasks/AddTask'
+import MobileQuickAddSheet from '../components/tasks/MobileQuickAddSheet'
 import BulkTaskMenu from '../components/tasks/BulkTaskMenu'
 import { Progress } from '../components/ui/Progress'
+import { Skeleton } from '../components/ui/Skeleton'
 import { useTasks } from '../context/useTasks'
 import { formatDateKey } from '../services/calendarService'
-import { Sun, ListTodo, CheckCircle2, CheckSquare, Sparkles, ChevronDown } from 'lucide-react'
+import { Sun, ListTodo, CheckCircle2, CheckSquare, Sparkles, ChevronDown, Plus } from 'lucide-react'
 
 export default function Tasks() {
   const [searchParams] = useSearchParams()
   const viewParam = searchParams.get('view')
 
   const {
+    isLoading,
     tasks,
     lists,
     activeListId,
@@ -34,6 +37,7 @@ export default function Tasks() {
   } = useTasks()
 
   const [isCompletedOpen, setIsCompletedOpen] = useState(false)
+  const [isMobileQuickAddOpen, setIsMobileQuickAddOpen] = useState(false)
 
   // Sync route query parameter ?view=myday or ?view=all with activeListId
   useEffect(() => {
@@ -222,8 +226,33 @@ export default function Tasks() {
           )}
 
           {/* Tasks List */}
-          {filteredTasks.length === 0 ? (
-            <EmptyTasks />
+          {isLoading ? (
+            <div className="space-y-3" aria-label="Loading tasks...">
+              {[...Array(5)].map((_, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3.5 p-3.5 sm:p-4 rounded-xl border border-nocturn-border/50 bg-nocturn-card/40"
+                >
+                  <Skeleton className="w-4 h-4 rounded-md shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-3.5 w-3/5 rounded-md" />
+                    <Skeleton className="h-2.5 w-1/4 rounded-md opacity-60" />
+                  </div>
+                  <Skeleton className="w-4 h-4 rounded-md shrink-0 opacity-40" />
+                </div>
+              ))}
+            </div>
+          ) : filteredTasks.length === 0 ? (
+            <EmptyTasks
+              onAddTask={() => {
+                const input = document.querySelector('input[placeholder*="Add a task"], input[type="text"]')
+                if (input && window.innerWidth >= 640) {
+                  input.focus()
+                } else {
+                  setIsMobileQuickAddOpen(true)
+                }
+              }}
+            />
           ) : (
             <div className="space-y-6">
               {/* Active Tasks Group */}
@@ -419,6 +448,25 @@ export default function Tasks() {
           />
         )}
       </AnimatePresence>
+
+      {/* Mobile Floating Quick Add Button (FAB) */}
+      <button
+        type="button"
+        onClick={() => setIsMobileQuickAddOpen(true)}
+        aria-label="Quick add task"
+        className="lg:hidden fixed bottom-20 right-4 sm:right-6 z-30 w-13 h-13 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white shadow-[0_8px_24px_rgba(var(--color-nocturn-accent-rgb),0.4)] flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer"
+      >
+        <Plus className="w-6 h-6 stroke-[2.5]" />
+      </button>
+
+      {/* Mobile Quick Add Bottom Sheet */}
+      <MobileQuickAddSheet
+        isOpen={isMobileQuickAddOpen}
+        onClose={() => setIsMobileQuickAddOpen(false)}
+        onAddTask={handleAddTask}
+        defaultDay={activeListId === 'my-day' ? 'today' : 'none'}
+        defaultInMyDay={activeListId === 'my-day'}
+      />
     </div>
   )
 }

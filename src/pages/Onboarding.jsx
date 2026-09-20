@@ -45,12 +45,12 @@ export default function Onboarding() {
   }
 
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 bg-[#16171b] text-white selection:bg-nocturn-accent selection:text-black overflow-hidden relative">
-      {/* Floating Cinematic Tall Card */}
-      <div className="relative w-full max-w-[420px] min-h-[620px] bg-[#090a0d] border border-white/[0.08] rounded-[38px] p-8 sm:p-9 flex flex-col justify-between shadow-[0_30px_90px_rgba(0,0,0,0.9)] overflow-hidden z-10">
+    <div className="min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-0 sm:p-6 md:p-8 bg-[#16171b] text-white selection:bg-nocturn-accent selection:text-black overflow-hidden relative">
+      {/* Immersive on Mobile, Floating Cinematic Card on Tablet & Desktop */}
+      <div className="relative w-full h-[100dvh] sm:h-auto sm:max-w-[460px] sm:min-h-[660px] bg-[#090a0d] border-0 sm:border sm:border-white/[0.08] rounded-none sm:rounded-[40px] p-6 sm:p-9 flex flex-col justify-between shadow-none sm:shadow-[0_30px_100px_rgba(0,0,0,0.95)] overflow-hidden z-10 pt-[calc(1.5rem+env(safe-area-inset-top,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
         {/* Soft Ambient Glows inside panel */}
-        <div className="absolute -bottom-16 -left-16 w-64 h-64 bg-teal-500/15 rounded-full blur-[80px] pointer-events-none" />
-        <div className="absolute top-1/2 -right-16 w-56 h-56 bg-amber-500/12 rounded-full blur-[80px] pointer-events-none" />
+        <div className="absolute -bottom-16 -left-16 w-72 h-72 bg-teal-500/15 rounded-full blur-[90px] pointer-events-none" />
+        <div className="absolute top-1/2 -right-16 w-64 h-64 bg-amber-500/12 rounded-full blur-[90px] pointer-events-none" />
 
         {/* Thin Flowing Curved Lines Artwork emerging from lower-left */}
         <svg
@@ -84,7 +84,7 @@ export default function Onboarding() {
           <button
             type="button"
             onClick={handleSkip}
-            className="text-xs font-medium text-nocturn-muted hover:text-white px-3 py-1 rounded-full bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] transition-all cursor-pointer"
+            className="text-xs font-medium text-nocturn-muted hover:text-white px-3 py-1 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition-all cursor-pointer"
           >
             Skip
           </button>
@@ -113,8 +113,8 @@ export default function Onboarding() {
 
                 {/* Two-Line Subtitle */}
                 <p className="text-base sm:text-lg text-nocturn-muted leading-snug font-normal pt-1">
-                  Manage your task<br />
-                  very easily!
+                  Manage your tasks<br />
+                  without the noise.
                 </p>
               </motion.div>
             )}

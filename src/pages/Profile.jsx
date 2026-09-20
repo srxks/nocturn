@@ -28,7 +28,7 @@ import { syncLocalDataToSupabase } from '../services/syncService'
 import { fetchUserFocusSessions } from '../lib/timer'
 import { fetchUserProfileRemote, updateUserProfileRemote } from '../lib/profile'
 import { getStorageItem, setStorageItem } from '../utils/storageUtils'
-import { Card, Badge, Button, Tabs } from '../components/ui'
+import { Card, Badge, Button, Tabs, Skeleton } from '../components/ui'
 
 export default function Profile() {
   const navigate = useNavigate()
@@ -71,6 +71,8 @@ export default function Profile() {
     if (!db || !db.activeSessions) return null
     return await db.activeSessions.get('active')
   }, [])
+
+  const isLoading = dbSessions === undefined || dbTasks === undefined
 
   // Load remote focus sessions from Supabase on mount / login
   useEffect(() => {
@@ -184,6 +186,90 @@ export default function Profile() {
     const highest = Math.max(...weekDays.map((d) => d.minutes))
     return Math.max(highest, 30) // Minimum 30 min scale so bars render nicely
   }, [weekDays])
+
+  // Real weekly breakdown distribution for the active month
+  const monthWeeks = useMemo(() => {
+    if (period !== 'month') return []
+    const now = new Date()
+    const targetMonthDate = new Date(now.getFullYear(), now.getMonth() + periodOffset, 1)
+    const year = targetMonthDate.getFullYear()
+    const month = targetMonthDate.getMonth()
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+    const weeks = [
+      { label: 'W1', sub: '1-7', start: 1, end: 7 },
+      { label: 'W2', sub: '8-14', start: 8, end: 14 },
+      { label: 'W3', sub: '15-21', start: 15, end: 21 },
+      { label: 'W4', sub: '22-28', start: 22, end: 28 },
+      { label: 'W5', sub: `29-${daysInMonth}`, start: 29, end: daysInMonth },
+    ]
+
+    return weeks.map((w) => {
+      const weekSessions = sessions.filter((s) => {
+        const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
+        if (!isFocus) return false
+        const dateStr = s.completedAt || s.ended_at || s.createdAt || s.created_at || s.startedAt
+        if (!dateStr) return false
+        const d = new Date(dateStr)
+        return (
+          d.getFullYear() === year &&
+          d.getMonth() === month &&
+          d.getDate() >= w.start &&
+          d.getDate() <= w.end
+        )
+      })
+      const mins = weekSessions.reduce((acc, s) => acc + getSessionDurationMinutes(s), 0)
+      return {
+        key: `${year}-${month}-${w.label}`,
+        label: w.label,
+        subLabel: w.sub,
+        minutes: mins,
+        hours: (mins / 60).toFixed(1),
+        count: weekSessions.length,
+      }
+    })
+  }, [period, periodOffset, sessions])
+
+  const maxMonthMinutes = useMemo(() => {
+    if (!monthWeeks.length) return 60
+    const highest = Math.max(...monthWeeks.map((w) => w.minutes))
+    return Math.max(highest, 60)
+  }, [monthWeeks])
+
+  // Real 12-month trend distribution for the active year
+  const yearMonths = useMemo(() => {
+    if (period !== 'year') return []
+    const now = new Date()
+    const targetYear = now.getFullYear() + periodOffset
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+    return monthNames.map((name, idx) => {
+      const monthSessions = sessions.filter((s) => {
+        const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
+        if (!isFocus) return false
+        const dateStr = s.completedAt || s.ended_at || s.createdAt || s.created_at || s.startedAt
+        if (!dateStr) return false
+        const d = new Date(dateStr)
+        return d.getFullYear() === targetYear && d.getMonth() === idx
+      })
+      const mins = monthSessions.reduce((acc, s) => acc + getSessionDurationMinutes(s), 0)
+      const isCurrentMonth = now.getFullYear() === targetYear && now.getMonth() === idx
+      return {
+        key: `${targetYear}-${idx}`,
+        label: name,
+        minutes: mins,
+        hours: (mins / 60).toFixed(1),
+        isCurrent: isCurrentMonth,
+        count: monthSessions.length,
+      }
+    })
+  }, [period, periodOffset, sessions])
+
+  const maxYearMinutes = useMemo(() => {
+    if (!yearMonths.length) return 120
+    const highest = Math.max(...yearMonths.map((m) => m.minutes))
+    return Math.max(highest, 120)
+  }, [yearMonths])
 
   const handleSaveName = async (e) => {
     e.preventDefault()
@@ -398,72 +484,228 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Week Bar Chart (When Period is 'week') */}
-          {period === 'week' && weekDays.length > 0 && (
-            <div className="pt-2 border-t border-white/[0.06] space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-nocturn-muted font-medium">Daily Focus Activity</span>
+          {/* Focus Distribution Charts & Empty State */}
+          {isLoading ? (
+            <div className="pt-6 pb-4 border-t border-white/[0.06] space-y-4" aria-label="Loading statistics...">
+              <div className="flex justify-between items-center px-1">
+                <Skeleton className="h-4 w-36 rounded-md" />
+                <Skeleton className="h-3 w-24 rounded-md opacity-60" />
+              </div>
+              <div className="grid grid-cols-7 gap-2 sm:gap-3 items-end h-40 pt-4 px-1">
+                {[...Array(7)].map((_, i) => (
+                  <div key={i} className="flex flex-col items-center justify-end h-full gap-2">
+                    <Skeleton className="w-full max-w-[40px] h-24 rounded-xl opacity-40" />
+                    <Skeleton className="w-6 h-3 rounded-md opacity-30" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : stats.periodSessionsCount === 0 && stats.periodTasksCount === 0 ? (
+            <div className="pt-6 pb-4 border-t border-white/[0.06] text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.08] mx-auto flex items-center justify-center text-nocturn-muted">
+                <BarChart2 className="w-6 h-6 stroke-[1.5]" />
+              </div>
+              <div className="space-y-1 max-w-sm mx-auto">
+                <h3 className="text-sm font-semibold text-white">
+                  No focus activity recorded for {stats.periodLabel}
+                </h3>
+                <p className="text-xs text-nocturn-muted">
+                  Timer sessions tracked during this period will populate your daily focus distribution and consistency trend.
+                </p>
+              </div>
+              <div className="pt-1">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => navigate('/timer')}
+                  icon={Timer}
+                >
+                  Start Focus Session
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="pt-3 border-t border-white/[0.06] space-y-4">
+              {/* Chart Title and Dynamic Scale */}
+              <div className="flex items-center justify-between text-xs px-0.5">
+                <span className="text-white font-medium flex items-center gap-1.5">
+                  <span>
+                    {period === 'week'
+                      ? 'Daily Focus Activity'
+                      : period === 'month'
+                      ? 'Weekly Focus Breakdown'
+                      : 'Monthly Focus Trends'}
+                  </span>
+                </span>
                 <span className="text-[11px] text-nocturn-muted font-mono">
-                  Scale: {Math.round(maxWeekMinutes)}m max
+                  Scale:{' '}
+                  {period === 'week'
+                    ? `${Math.round(maxWeekMinutes)}m max`
+                    : period === 'month'
+                    ? `${(maxMonthMinutes / 60).toFixed(1)}h max`
+                    : `${(maxYearMinutes / 60).toFixed(1)}h max`}
                 </span>
               </div>
 
-              <div className="grid grid-cols-7 gap-2 sm:gap-3 items-end h-36 pt-4 px-1">
-                {weekDays.map((d) => {
-                  const heightPercent = Math.max(
-                    6,
-                    Math.round((d.minutes / maxWeekMinutes) * 100)
-                  )
-                  const hasMinutes = d.minutes > 0
+              {/* Chart Visual Surface with Subtle Gridlines */}
+              <div className="relative pt-6 pb-2 px-1">
+                {/* Dotted Reference Grid Lines */}
+                <div className="absolute inset-x-0 top-6 bottom-10 flex flex-col justify-between pointer-events-none opacity-20">
+                  <div className="border-b border-dashed border-white w-full" />
+                  <div className="border-b border-dashed border-white w-full" />
+                  <div className="border-b border-dashed border-white w-full" />
+                  <div className="border-b border-white w-full" />
+                </div>
 
-                  return (
-                    <div
-                      key={d.key}
-                      className="flex flex-col items-center justify-end h-full gap-2 group relative"
-                    >
-                      {/* Tooltip on hover */}
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 px-2 py-1 rounded-md bg-nocturn-elevated border border-white/10 text-[10px] font-mono text-white whitespace-nowrap pointer-events-none z-20 shadow-lg">
-                        {d.minutes} min ({d.hours}h)
-                      </div>
+                {/* 1. Week Bar Chart */}
+                {period === 'week' && (
+                  <div className="grid grid-cols-7 gap-2 sm:gap-3 items-end h-40">
+                    {weekDays.map((d) => {
+                      const heightPercent = Math.max(
+                        4,
+                        Math.round((d.minutes / maxWeekMinutes) * 100)
+                      )
+                      const hasMinutes = d.minutes > 0
 
-                      {/* Bar Fill */}
-                      <div className="w-full max-w-[36px] bg-white/[0.04] rounded-lg p-0.5 flex flex-col justify-end h-full">
+                      return (
                         <div
-                          style={{ height: `${heightPercent}%` }}
-                          className={`w-full rounded-md transition-all duration-300 ${
-                            hasMinutes
-                              ? d.isToday
-                                ? 'bg-nocturn-accent shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.35)]'
-                                : 'bg-nocturn-accent/80 hover:bg-nocturn-accent'
-                              : 'bg-white/[0.06]'
-                          }`}
-                        />
-                      </div>
-
-                      {/* Day Label */}
-                      <div className="text-center">
-                        <span
-                          className={`text-[11px] block font-medium ${
-                            d.isToday ? 'text-nocturn-accent font-semibold' : 'text-nocturn-muted'
-                          }`}
+                          key={d.key}
+                          className="flex flex-col items-center justify-end h-full gap-2 group relative z-10"
                         >
-                          {d.dayLabel}
-                        </span>
-                        <span className="text-[10px] text-nocturn-muted/60 font-mono block">
-                          {d.dateNumber}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })}
+                          {/* Hover Tooltip */}
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 px-2 py-1 rounded-md bg-nocturn-elevated border border-white/10 text-[10px] font-mono text-white whitespace-nowrap pointer-events-none z-20 shadow-lg">
+                            {d.minutes} min ({d.hours}h)
+                          </div>
+
+                          {/* Bar Column */}
+                          <div className="w-full max-w-[40px] bg-white/[0.04] rounded-xl p-0.5 flex flex-col justify-end h-full">
+                            <div
+                              style={{ height: `${heightPercent}%` }}
+                              className={`w-full rounded-lg transition-all duration-300 ${
+                                hasMinutes
+                                  ? d.isToday
+                                    ? 'bg-nocturn-accent shadow-[0_0_14px_rgba(var(--color-nocturn-accent-rgb),0.4)]'
+                                    : 'bg-nocturn-accent/80 hover:bg-nocturn-accent'
+                                  : 'bg-white/[0.05]'
+                              }`}
+                            />
+                          </div>
+
+                          {/* Labels */}
+                          <div className="text-center pt-0.5">
+                            <span
+                              className={`text-[11px] block font-medium ${
+                                d.isToday ? 'text-nocturn-accent font-bold' : 'text-nocturn-muted'
+                              }`}
+                            >
+                              {d.dayLabel}
+                            </span>
+                            <span className="text-[10px] text-nocturn-muted/60 font-mono block">
+                              {d.dateNumber}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* 2. Month Breakdown Chart */}
+                {period === 'month' && (
+                  <div className="grid grid-cols-5 gap-2 sm:gap-4 items-end h-40">
+                    {monthWeeks.map((w) => {
+                      const heightPercent = Math.max(
+                        4,
+                        Math.round((w.minutes / maxMonthMinutes) * 100)
+                      )
+                      const hasMinutes = w.minutes > 0
+
+                      return (
+                        <div
+                          key={w.key}
+                          className="flex flex-col items-center justify-end h-full gap-2 group relative z-10"
+                        >
+                          {/* Hover Tooltip */}
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 px-2 py-1 rounded-md bg-nocturn-elevated border border-white/10 text-[10px] font-mono text-white whitespace-nowrap pointer-events-none z-20 shadow-lg">
+                            {w.hours}h ({w.count} sessions)
+                          </div>
+
+                          {/* Bar Column */}
+                          <div className="w-full max-w-[48px] bg-white/[0.04] rounded-xl p-0.5 flex flex-col justify-end h-full">
+                            <div
+                              style={{ height: `${heightPercent}%` }}
+                              className={`w-full rounded-lg transition-all duration-300 ${
+                                hasMinutes
+                                  ? 'bg-nocturn-accent/80 hover:bg-nocturn-accent shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.3)]'
+                                  : 'bg-white/[0.05]'
+                              }`}
+                            />
+                          </div>
+
+                          {/* Labels */}
+                          <div className="text-center pt-0.5">
+                            <span className="text-xs font-semibold text-white block">
+                              {w.label}
+                            </span>
+                            <span className="text-[10px] text-nocturn-muted/60 font-mono block whitespace-nowrap">
+                              {w.subLabel}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* 3. Year Monthly Trend Chart */}
+                {period === 'year' && (
+                  <div className="grid grid-cols-12 gap-1 sm:gap-2 items-end h-40 overflow-x-auto no-scrollbar">
+                    {yearMonths.map((m) => {
+                      const heightPercent = Math.max(
+                        4,
+                        Math.round((m.minutes / maxYearMinutes) * 100)
+                      )
+                      const hasMinutes = m.minutes > 0
+
+                      return (
+                        <div
+                          key={m.key}
+                          className="flex flex-col items-center justify-end h-full gap-2 group relative z-10 min-w-[20px]"
+                        >
+                          {/* Hover Tooltip */}
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 px-2 py-1 rounded-md bg-nocturn-elevated border border-white/10 text-[10px] font-mono text-white whitespace-nowrap pointer-events-none z-20 shadow-lg">
+                            {m.hours}h ({m.count} sessions)
+                          </div>
+
+                          {/* Bar Column */}
+                          <div className="w-full max-w-[28px] bg-white/[0.04] rounded-lg p-0.5 flex flex-col justify-end h-full">
+                            <div
+                              style={{ height: `${heightPercent}%` }}
+                              className={`w-full rounded-md transition-all duration-300 ${
+                                hasMinutes
+                                  ? m.isCurrent
+                                    ? 'bg-nocturn-accent shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.35)]'
+                                    : 'bg-nocturn-accent/80 hover:bg-nocturn-accent'
+                                  : 'bg-white/[0.05]'
+                              }`}
+                            />
+                          </div>
+
+                          {/* Month Label */}
+                          <span
+                            className={`text-[10px] block font-medium truncate pt-0.5 ${
+                              m.isCurrent ? 'text-nocturn-accent font-bold' : 'text-nocturn-muted'
+                            }`}
+                          >
+                            {m.label}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
-          )}
-
-          {stats.periodSessionsCount === 0 && stats.periodTasksCount === 0 && (
-            <p className="text-center text-xs text-nocturn-muted py-2">
-              No focus activity recorded for this period.
-            </p>
           )}
         </Card>
       </section>

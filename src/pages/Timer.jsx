@@ -135,6 +135,8 @@ export default function Timer() {
               totalSeconds={totalSeconds}
               modeLabel={modeLabel}
               isRunning={isRunning}
+              isPaused={isPaused}
+              isCompleted={mode === 'completed' || remainingSeconds === 0}
             />
           </div>
 

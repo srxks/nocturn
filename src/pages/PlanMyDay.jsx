@@ -21,10 +21,12 @@ import {
 } from 'lucide-react'
 import { useTasks } from '../context/useTasks'
 import { useTimerSession } from '../context/useTimerSession'
+import { useToast } from '../context/useToast'
 import { generateDailyPlan } from '../services/geminiPlannerService'
 import { savePlanSchedule, getPlanSchedule } from '../services/plannerPersistenceService'
 import { formatDateKey } from '../services/calendarService'
 import { Modal } from '../components/ui/Modal'
+import { Skeleton } from '../components/ui/Skeleton'
 import FlowingLines from '../components/common/FlowingLines'
 
 const EXAMPLE_PROMPTS = [
@@ -37,8 +39,10 @@ export default function PlanMyDay() {
   const navigate = useNavigate()
   const { tasks, addTask, toggleTask, deleteTask } = useTasks()
   const { startPlanSession, isRunning, taskName, terminateTimer, justCompletedBlockId } = useTimerSession()
+  const { addToast } = useToast()
 
   const [prompt, setPrompt] = useState('')
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
   const [errorMsg, setErrorMsg] = useState(null)
   const [plan, setPlan] = useState(null)
@@ -77,33 +81,40 @@ export default function PlanMyDay() {
   // Load persisted plan on mount
   useEffect(() => {
     let isMounted = true
-    getPlanSchedule(todayKey).then((saved) => {
-      if (!isMounted || !saved) return
-      if (saved.blocks && saved.blocks.length > 0) {
-        const rt = saved.recommendedTimer || {
-          focusDuration: 50,
-          shortBreakDuration: 10,
-          longBreakDuration: 20,
-          sessions: 4,
+    getPlanSchedule(todayKey)
+      .then((saved) => {
+        if (!isMounted || !saved) return
+        if (saved.blocks && saved.blocks.length > 0) {
+          const rt = saved.recommendedTimer || {
+            focusDuration: 50,
+            shortBreakDuration: 10,
+            longBreakDuration: 20,
+            sessions: 4,
+          }
+          setPlan({
+            summary: saved.summary || 'Your custom daily schedule.',
+            recommendedTimer: rt,
+            blocks: saved.blocks,
+            suggestedNewTasks: saved.suggestedNewTasks || [],
+          })
+          if (rt.focusDuration) setCustomFocusDuration(Number(rt.focusDuration) || 50)
+          if (rt.shortBreakDuration) setCustomBreakDuration(Number(rt.shortBreakDuration) || 10)
+          if (rt.longBreakDuration) setCustomLongBreakDuration(Number(rt.longBreakDuration) || 20)
+          if (rt.sessions) setCustomSessions(Number(rt.sessions) || 4)
         }
-        setPlan({
-          summary: saved.summary || 'Your custom daily schedule.',
-          recommendedTimer: rt,
-          blocks: saved.blocks,
-          suggestedNewTasks: saved.suggestedNewTasks || [],
-        })
-        if (rt.focusDuration) setCustomFocusDuration(Number(rt.focusDuration) || 50)
-        if (rt.shortBreakDuration) setCustomBreakDuration(Number(rt.shortBreakDuration) || 10)
-        if (rt.longBreakDuration) setCustomLongBreakDuration(Number(rt.longBreakDuration) || 20)
-        if (rt.sessions) setCustomSessions(Number(rt.sessions) || 4)
-      }
-      if (saved.userInstruction) {
-        setPrompt(saved.userInstruction)
-      }
-      if (Array.isArray(saved.appliedTaskTitles)) {
-        setAppliedTaskTitles(new Set(saved.appliedTaskTitles))
-      }
-    })
+        if (saved.userInstruction) {
+          setPrompt(saved.userInstruction)
+        }
+        if (Array.isArray(saved.appliedTaskTitles)) {
+          setAppliedTaskTitles(new Set(saved.appliedTaskTitles))
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load saved plan schedule:', err)
+      })
+      .finally(() => {
+        if (isMounted) setIsInitialLoading(false)
+      })
     return () => {
       isMounted = false
     }
@@ -148,6 +159,12 @@ export default function PlanMyDay() {
   const handleConfirmReplacePlan = async () => {
     setShowReplaceModal(false)
 
+    // Snapshot current plan and active plan-generated tasks for undo
+    const previousPlanSnapshot = plan ? JSON.parse(JSON.stringify(plan)) : null
+    const previousTasksSnapshot = (tasks || [])
+      .filter((t) => t.source === 'plan_generated' && !t.completed)
+      .map((t) => ({ ...t }))
+
     // 1. Keep completed focus blocks
     const completedBlocks = (plan?.blocks || []).filter((b) => b.completed)
 
@@ -165,6 +182,37 @@ export default function PlanMyDay() {
 
     // 3. Generate new plan
     await executePlanGeneration(completedBlocks)
+
+    if (previousPlanSnapshot) {
+      addToast('Schedule updated with new plan', {
+        type: 'info',
+        duration: 7000,
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            try {
+              setPlan(previousPlanSnapshot)
+              await savePlanSchedule(previousPlanSnapshot)
+              for (const pt of previousTasksSnapshot) {
+                await addTask(
+                  pt.title,
+                  pt.category || 'tasks',
+                  pt.due_date || todayKey,
+                  pt.priority || 'medium',
+                  pt.completed || false,
+                  pt.my_day !== undefined ? pt.my_day : true,
+                  'plan_generated'
+                )
+              }
+              addToast('Previous plan restored', 'success')
+            } catch (err) {
+              console.error('Failed to restore previous plan:', err)
+              addToast('Could not restore previous plan', 'error')
+            }
+          },
+        },
+      })
+    }
   }
 
   // Core generation execution
@@ -255,11 +303,33 @@ export default function PlanMyDay() {
   }
 
   const handleDeleteBlock = async (blockId) => {
+    const blockToDelete = (plan?.blocks || []).find((b) => b.id === blockId)
     const updatedBlocks = (plan?.blocks || []).filter((b) => b.id !== blockId)
     const updatedPlan = { ...plan, blocks: updatedBlocks }
     setPlan(updatedPlan)
     setEditingBlock(null)
     await savePlanSchedule(updatedPlan).catch(console.error)
+
+    if (blockToDelete) {
+      addToast(`Removed "${blockToDelete.title || blockToDelete.taskTitle || 'Block'}"`, {
+        type: 'info',
+        duration: 5000,
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            const restoredBlocks = [...(updatedPlan.blocks || []), blockToDelete].sort((a, b) => {
+              const [ha, ma] = (a.startTime || '00:00').split(':').map(Number)
+              const [hb, mb] = (b.startTime || '00:00').split(':').map(Number)
+              return ha * 60 + ma - (hb * 60 + mb)
+            })
+            const restoredPlan = { ...updatedPlan, blocks: restoredBlocks }
+            setPlan(restoredPlan)
+            await savePlanSchedule(restoredPlan).catch(console.error)
+            addToast('Block restored', 'success')
+          },
+        },
+      })
+    }
   }
 
   const handleAddNewBlock = async () => {
@@ -576,6 +646,34 @@ export default function PlanMyDay() {
         <div className="p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-2.5">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{feedbackMsg}</span>
+        </div>
+      )}
+
+      {/* Initial Loading Skeleton */}
+      {isInitialLoading && (
+        <div className="space-y-4 pt-2" aria-label="Loading your schedule...">
+          <div className="nocturn-card p-5 border border-nocturn-border space-y-3">
+            <Skeleton className="h-3 w-28 rounded-md" />
+            <Skeleton className="h-5 w-4/5 rounded-md" />
+            <Skeleton className="h-12 w-full rounded-xl opacity-60" />
+          </div>
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div
+                key={i}
+                className="p-4 rounded-xl border border-nocturn-border/60 bg-nocturn-card/40 flex items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-3">
+                  <Skeleton className="w-12 h-6 rounded-md shrink-0" />
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-4 w-40 rounded-md" />
+                    <Skeleton className="h-3 w-20 rounded-md opacity-60" />
+                  </div>
+                </div>
+                <Skeleton className="w-16 h-8 rounded-lg shrink-0 opacity-50" />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
