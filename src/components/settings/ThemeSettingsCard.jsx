@@ -455,10 +455,10 @@ export default function ThemeSettingsCard() {
           <div className="w-full max-w-sm p-5 rounded-2xl bg-nocturn-card border border-nocturn-border space-y-4 shadow-2xl">
             <div className="flex items-center gap-3 text-nocturn-accent">
               <RotateCcw className="w-6 h-6 stroke-[2]" />
-              <h3 className="text-base font-bold text-white">Reset to Nocturn Green?</h3>
+              <h3 className="text-base font-bold text-white">Reset to Default Theme?</h3>
             </div>
             <p className="text-xs text-nocturn-muted leading-relaxed">
-              This will restore the active theme back to standard Nocturn Green. Your saved themes will remain safe.
+              This will restore the active theme back to Nocturn Obsidian. Your saved themes will remain safe.
             </p>
             <div className="flex items-center justify-end gap-2 pt-2">
               <button

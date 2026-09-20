@@ -29,6 +29,16 @@
   --color-nocturn-accent-rgb: 99, 102, 241;
 }
 
+html {
+  font-size: 15px;
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 15.5px;
+  }
+}
+
 html,
 body {
   margin: 0;

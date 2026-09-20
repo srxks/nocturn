@@ -23,7 +23,7 @@ const PRIMARY_MOBILE_ITEMS = [
     icon: Sun,
     isActive: (pathname, search = '') =>
       pathname.startsWith('/tasks') &&
-      (search.includes('view=myday') || (!search.includes('view=all') && !search.includes('view=completed'))),
+      (search.includes('view=myday') || (!search.includes('view=all') && !search.includes('view=completed') && !search.includes('view=list') && !search.includes('list='))),
   },
   {
     id: 'tasks',
@@ -31,7 +31,8 @@ const PRIMARY_MOBILE_ITEMS = [
     path: '/tasks?view=all',
     icon: CheckSquare,
     isActive: (pathname, search = '') =>
-      pathname.startsWith('/tasks') && search.includes('view=all'),
+      pathname.startsWith('/tasks') &&
+      (search.includes('view=all') || search.includes('view=completed') || search.includes('view=list') || search.includes('list=')),
   },
   {
     id: 'plan',

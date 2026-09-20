@@ -7,7 +7,8 @@ export const NAV_ITEMS = [
     path: '/tasks?view=myday',
     icon: Sun,
     isActive: (pathname, search = '') =>
-      pathname.startsWith('/tasks') && (search.includes('view=myday') || (!search.includes('view=all') && !search.includes('view=completed'))),
+      pathname.startsWith('/tasks') &&
+      (search.includes('view=myday') || (!search.includes('view=all') && !search.includes('view=completed') && !search.includes('view=list') && !search.includes('list='))),
   },
   {
     id: 'tasks',
@@ -15,7 +16,8 @@ export const NAV_ITEMS = [
     path: '/tasks?view=all',
     icon: CheckSquare,
     isActive: (pathname, search = '') =>
-      pathname.startsWith('/tasks') && search.includes('view=all'),
+      pathname.startsWith('/tasks') &&
+      (search.includes('view=all') || search.includes('view=completed') || search.includes('view=list') || search.includes('list=')),
   },
   {
     id: 'calendar',

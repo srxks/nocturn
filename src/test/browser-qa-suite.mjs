@@ -383,9 +383,186 @@ async function runBrowserQA() {
     await page.setViewport({ width: 1280, height: 800, isMobile: false })
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Phase 8: Offline Recovery Simulation
+    // Phase 8: Tasks Navigation & Bidirectional URL Synchronization
     // ──────────────────────────────────────────────────────────────────────────
-    console.log('\n--- Phase 8: Offline / Reconnect Simulation ---')
+    console.log('\n--- Phase 8: Tasks View Navigation & URL Sync ---')
+    await page.goto(`${BASE_URL}/tasks?view=myday`, { waitUntil: 'networkidle2' })
+    await new Promise((r) => setTimeout(r, 600))
+    assert('Initial URL contains view=myday', page.url().includes('view=myday'))
+
+    // Switch to "All" view
+    const allNavBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('button'))
+      return btns.find((b) => b.innerText && b.innerText.trim().startsWith('All'))
+    })
+    if (allNavBtn && allNavBtn.asElement()) {
+      await allNavBtn.asElement().click()
+      await new Promise((r) => setTimeout(r, 400))
+      assert('Clicking All view updates URL to view=all', page.url().includes('view=all'))
+      const headerText = await page.evaluate(() => document.querySelector('h1')?.innerText || '')
+      assert('All view renders All Tasks title', headerText.toLowerCase().includes('all'))
+    } else {
+      assert('Found All navigation button', false)
+    }
+
+    // Switch to "Completed" view
+    const completedNavBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('button'))
+      return btns.find((b) => b.innerText && b.innerText.trim().startsWith('Completed'))
+    })
+    if (completedNavBtn && completedNavBtn.asElement()) {
+      await completedNavBtn.asElement().click()
+      await new Promise((r) => setTimeout(r, 400))
+      assert('Clicking Completed view updates URL to view=completed', page.url().includes('view=completed'))
+      const headerText = await page.evaluate(() => document.querySelector('h1')?.innerText || '')
+      assert('Completed view renders Completed Tasks title', headerText.toLowerCase().includes('completed'))
+    } else {
+      assert('Found Completed navigation button', false)
+    }
+
+    // Switch back to "My Day" view
+    const myDayNavBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('button'))
+      return btns.find((b) => b.innerText && b.innerText.trim().startsWith('My Day'))
+    })
+    if (myDayNavBtn && myDayNavBtn.asElement()) {
+      await myDayNavBtn.asElement().click()
+      await new Promise((r) => setTimeout(r, 400))
+      assert('Clicking My Day view updates URL to view=myday', page.url().includes('view=myday'))
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Phase 9: Settings Content Resilience & Preset Themes
+    // ──────────────────────────────────────────────────────────────────────────
+    console.log('\n--- Phase 9: Settings Content Resilience & Preset Themes ---')
+    await page.goto(`${BASE_URL}/settings`, { waitUntil: 'networkidle2' })
+    await new Promise((r) => setTimeout(r, 600))
+
+    const settingsCategories = [
+      { name: 'Appearance', expectedKeyword: 'theme' },
+      { name: 'Timer', expectedKeyword: 'focus' },
+      { name: 'Notifications', expectedKeyword: 'notification' },
+      { name: 'Account', expectedKeyword: 'account' },
+    ]
+
+    for (const cat of settingsCategories) {
+      const tabBtn = await page.evaluateHandle((tabName) => {
+        const btns = Array.from(document.querySelectorAll('button'))
+        return btns.find((b) => b.innerText && b.innerText.toLowerCase().includes(tabName.toLowerCase()))
+      }, cat.name)
+
+      if (tabBtn && tabBtn.asElement()) {
+        await tabBtn.asElement().click()
+        await new Promise((r) => setTimeout(r, 350))
+        const bodyContent = await page.evaluate(() => document.body.innerText.toLowerCase())
+        assert(`Settings ${cat.name} tab content is not blank`, bodyContent.length > 80)
+        assert(`Settings ${cat.name} renders expected section: "${cat.expectedKeyword}"`, bodyContent.includes(cat.expectedKeyword.toLowerCase()))
+      }
+    }
+
+    // Explicitly navigate to Appearance tab to check Theme Presets
+    await page.goto(`${BASE_URL}/settings?tab=appearance`, { waitUntil: 'networkidle2' })
+    await new Promise((r) => setTimeout(r, 400))
+    const presetButtonsCount = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button'))
+      return buttons.filter((b) => {
+        const text = b.innerText || ''
+        return text.includes('Nocturn') || text.includes('Midnight') || text.includes('Slate') || text.includes('Frost') || text.includes('Aurora') || text.includes('Rosewood') || text.includes('Monochrome')
+      }).length
+    })
+    assert('Settings Appearance displays expanded preset theme grid (>= 5 preset buttons)', presetButtonsCount >= 5, `Found ${presetButtonsCount}`)
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Phase 10: Notification Center Alignment & Escape Dismissal
+    // ──────────────────────────────────────────────────────────────────────────
+    console.log('\n--- Phase 10: Notification Center Alignment & Dismissal ---')
+    await page.goto(`${BASE_URL}/tasks?view=myday`, { waitUntil: 'networkidle2' })
+    await new Promise((r) => setTimeout(r, 500))
+
+    const bellBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('button'))
+      return btns.find((b) => (b.getAttribute('aria-label') || '').toLowerCase().includes('notification') || b.querySelector('svg.lucide-bell'))
+    })
+
+    if (bellBtn && bellBtn.asElement()) {
+      await bellBtn.asElement().click()
+      await new Promise((r) => setTimeout(r, 400))
+
+      const panelBounds = await page.evaluate(() => {
+        const panel = document.querySelector('[role="region"][aria-label="Notification Center"]')
+        if (!panel) {
+          const panels = Array.from(document.querySelectorAll('div'))
+          const found = panels.find((p) => p.innerText && p.innerText.includes('Notifications') && p.querySelector('h3'))
+          if (!found) return null
+          const rect = found.getBoundingClientRect()
+          return {
+            left: rect.left,
+            right: rect.right,
+            width: rect.width,
+            inViewport: rect.left >= 0 && rect.right <= window.innerWidth + 20,
+          }
+        }
+        const rect = panel.getBoundingClientRect()
+        return {
+          left: rect.left,
+          right: rect.right,
+          width: rect.width,
+          inViewport: rect.left >= 0 && rect.right <= window.innerWidth + 20,
+        }
+      })
+
+      assert('Notification Center opened and within viewport bounds', Boolean(panelBounds && panelBounds.inViewport), JSON.stringify(panelBounds))
+
+      // Test Escape dismissal
+      await page.keyboard.press('Escape')
+      await new Promise((r) => setTimeout(r, 300))
+
+      const isClosedAfterEscape = await page.evaluate(() => {
+        const panel = document.querySelector('[role="region"][aria-label="Notification Center"]')
+        return !panel || panel.offsetParent === null
+      })
+      assert('Notification Center dismisses cleanly on Escape key press', isClosedAfterEscape)
+    } else {
+      assert('Found Notification Center trigger button', false)
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Phase 11: Onboarding Guarding & Full Viewport
+    // ──────────────────────────────────────────────────────────────────────────
+    console.log('\n--- Phase 11: Onboarding Guarding & Full Viewport ---')
+    // 1. Root redirect guard: Visiting "/" when already onboarded must redirect to tasks
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle2' })
+    await new Promise((r) => setTimeout(r, 600))
+    assert('Root path "/" redirects to /tasks?view=myday when session active', page.url().includes('/tasks'))
+
+    // 2. Replay Onboarding: Visiting with ?replay=true renders full-viewport onboarding
+    await page.goto(`${BASE_URL}/onboarding?replay=true`, { waitUntil: 'networkidle2' })
+    await new Promise((r) => setTimeout(r, 600))
+    const onboardingText = await page.evaluate(() => document.body.innerText)
+    assert('Onboarding welcome screen renders with ?replay=true', onboardingText.includes('Welcome') && onboardingText.includes('Manage your tasks'))
+
+    // Check full viewport container
+    const isFullViewport = await page.evaluate(() => {
+      const rootDiv = document.querySelector('div.min-h-screen')
+      return rootDiv && rootDiv.clientHeight >= window.innerHeight - 10
+    })
+    assert('Onboarding fills the entire viewport without tiny card clipping', Boolean(isFullViewport))
+
+    // Click Close/Skip on onboarding
+    const closeBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('button'))
+      return btns.find((b) => b.innerText === 'Close' || b.innerText === 'Skip')
+    })
+    if (closeBtn && closeBtn.asElement()) {
+      await closeBtn.asElement().click()
+      await new Promise((r) => setTimeout(r, 500))
+      assert('Closing onboarding redirects back to tasks', page.url().includes('/tasks'))
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Phase 12: Offline Recovery Simulation
+    // ──────────────────────────────────────────────────────────────────────────
+    console.log('\n--- Phase 12: Offline / Reconnect Simulation ---')
     await page.setOfflineMode(true)
     await page.goto(`${BASE_URL}/tasks?view=myday`, { waitUntil: 'networkidle2' }).catch(() => {})
     await new Promise((r) => setTimeout(r, 500))

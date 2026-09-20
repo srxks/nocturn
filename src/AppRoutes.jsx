@@ -14,12 +14,30 @@ import VocabLearn from './pages/VocabLearn'
 import VocabReview from './pages/VocabReview'
 import VocabList from './pages/VocabList'
 import ProtectedRoute from './components/auth/ProtectedRoute'
+import { useAuth } from './context/useAuth'
+
+function RootRedirect() {
+  const { user, isGuest, loading } = useAuth()
+  const onboardingDone =
+    typeof window !== 'undefined' &&
+    window.localStorage.getItem('nocturn_onboarding_completed') === 'true'
+
+  if (loading) {
+    return null
+  }
+
+  if (user || isGuest || onboardingDone) {
+    return <Navigate to="/tasks?view=myday" replace />
+  }
+
+  return <Navigate to="/onboarding" replace />
+}
 
 function AppRoutes() {
   return (
     <Routes>
-      {/* Root redirects to /onboarding */}
-      <Route path="/" element={<Navigate to="/onboarding" replace />} />
+      {/* Root redirect: if already onboarded or logged in, go straight to Tasks My Day */}
+      <Route path="/" element={<RootRedirect />} />
 
       {/* Standalone Onboarding & Auth routes */}
       <Route path="/onboarding" element={<Onboarding />} />
@@ -49,7 +67,7 @@ function AppRoutes() {
       </Route>
 
       {/* Catch-all route */}
-      <Route path="*" element={<Navigate to="/onboarding" replace />} />
+      <Route path="*" element={<RootRedirect />} />
     </Routes>
   )
 }

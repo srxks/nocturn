@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Sun,
   ListTodo,
@@ -13,7 +14,7 @@ import {
 } from 'lucide-react'
 import { useTasks } from '../../context/useTasks'
 
-export default function TaskListNav() {
+export default function TaskListNav({ onSelectView }) {
   const {
     lists,
     activeListId,
@@ -23,6 +24,24 @@ export default function TaskListNav() {
     renameList,
     deleteList,
   } = useTasks()
+  const [, setSearchParams] = useSearchParams()
+
+  const handleSelect = (viewId) => {
+    if (onSelectView) {
+      onSelectView(viewId)
+      return
+    }
+    setActiveListId(viewId)
+    if (viewId === 'my-day') {
+      setSearchParams({ view: 'myday' }, { replace: true })
+    } else if (viewId === 'all') {
+      setSearchParams({ view: 'all' }, { replace: true })
+    } else if (viewId === 'completed') {
+      setSearchParams({ view: 'completed' }, { replace: true })
+    } else {
+      setSearchParams({ view: 'list', list: viewId }, { replace: true })
+    }
+  }
 
   const [isAddingList, setIsAddingList] = useState(false)
   const [newListTitle, setNewListTitle] = useState('')
@@ -76,7 +95,7 @@ export default function TaskListNav() {
               <button
                 key={view.id}
                 type="button"
-                onClick={() => setActiveListId(view.id)}
+                onClick={() => handleSelect(view.id)}
                 className={`flex-1 sm:flex-none flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-150 cursor-pointer shrink-0 ${
                   active
                     ? 'bg-nocturn-accent/12 text-white font-medium border border-nocturn-accent/25 shadow-sm'
@@ -164,7 +183,7 @@ export default function TaskListNav() {
                   <>
                     <button
                       type="button"
-                      onClick={() => setActiveListId(list.id)}
+                      onClick={() => handleSelect(list.id)}
                       className="flex-1 flex items-center gap-2.5 text-left truncate cursor-pointer py-1"
                     >
                       <CheckSquare className="w-4 h-4 stroke-[2] shrink-0 text-nocturn-accent/80" />

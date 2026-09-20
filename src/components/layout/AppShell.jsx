@@ -8,6 +8,7 @@ import CommandPaletteModal from '../common/CommandPaletteModal'
 import ShortcutsHelpModal from '../common/ShortcutsHelpModal'
 import NotificationBell from '../common/NotificationBell'
 import SyncStatusIndicator from '../common/SyncStatusIndicator'
+import RouteErrorBoundary from '../common/RouteErrorBoundary'
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts'
 
 export default function AppShell() {
@@ -60,7 +61,9 @@ export default function AppShell() {
             transition={{ duration: 0.12, ease: 'easeOut' }}
             className="w-full flex-1 flex flex-col"
           >
-            <Outlet />
+            <RouteErrorBoundary>
+              <Outlet />
+            </RouteErrorBoundary>
           </motion.div>
         </main>
       </div>

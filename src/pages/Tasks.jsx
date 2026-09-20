@@ -15,8 +15,9 @@ import { formatDateKey } from '../services/calendarService'
 import { Sun, ListTodo, CheckCircle2, CheckSquare, Sparkles, ChevronDown, Plus } from 'lucide-react'
 
 export default function Tasks() {
-  const [searchParams] = useSearchParams()
-  const viewParam = searchParams.get('view')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const rawView = searchParams.get('view')
+  const listParam = searchParams.get('list')
 
   const {
     isLoading,
@@ -39,14 +40,36 @@ export default function Tasks() {
   const [isCompletedOpen, setIsCompletedOpen] = useState(false)
   const [isMobileQuickAddOpen, setIsMobileQuickAddOpen] = useState(false)
 
-  // Sync route query parameter ?view=myday or ?view=all with activeListId
+  // Resolve target list ID from URL query parameters
+  const targetIdFromUrl = useMemo(() => {
+    if (listParam) return listParam
+    if (rawView === 'myday' || rawView === 'my-day') return 'my-day'
+    if (rawView === 'all') return 'all'
+    if (rawView === 'completed') return 'completed'
+    if (rawView) return rawView
+    return null
+  }, [rawView, listParam])
+
+  // Sync from URL to activeListId
   useEffect(() => {
-    if (viewParam === 'myday' && activeListId !== 'my-day') {
-      setActiveListId('my-day')
-    } else if (viewParam === 'all' && activeListId !== 'all') {
-      setActiveListId('all')
+    if (targetIdFromUrl && targetIdFromUrl !== activeListId) {
+      setActiveListId(targetIdFromUrl)
     }
-  }, [viewParam, activeListId, setActiveListId])
+  }, [targetIdFromUrl, activeListId, setActiveListId])
+
+  // Centralized view switcher that updates both context state and URL query params
+  const handleSelectView = (viewId) => {
+    setActiveListId(viewId)
+    if (viewId === 'my-day') {
+      setSearchParams({ view: 'myday' }, { replace: true })
+    } else if (viewId === 'all') {
+      setSearchParams({ view: 'all' }, { replace: true })
+    } else if (viewId === 'completed') {
+      setSearchParams({ view: 'completed' }, { replace: true })
+    } else {
+      setSearchParams({ view: 'list', list: viewId }, { replace: true })
+    }
+  }
 
   const todayKey = formatDateKey(new Date())
   const tomorrowDate = new Date()
@@ -211,7 +234,7 @@ export default function Tasks() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
         {/* Left Navigation */}
         <div className="lg:col-span-3 xl:col-span-3 bg-nocturn-card/60 p-3.5 sm:p-4 rounded-2xl border border-nocturn-border/80">
-          <TaskListNav />
+          <TaskListNav onSelectView={handleSelectView} />
         </div>
 
         {/* Right Tasks Content - Fixed Stationary Width */}
@@ -244,6 +267,7 @@ export default function Tasks() {
             </div>
           ) : filteredTasks.length === 0 ? (
             <EmptyTasks
+              activeListId={activeListId}
               onAddTask={() => {
                 const input = document.querySelector('input[placeholder*="Add a task"], input[type="text"]')
                 if (input && window.innerWidth >= 640) {
@@ -255,15 +279,39 @@ export default function Tasks() {
             />
           ) : (
             <div className="space-y-6">
-              {/* Active Tasks Group */}
-              {isMyDay ? (
+              {/* Completed View: Display all completed tasks directly */}
+              {activeListId === 'completed' ? (
+                <div className="space-y-2.5">
+                  <AnimatePresence mode="popLayout">
+                    {completedTasks.map((task) => (
+                      <motion.div
+                        key={task.id}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.98, y: -2 }}
+                        transition={{ duration: 0.15, ease: 'easeOut' }}
+                      >
+                        <TaskItemRow
+                          task={task}
+                          lists={lists}
+                          onToggleComplete={toggleTask}
+                          onToggleStar={toggleStar}
+                          onSelectTask={setSelectedTask}
+                          onDeleteTask={deleteTask}
+                          isSelected={selectedTask?.id === task.id}
+                        />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              ) : isMyDay ? (
                 <div className="space-y-6">
                   {/* OVERDUE Section */}
                   {overdueTasks.length > 0 && (
                     <div className="space-y-2.5">
                       <div className="flex items-center gap-2 text-xs font-semibold text-rose-400 uppercase tracking-wider px-1">
                         <span>Overdue</span>
-                        <span className="px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-300 text-[10px] font-mono border border-rose-500/30">
+                        <span className="px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-400 text-[10px] font-mono border border-rose-500/25">
                           {overdueTasks.length}
                         </span>
                       </div>
@@ -294,9 +342,9 @@ export default function Tasks() {
                   {/* DUE TODAY Section */}
                   {dueTodayTasks.length > 0 && (
                     <div className="space-y-2.5">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-nocturn-accent-bright uppercase tracking-wider px-1">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-nocturn-accent uppercase tracking-wider px-1">
                         <span>Due Today</span>
-                        <span className="px-1.5 py-0.2 rounded-full bg-nocturn-accent/15 text-nocturn-accent-bright text-[10px] font-mono border border-nocturn-accent/30">
+                        <span className="px-1.5 py-0.2 rounded-full bg-nocturn-accent/15 text-nocturn-accent-bright text-[10px] font-mono border border-nocturn-accent/25">
                           {dueTodayTasks.length}
                         </span>
                       </div>
@@ -385,8 +433,8 @@ export default function Tasks() {
                 )
               )}
 
-              {/* Completed Tasks Group (Collapsible) */}
-              {completedTasks.length > 0 && (
+              {/* Completed Tasks Group (Collapsible for non-completed views) */}
+              {activeListId !== 'completed' && completedTasks.length > 0 && (
                 <div className="space-y-3 pt-2">
                   <button
                     type="button"

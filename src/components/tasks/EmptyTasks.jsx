@@ -2,17 +2,33 @@ import { CheckCircle2 } from 'lucide-react'
 import { EmptyState } from '../ui/EmptyState'
 import FlowingLines from '../common/FlowingLines'
 
-export default function EmptyTasks({ onAddTask }) {
+export default function EmptyTasks({ onAddTask, title, description, activeListId }) {
+  const resolvedTitle =
+    title ||
+    (activeListId === 'completed'
+      ? 'No completed tasks yet'
+      : activeListId === 'my-day'
+      ? 'Nothing scheduled for today'
+      : 'No tasks in this view')
+
+  const resolvedDescription =
+    description ||
+    (activeListId === 'completed'
+      ? 'Completed items and finished focus blocks will appear here.'
+      : activeListId === 'my-day'
+      ? 'Add something you want to accomplish today to get started.'
+      : 'Add a new task or select another list to get started.')
+
   return (
     <div className="relative overflow-hidden bg-nocturn-card/60 border border-nocturn-border rounded-2xl my-4">
       <FlowingLines variant="corner" opacity={0.15} />
       <div className="relative z-10">
         <EmptyState
           icon={CheckCircle2}
-          title="Nothing scheduled"
-          description="Add something you want to accomplish today to get started."
+          title={resolvedTitle}
+          description={resolvedDescription}
           action={
-            onAddTask ? (
+            onAddTask && activeListId !== 'completed' ? (
               <button
                 type="button"
                 onClick={onAddTask}

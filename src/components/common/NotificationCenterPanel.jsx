@@ -105,6 +105,18 @@ export default function NotificationCenterPanel({ isOpen, onClose }) {
     window.dispatchEvent(new Event('nocturn:notifications-updated'))
   }
 
+  // Handle Escape key to close
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -112,25 +124,27 @@ export default function NotificationCenterPanel({ isOpen, onClose }) {
           {/* Backdrop on mobile */}
           <div
             onClick={onClose}
-            className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
             aria-hidden="true"
           />
 
-          {/* Popover Panel */}
+          {/* Popover Panel - Fully responsive across mobile, tablet, and desktop */}
           <motion.div
+            role="region"
+            aria-label="Notification Center"
             initial={{ opacity: 0, y: 8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.97 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="absolute left-4 right-4 sm:left-auto sm:right-0 top-full mt-2 sm:w-80 md:w-96 bg-nocturn-card/95 border border-nocturn-border rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.75)] backdrop-blur-xl z-50 overflow-hidden flex flex-col max-h-[440px]"
+            className="fixed inset-x-3 top-14 sm:inset-x-auto sm:absolute sm:top-full sm:mt-2 sm:right-0 lg:right-auto lg:left-0 w-auto sm:w-84 md:w-92 max-w-[calc(100vw-1.5rem)] bg-nocturn-card/95 border border-nocturn-border rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] backdrop-blur-2xl z-50 overflow-hidden flex flex-col max-h-[75vh] sm:max-h-[460px]"
           >
             {/* Header */}
             <div className="px-4 py-3 border-b border-nocturn-border/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4 text-nocturn-accent" />
-                <span className="text-xs sm:text-sm font-semibold text-white">
+                <h3 className="text-xs sm:text-sm font-semibold text-white">
                   Notifications
-                </span>
+                </h3>
                 {activeItems.length > 0 && (
                   <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-nocturn-accent/20 text-nocturn-accent border border-nocturn-accent/30 font-semibold">
                     {activeItems.length}

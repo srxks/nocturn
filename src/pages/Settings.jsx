@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Palette,
   Timer,
@@ -10,6 +10,9 @@ import {
   ListTodo,
   Info,
   ArrowRight,
+  Bell,
+  User,
+  LogOut,
 } from 'lucide-react'
 import PreferenceCard from '../components/settings/PreferenceCard'
 import UiStyleSettingsCard from '../components/settings/UiStyleSettingsCard'
@@ -21,23 +24,51 @@ import SyncDiagnosticsCard from '../components/settings/SyncDiagnosticsCard'
 import DataManagementCard from '../components/settings/DataManagementCard'
 import NotificationSettingsCard from '../components/settings/NotificationSettingsCard'
 import { Card, Badge, Button, Tabs } from '../components/ui'
+import { useAuth } from '../context/useAuth'
+
+const VALID_TABS = ['all', 'appearance', 'focus', 'notifications', 'sync', 'account', 'data']
+
+function normalizeTab(raw) {
+  if (!raw) return 'all'
+  const lower = String(raw).toLowerCase().trim()
+  if (lower === 'theme' || lower === 'themes') return 'appearance'
+  if (lower === 'timer' || lower === 'focus' || lower === 'learning') return 'focus'
+  if (lower === 'notif' || lower === 'notifications' || lower === 'sound' || lower === 'sounds') return 'notifications'
+  if (lower === 'cloud' || lower === 'sync') return 'sync'
+  if (lower === 'account' || lower === 'profile' || lower === 'user') return 'account'
+  if (lower === 'data' || lower === 'backup' || lower === 'integrations') return 'data'
+  if (VALID_TABS.includes(lower)) return lower
+  return 'all'
+}
 
 export default function Settings() {
   const navigate = useNavigate()
-  const [activeCategory, setActiveCategory] = useState('all')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { user, signOut } = useAuth()
+
+  const rawTab = searchParams.get('tab') || searchParams.get('category')
+  const activeCategory = useMemo(() => normalizeTab(rawTab), [rawTab])
+
+  const handleTabChange = (newTab) => {
+    setSearchParams(newTab === 'all' ? {} : { tab: newTab }, { replace: true })
+  }
 
   const categoryTabs = [
     { id: 'all', label: 'All', icon: Sliders },
     { id: 'appearance', label: 'Appearance', icon: Palette },
-    { id: 'focus', label: 'Focus & Learning', icon: Timer },
+    { id: 'focus', label: 'Focus & Timer', icon: Timer },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'sync', label: 'Cloud & Sync', icon: RefreshCw },
-    { id: 'data', label: 'Data & Integrations', icon: Database },
+    { id: 'account', label: 'Account', icon: User },
+    { id: 'data', label: 'Data & Backup', icon: Database },
   ]
 
   const showAll = activeCategory === 'all'
   const showAppearance = showAll || activeCategory === 'appearance'
   const showFocus = showAll || activeCategory === 'focus'
+  const showNotifications = showAll || activeCategory === 'notifications'
   const showSync = showAll || activeCategory === 'sync'
+  const showAccount = showAll || activeCategory === 'account'
   const showData = showAll || activeCategory === 'data'
 
   return (
@@ -63,7 +94,7 @@ export default function Settings() {
           <Tabs
             tabs={categoryTabs}
             activeTab={activeCategory}
-            onChange={setActiveCategory}
+            onChange={handleTabChange}
             size="sm"
           />
         </div>
@@ -84,12 +115,12 @@ export default function Settings() {
         </section>
       )}
 
-      {/* 2. Focus & Learning Section */}
+      {/* 2. Focus & Timer Section */}
       {showFocus && (
         <section className="space-y-5">
           <div className="border-b border-white/[0.06] pb-2">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-nocturn-muted">
-              Focus & Learning
+              Focus & Timer
             </h2>
           </div>
 
@@ -120,12 +151,24 @@ export default function Settings() {
             </Button>
           </Card>
 
-          <NotificationSettingsCard />
           <VocabSettingsCard />
         </section>
       )}
 
-      {/* 3. Cloud & Synchronization Section */}
+      {/* 3. Notifications & Audio Alerts Section */}
+      {showNotifications && (
+        <section className="space-y-5">
+          <div className="border-b border-white/[0.06] pb-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-nocturn-muted">
+              Notifications & Sound
+            </h2>
+          </div>
+
+          <NotificationSettingsCard />
+        </section>
+      )}
+
+      {/* 4. Cloud & Synchronization Section */}
       {showSync && (
         <section className="space-y-5">
           <div className="border-b border-white/[0.06] pb-2">
@@ -139,7 +182,66 @@ export default function Settings() {
         </section>
       )}
 
-      {/* 4. Data & Backups Section */}
+      {/* 5. Account & Session Section */}
+      {showAccount && (
+        <section className="space-y-5">
+          <div className="border-b border-white/[0.06] pb-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-nocturn-muted">
+              Account & Security
+            </h2>
+          </div>
+
+          <Card className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent shrink-0">
+                <User className="w-5 h-5 stroke-[2]" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm sm:text-base font-semibold text-white block">
+                    {user?.is_anonymous || !user?.email || user?.id === 'guest-local-user'
+                      ? 'Local Guest Session'
+                      : user.email}
+                  </span>
+                  <Badge variant={user?.email && !user?.is_anonymous ? 'accent' : 'neutral'} size="sm">
+                    {user?.email && !user?.is_anonymous ? 'Cloud Connected' : 'Offline / Local'}
+                  </Badge>
+                </div>
+                <span className="text-xs text-nocturn-muted block">
+                  {user?.email && !user?.is_anonymous
+                    ? 'Your preferences and tasks are securely synchronized with Supabase.'
+                    : 'Running in private offline mode. Connect an account to sync across devices.'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate('/profile')}
+                icon={ArrowRight}
+              >
+                View Profile
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  await signOut()
+                  navigate('/auth')
+                }}
+                icon={LogOut}
+                className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+              >
+                Sign Out
+              </Button>
+            </div>
+          </Card>
+        </section>
+      )}
+
+      {/* 6. Data & Backups Section */}
       {showData && (
         <section className="space-y-5">
           <div className="border-b border-white/[0.06] pb-2">

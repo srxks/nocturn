@@ -6,11 +6,16 @@ import { formatDateKey } from '../services/calendarService.js'
 
 console.log('=== RUNNING NOCTURN PRODUCT & UPGRADE VERIFICATION SUITE ===\n')
 
-// ─── Test 1: Preset Themes (Midnight Violet present, Warm Amber removed) ─────
+// ─── Test 1: Preset Themes (15 Presets, Amber & Cyber Cyan excluded) ─────────
 console.log('--- Test 1: Theme Presets Verification ---')
 {
   const amberFound = PRESET_THEMES.some((t) => t.id === 'preset-warm-amber' || t.name.toLowerCase().includes('amber'))
   assert.strictEqual(amberFound, false, 'Warm Amber preset must be completely removed from preset themes')
+
+  const cyberCyanFound = PRESET_THEMES.some((t) => t.id.includes('cyber-cyan') || t.name.toLowerCase().includes('cyber cyan'))
+  assert.strictEqual(cyberCyanFound, false, 'Cyber Cyan preset must be completely removed from preset themes')
+
+  assert.ok(PRESET_THEMES.length >= 15, `PRESET_THEMES must contain at least 15 themes (found ${PRESET_THEMES.length})`)
 
   const midnightViolet = PRESET_THEMES.find((t) => t.id === 'preset-midnight-violet')
   assert.ok(midnightViolet, 'Midnight Violet preset must exist in PRESET_THEMES')
@@ -18,7 +23,14 @@ console.log('--- Test 1: Theme Presets Verification ---')
   assert.strictEqual(midnightViolet.colors.accentGlow, '#A78BFA', 'Midnight Violet accentGlow must be #A78BFA')
   assert.strictEqual(midnightViolet.colors.background, '#0B0B12', 'Midnight Violet background must be #0B0B12')
   assert.strictEqual(midnightViolet.colors.surface, '#13131F', 'Midnight Violet surface must be #13131F')
-  console.log('✓ PASS: Warm Amber is removed and Midnight Violet preset is active with correct color hexes')
+
+  // Verify all presets have required color keys
+  for (const preset of PRESET_THEMES) {
+    assert.ok(preset.id && preset.name, `Preset must have id and name`)
+    assert.ok(preset.colors.background && preset.colors.surface && preset.colors.accent, `Preset ${preset.name} must have background, surface, and accent`)
+  }
+
+  console.log(`✓ PASS: Exactly ${PRESET_THEMES.length} distinct themes configured, Amber and Cyber Cyan removed, and all tokens verified`)
 }
 
 // ─── Test 2: Plan My Day Timetable 12-Attribute Schema ────────────────────────
