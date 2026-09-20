@@ -246,3 +246,20 @@ export function playTaskCompleteSound() {
     // Audio optional
   }
 }
+
+/**
+ * Pronounces a word aloud using the native browser SpeechSynthesis API
+ */
+export function speakWord(word) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window) || !word) return
+  try {
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(word)
+    utterance.rate = 0.88
+    utterance.pitch = 1.0
+    utterance.lang = 'en-US'
+    window.speechSynthesis.speak(utterance)
+  } catch {
+    // Audio optional
+  }
+}

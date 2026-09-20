@@ -11,10 +11,12 @@ import {
   AlertTriangle,
   Plus,
   BookOpen,
+  Volume2,
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
 import { getTodayDateKey, saveDailyVocabLog } from '../services/vocabService'
+import { speakWord } from '../services/soundService'
 import VocabWordModal from '../components/vocab/VocabWordModal'
 import { Card, Badge, Button, Progress } from '../components/ui'
 
@@ -456,11 +458,22 @@ export default function VocabLearn() {
               <span className="text-[11px] font-mono text-nocturn-muted">GRE Level</span>
             </div>
 
-            {/* Word Heading */}
-            <div>
+            {/* Word Heading & Audio Pronunciation */}
+            <div className="flex items-center gap-3">
               <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
                 {currentWord?.word}
               </h1>
+              {currentWord?.word && (
+                <button
+                  type="button"
+                  onClick={() => speakWord(currentWord.word)}
+                  title="Pronounce word"
+                  aria-label={`Pronounce ${currentWord.word}`}
+                  className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-nocturn-muted hover:text-nocturn-accent border border-white/[0.06] transition-all cursor-pointer active:scale-95 shadow-sm"
+                >
+                  <Volume2 className="w-5 h-5 stroke-[2]" />
+                </button>
+              )}
             </div>
 
             {/* Definition */}

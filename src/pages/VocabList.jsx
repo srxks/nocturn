@@ -9,9 +9,11 @@ import {
   Plus,
   Trash2,
   AlertTriangle,
+  Volume2,
 } from 'lucide-react'
 import { useVocab } from '../hooks/useVocab'
 import { getWordStatus } from '../services/vocabService'
+import { speakWord } from '../services/soundService'
 import VocabDetailModal from '../components/vocab/VocabDetailModal'
 import VocabWordModal from '../components/vocab/VocabWordModal'
 import { Card, Badge, Button, Tabs } from '../components/ui'
@@ -193,9 +195,23 @@ export default function VocabList() {
                   >
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-lg font-semibold text-white group-hover:text-nocturn-accent transition-colors">
-                          {wordItem.word}
-                        </h3>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <h3 className="text-lg font-semibold text-white group-hover:text-nocturn-accent transition-colors truncate">
+                            {wordItem.word}
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              speakWord(wordItem.word)
+                            }}
+                            title="Pronounce word"
+                            aria-label={`Pronounce ${wordItem.word}`}
+                            className="p-1 text-nocturn-muted hover:text-white rounded-md hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                          >
+                            <Volume2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
 
                         {/* Status Badge */}
                         {status === 'settled' ? (
