@@ -23,8 +23,9 @@ import { useTasks } from '../context/useTasks'
 import { useTimerSession } from '../context/useTimerSession'
 import { useToast } from '../context/useToast'
 import { generateDailyPlan } from '../services/geminiPlannerService'
-import { savePlanSchedule, getPlanSchedule } from '../services/plannerPersistenceService'
+import { savePlanSchedule, getPlanSchedule, togglePlanBlockCompleted } from '../services/plannerPersistenceService'
 import { formatDateKey } from '../services/calendarService'
+import { playTaskCompleteSound } from '../services/soundService'
 import { Modal } from '../components/ui/Modal'
 import { Skeleton } from '../components/ui/Skeleton'
 import FlowingLines from '../components/common/FlowingLines'
@@ -367,6 +368,62 @@ export default function PlanMyDay() {
     setIsAddBlockOpen(false)
     setNewBlockTitle('')
     await savePlanSchedule(updatedPlan).catch(console.error)
+  }
+
+  // Toggle completion for a task block linked to a real Task
+  const handleToggleTaskBlock = async (block) => {
+    if (!block.taskId) return
+    const taskObj = tasks.find((t) => t.id === block.taskId)
+    const willBeCompleted = taskObj ? !taskObj.completed : true
+    if (willBeCompleted) {
+      playTaskCompleteSound()
+    }
+    toggleTask(block.taskId)
+    const updatedBlocks = (plan?.blocks || []).map((b) =>
+      b.id === block.id || b.taskId === block.taskId
+        ? { ...b, completed: willBeCompleted, completedAt: willBeCompleted ? new Date().toISOString() : null }
+        : b
+    )
+    const updatedPlan = { ...plan, blocks: updatedBlocks }
+    setPlan(updatedPlan)
+    await savePlanSchedule(updatedPlan).catch(console.error)
+  }
+
+  // Toggle completion for an unlinked block (event, break, or custom block)
+  const handleToggleBlockCompletion = async (block) => {
+    if (!block || !block.id) return
+    const nextCompleted = !block.completed
+    if (nextCompleted) {
+      playTaskCompleteSound()
+    }
+    const updatedBlocks = (plan?.blocks || []).map((b) =>
+      b.id === block.id
+        ? { ...b, completed: nextCompleted, completedAt: nextCompleted ? new Date().toISOString() : null }
+        : b
+    )
+    const updatedPlan = { ...plan, blocks: updatedBlocks }
+    setPlan(updatedPlan)
+    await togglePlanBlockCompleted(block.id)
+    await savePlanSchedule(updatedPlan).catch(console.error)
+
+    if (nextCompleted) {
+      addToast(`Completed "${block.title || 'Block'}"`, {
+        type: 'success',
+        duration: 4000,
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            const revertedBlocks = (plan?.blocks || []).map((b) =>
+              b.id === block.id ? { ...b, completed: false, completedAt: null } : b
+            )
+            const revertedPlan = { ...plan, blocks: revertedBlocks }
+            setPlan(revertedPlan)
+            await togglePlanBlockCompleted(block.id)
+            await savePlanSchedule(revertedPlan).catch(console.error)
+          },
+        },
+      })
+    }
   }
 
   // Apply Timer Settings and Launch Focus or Break Session
@@ -914,13 +971,15 @@ export default function PlanMyDay() {
                   >
                     {/* Left Details: Time + Title */}
                     <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
-                      {/* Checkbox for existing task */}
+                      {/* Checkbox for existing task or unlinked block */}
                       {isExisting && block.taskId ? (
                         <div onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
-                            onClick={() => toggleTask(block.taskId)}
-                            className={`w-5 h-5 mt-0.5 sm:mt-0 rounded-lg border flex items-center justify-center transition-colors shrink-0 ${
+                            onClick={() => handleToggleTaskBlock(block)}
+                            title={isCompletedBlock ? 'Mark incomplete' : 'Mark completed'}
+                            aria-label={isCompletedBlock ? 'Mark incomplete' : 'Mark completed'}
+                            className={`w-5 h-5 mt-0.5 sm:mt-0 rounded-lg border flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
                               isCompletedBlock
                                 ? 'bg-nocturn-accent border-nocturn-accent text-white'
                                 : 'border-nocturn-border hover:border-nocturn-accent/60'
@@ -930,28 +989,32 @@ export default function PlanMyDay() {
                           </button>
                         </div>
                       ) : (
-                        <div
-                          className={`w-5 h-5 mt-0.5 sm:mt-0 rounded-lg flex items-center justify-center shrink-0 ${
-                            isCompletedBlock
-                              ? 'text-emerald-400'
-                              : isBlockActive
-                              ? 'text-rose-400'
-                              : isFocus
-                              ? 'text-nocturn-accent-bright'
-                              : isBreak
-                              ? 'text-amber-400'
-                              : 'text-nocturn-muted'
-                          }`}
-                        >
-                          {isCompletedBlock ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          ) : isBreak ? (
-                            <Coffee className="w-4 h-4" />
-                          ) : isFocus ? (
-                            <Zap className="w-4 h-4" />
-                          ) : (
-                            <Clock className="w-4 h-4" />
-                          )}
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleBlockCompletion(block)}
+                            title={isCompletedBlock ? 'Mark incomplete' : 'Mark completed'}
+                            aria-label={isCompletedBlock ? 'Mark incomplete' : 'Mark completed'}
+                            className={`w-5 h-5 mt-0.5 sm:mt-0 rounded-lg border flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
+                              isCompletedBlock
+                                ? 'bg-emerald-500 border-emerald-500 text-white'
+                                : isFocus
+                                ? 'border-nocturn-border hover:border-nocturn-accent/60 text-nocturn-accent'
+                                : isBreak
+                                ? 'border-nocturn-border hover:border-amber-400/60 text-amber-400'
+                                : 'border-nocturn-border hover:border-white/40 text-nocturn-muted'
+                            }`}
+                          >
+                            {isCompletedBlock ? (
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            ) : isBreak ? (
+                              <Coffee className="w-3 h-3 text-amber-400" />
+                            ) : isFocus ? (
+                              <Zap className="w-3 h-3 text-nocturn-accent-bright" />
+                            ) : (
+                              <Clock className="w-3 h-3 text-nocturn-muted" />
+                            )}
+                          </button>
                         </div>
                       )}
 

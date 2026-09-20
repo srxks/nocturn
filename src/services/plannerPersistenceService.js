@@ -88,6 +88,39 @@ export async function markPlanBlockCompleted(blockId, dateKey = null) {
   }
 }
 
+export async function togglePlanBlockCompleted(blockId, dateKey = null) {
+  try {
+    const key = dateKey || formatDateKey(new Date())
+    const schedule = await getPlanSchedule(key)
+    if (!schedule || !Array.isArray(schedule.blocks)) return null
+
+    let found = false
+    let newCompleted = false
+    const updatedBlocks = schedule.blocks.map((b) => {
+      if (b.id === blockId || (b.taskId && b.taskId === blockId)) {
+        found = true
+        newCompleted = !b.completed
+        return {
+          ...b,
+          completed: newCompleted,
+          completedAt: newCompleted ? new Date().toISOString() : null,
+        }
+      }
+      return b
+    })
+
+    if (!found) return null
+
+    schedule.blocks = updatedBlocks
+    schedule.updatedAt = new Date().toISOString()
+    await db.planSchedules.put(schedule)
+    return { schedule, completed: newCompleted }
+  } catch (err) {
+    console.error('plannerPersistenceService.togglePlanBlockCompleted failed:', err)
+    return null
+  }
+}
+
 export async function updatePlanBlock(blockId, updates, dateKey = null) {
   try {
     const key = dateKey || formatDateKey(new Date())
