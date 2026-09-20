@@ -1,12 +1,30 @@
+import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Zap, Search, Keyboard } from 'lucide-react'
 import { NAV_ITEMS } from './navConfig'
 import NotificationBell from '../common/NotificationBell'
 import SyncStatusIndicator from '../common/SyncStatusIndicator'
+import { getStorageItem } from '../../utils/storageUtils'
 
 export default function SidebarNav({ onOpenCommandPalette, onOpenShortcutsHelp }) {
   const location = useLocation()
   const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+
+  const [displayName, setDisplayName] = useState(() => {
+    return getStorageItem('nocturn_user_name', 'Nocturn User')
+  })
+
+  useEffect(() => {
+    const handleProfileUpdated = (e) => {
+      if (e.detail?.display_name) {
+        setDisplayName(e.detail.display_name)
+      }
+    }
+    window.addEventListener('nocturn:profile-updated', handleProfileUpdated)
+    return () => {
+      window.removeEventListener('nocturn:profile-updated', handleProfileUpdated)
+    }
+  }, [])
 
   return (
     <aside
@@ -88,8 +106,27 @@ export default function SidebarNav({ onOpenCommandPalette, onOpenShortcutsHelp }
       </div>
 
       {/* Footer Status & Shortcuts Trigger */}
-      <div className="pt-3 border-t border-nocturn-border/80 space-y-2">
+      <div className="pt-3 border-t border-nocturn-border/80 space-y-2.5">
+        {/* User Profile Quick Card */}
+        <Link
+          to="/profile"
+          className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-white/[0.05] border border-transparent hover:border-white/[0.08] transition-all group cursor-pointer"
+        >
+          <div className="w-7 h-7 rounded-full bg-nocturn-accent/20 border border-nocturn-accent/40 flex items-center justify-center text-nocturn-accent text-xs font-bold uppercase shrink-0 group-hover:scale-105 transition-transform">
+            {displayName ? displayName.charAt(0) : 'U'}
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="text-xs font-semibold text-white block truncate group-hover:text-nocturn-accent transition-colors">
+              {displayName}
+            </span>
+            <span className="text-[10px] text-nocturn-muted block truncate">
+              Statistics & Account
+            </span>
+          </div>
+        </Link>
+
         <SyncStatusIndicator />
+
         <div className="px-1 flex items-center justify-between text-xs text-nocturn-muted">
           <span>Shortcuts</span>
           <button
