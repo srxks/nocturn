@@ -280,6 +280,12 @@ export default function Profile() {
     setStorageItem('nocturn_user_name', trimmed)
     setIsSaved(true)
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('nocturn:profile-updated', { detail: { display_name: trimmed } })
+      )
+    }
+
     if (user?.id) {
       await updateUserProfileRemote(user.id, { display_name: trimmed })
     }
