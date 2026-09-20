@@ -562,6 +562,30 @@ export function TimerSessionProvider({ children }) {
     }
   }, [isRunning, canonicalStartTime, totalSeconds, mode, taskName, handleSessionCompletion])
 
+  // Reflect live timer countdown in browser document title
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+
+    if (isRunning) {
+      const mins = Math.floor(remainingSeconds / 60)
+      const secs = remainingSeconds % 60
+      const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+      const label = taskName || (mode === 'focus' ? 'Focus' : mode === 'shortBreak' ? 'Short Break' : 'Long Break')
+      document.title = `(${formatted}) ${label} · Nocturn`
+    } else if (isPaused) {
+      const mins = Math.floor(remainingSeconds / 60)
+      const secs = remainingSeconds % 60
+      const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+      document.title = `[Paused ${formatted}] Nocturn`
+    } else {
+      document.title = 'Nocturn — Calm Focus & Planning'
+    }
+
+    return () => {
+      document.title = 'Nocturn — Calm Focus & Planning'
+    }
+  }, [isRunning, isPaused, remainingSeconds, taskName, mode])
+
   // 5. Start Session Action
   const startTimer = async (
     overrideTaskName,
