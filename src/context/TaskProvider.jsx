@@ -11,6 +11,7 @@ import { recordTombstone, clearTombstone } from '../services/conflictService'
 import { enqueueMutation } from '../services/syncQueue'
 import { toUuid } from '../lib/idUtils'
 import { syncTaskReminders, cancelTaskReminder } from '../services/notificationService'
+import { playTaskCompleteSound } from '../services/soundService'
 import { useToast } from './useToast'
 
 const todayKey = formatDateKey(new Date())
@@ -233,6 +234,7 @@ export function TaskProvider({ children }) {
     }
 
     if (willBeCompleted) {
+      playTaskCompleteSound()
       addToast(`Completed "${target.title}"`, {
         type: 'success',
         duration: 4500,

@@ -47,8 +47,7 @@ export default function Calendar() {
     setSelectedDate(now)
   }
 
-  const handleAddTaskForDate = (dateKey) => {
-    const taskTitle = window.prompt('Enter task for ' + dateKey + ':')
+  const handleAddTaskForDate = (dateKey, taskTitle) => {
     if (taskTitle && taskTitle.trim()) {
       addTask(taskTitle.trim(), 'tasks', dateKey)
     }

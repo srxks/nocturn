@@ -211,3 +211,38 @@ export function playClickSound() {
     // Audio optional
   }
 }
+
+/**
+ * Play a gentle, rewarding ascending chime when a task is checked off as completed
+ */
+export function playTaskCompleteSound() {
+  if (!isSoundEffectsEnabled()) return
+  const ctx = getAudioContext()
+  if (!ctx) return
+
+  try {
+    const now = ctx.currentTime
+    // Uplifting subtle major third dyad (G5 -> B5)
+    const notes = [783.99, 987.77]
+
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      const start = now + idx * 0.05
+
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, start)
+
+      gain.gain.setValueAtTime(0.045, start)
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.22)
+
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+
+      osc.start(start)
+      osc.stop(start + 0.23)
+    })
+  } catch {
+    // Audio optional
+  }
+}

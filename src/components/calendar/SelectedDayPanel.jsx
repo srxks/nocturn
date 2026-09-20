@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react'
 import { Calendar as CalendarIcon, ExternalLink, Check, Plus } from 'lucide-react'
 import { formatDateKey, openGoogleCalendarForDate, getEventsForDate } from '../../services/calendarService'
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
@@ -9,6 +10,32 @@ export default function SelectedDayPanel({
   onAddTaskForDate,
   onSelectTask,
 }) {
+  const [isAdding, setIsAdding] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (isAdding) {
+      inputRef.current?.focus()
+    }
+  }, [isAdding])
+
+  const handleCreateTask = (e) => {
+    e?.preventDefault()
+    const trimmed = newTitle.trim()
+    if (!trimmed) return
+    onAddTaskForDate(dateKey, trimmed)
+    setNewTitle('')
+    setIsAdding(false)
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      setIsAdding(false)
+      setNewTitle('')
+    }
+  }
+
   const dateKey = formatDateKey(selectedDate)
   const dayEvents = getEventsForDate(dateKey, tasks)
 
@@ -69,13 +96,50 @@ export default function SelectedDayPanel({
           </h4>
           <button
             type="button"
-            onClick={() => onAddTaskForDate(dateKey)}
+            onClick={() => setIsAdding((prev) => !prev)}
             className="text-xs font-medium text-nocturn-accent hover:text-nocturn-accent-bright inline-flex items-center gap-1 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-            Add for this date
+            {isAdding ? 'Close' : 'Add for this date'}
           </button>
         </div>
+
+        {/* Inline Add Task Form */}
+        {isAdding && (
+          <form
+            onSubmit={handleCreateTask}
+            className="p-3.5 rounded-xl bg-nocturn-surface border border-nocturn-accent/40 shadow-sm space-y-3"
+          >
+            <input
+              ref={inputRef}
+              type="text"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={`What needs to be done on this date?`}
+              className="w-full bg-transparent text-sm text-white placeholder-nocturn-muted focus:outline-none"
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAdding(false)
+                  setNewTitle('')
+                }}
+                className="px-3 py-1 text-xs text-nocturn-muted hover:text-white rounded-lg hover:bg-white/[0.04] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!newTitle.trim()}
+                className="px-3.5 py-1 text-xs font-semibold text-nocturn-accent-bright bg-nocturn-accent/20 hover:bg-nocturn-accent/30 border border-nocturn-accent/40 rounded-lg transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+              >
+                Add Task
+              </button>
+            </div>
+          </form>
+        )}
 
         {dayEvents.length > 0 ? (
           <div className="space-y-2">
