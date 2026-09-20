@@ -38,6 +38,7 @@ function AppRoutes() {
         <Route path="/timer" element={<Timer />} />
         <Route path="/timer-settings" element={<TimerSettings />} />
         <Route path="/plan" element={<PlanMyDay />} />
+        <Route path="/plan-my-day" element={<Navigate to="/plan" replace />} />
         <Route path="/vocab" element={<Vocab />} />
         <Route path="/vocab/learn" element={<VocabLearn />} />
         <Route path="/vocab/review" element={<VocabReview />} />

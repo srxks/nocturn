@@ -471,10 +471,10 @@ export function TimerSessionProvider({ children }) {
 
         // 8. Auto-navigate to Plan My Day
         try {
-          navigate('/plan-my-day')
+          navigate('/plan')
         } catch {
           if (typeof window !== 'undefined') {
-            window.location.href = '/plan-my-day'
+            window.location.href = '/plan'
           }
         }
       } else {

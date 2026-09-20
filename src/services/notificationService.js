@@ -117,7 +117,7 @@ export function notifyTimerEnded(taskTitle = '', sessionId = '') {
       n.onclick = () => {
         try {
           window.focus()
-          window.location.href = '/plan-my-day'
+          window.location.href = '/plan'
         } catch {
           // ignore
         }
@@ -156,7 +156,7 @@ export function notifyPlanBlockDue(taskTitle = '', blockId = '', dateKey = '') {
       n.onclick = () => {
         try {
           window.focus()
-          window.location.href = '/plan-my-day'
+          window.location.href = '/plan'
         } catch {
           // ignore
         }
