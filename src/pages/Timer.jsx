@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Settings, Clock, Edit3, CheckCircle2, Target } from 'lucide-react'
+import { Settings, Clock, Edit3, CheckCircle2, Target, Maximize2 } from 'lucide-react'
 import TimerRing from '../components/timer/TimerRing'
 import TimerControls from '../components/timer/TimerControls'
 import SessionDots from '../components/timer/SessionDots'
+import FocusModeOverlay from '../components/timer/FocusModeOverlay'
 import { useTimerSettings } from '../context/useTimerSettings'
 import { useTimerSession } from '../context/useTimerSession'
+import {
+  playTimerStartSound,
+  playTimerPauseSound,
+  playTimerResumeSound,
+} from '../services/soundService'
 
 export default function Timer() {
   const { settings } = useTimerSettings()
@@ -29,8 +35,17 @@ export default function Timer() {
 
   const [isEditingTask, setIsEditingTask] = useState(false)
   const [taskInputVal, setTaskInputVal] = useState('')
+  const [isFocusModeOpen, setIsFocusModeOpen] = useState(() => Boolean(location.state?.focusMode))
+  const [prevFocusModeProp, setPrevFocusModeProp] = useState(location.state?.focusMode)
 
-  // Sync taskName when location state passes a new taskName from Tasks or Plan My Day
+  if (location.state?.focusMode !== prevFocusModeProp) {
+    setPrevFocusModeProp(location.state?.focusMode)
+    if (location.state?.focusMode) {
+      setIsFocusModeOpen(true)
+    }
+  }
+
+  // Sync taskName when location state passes a new taskName
   useEffect(() => {
     if (location.state?.taskName && location.state.taskName !== taskName) {
       setTaskName(location.state.taskName)
@@ -48,6 +63,17 @@ export default function Timer() {
     setIsEditingTask(false)
   }
 
+  const handleTogglePlayPause = () => {
+    if (!isRunning && !isPaused) {
+      playTimerStartSound()
+    } else if (isRunning) {
+      playTimerPauseSound()
+    } else {
+      playTimerResumeSound()
+    }
+    togglePlayPause()
+  }
+
   const modeLabel =
     mode === 'focus' ? 'FOCUS' : mode === 'shortBreak' ? 'SHORT BREAK' : 'LONG BREAK'
 
@@ -57,7 +83,15 @@ export default function Timer() {
     <div className="w-full max-w-md lg:max-w-xl mx-auto flex flex-col items-center justify-center space-y-6 sm:space-y-7 py-4">
       {/* Top Header with Timer Settings gear button */}
       <header className="relative w-full text-center flex items-center justify-between px-2">
-        <div className="w-9" />
+        <button
+          type="button"
+          onClick={() => setIsFocusModeOpen(true)}
+          title="Enter Fullscreen Focus Mode"
+          aria-label="Enter Fullscreen Focus Mode"
+          className="p-2 rounded-xl text-nocturn-muted hover:text-nocturn-accent hover:bg-white/[0.04] transition-colors cursor-pointer"
+        >
+          <Maximize2 className="w-4 h-4" />
+        </button>
         <div className="space-y-0.5">
           <span className="text-[11px] font-bold tracking-widest text-nocturn-accent uppercase">
             {modeLabel}
@@ -186,13 +220,33 @@ export default function Timer() {
           <TimerControls
             isRunning={isRunning}
             isPaused={isPaused}
-            onTogglePlayPause={togglePlayPause}
+            onTogglePlayPause={handleTogglePlayPause}
             onReset={resetTimer}
             onSkip={skipTimer}
             onTerminate={terminateTimer}
           />
         </>
       )}
+
+      {/* Distraction-Free Focus Mode Overlay */}
+      <FocusModeOverlay
+        isOpen={isFocusModeOpen}
+        onClose={() => setIsFocusModeOpen(false)}
+        remainingSeconds={remainingSeconds}
+        totalSeconds={totalSeconds}
+        isRunning={isRunning}
+        isPaused={isPaused}
+        taskName={taskName}
+        blockTimeRange={blockTimeRange}
+        currentSession={currentSession}
+        totalSessions={settings.sessions}
+        modeLabel={modeLabel}
+        onStart={handleTogglePlayPause}
+        onPause={handleTogglePlayPause}
+        onResume={handleTogglePlayPause}
+        onTerminate={terminateTimer}
+        onSkip={skipTimer}
+      />
     </div>
   )
 }

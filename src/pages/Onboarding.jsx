@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles,
-  Timer,
-  Calendar,
   Check,
   User,
   Target,
@@ -47,60 +45,42 @@ export default function Onboarding() {
   }
 
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 bg-[#070709] text-white selection:bg-nocturn-accent selection:text-black overflow-hidden relative">
-      {/* Ambient background glows */}
-      <div className="fixed top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="fixed bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-amber-500/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="fixed top-1/2 right-1/3 w-80 h-80 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
+    <div className="min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 bg-[#16171b] text-white selection:bg-nocturn-accent selection:text-black overflow-hidden relative">
+      {/* Floating Cinematic Tall Card */}
+      <div className="relative w-full max-w-[420px] min-h-[620px] bg-[#090a0d] border border-white/[0.08] rounded-[38px] p-8 sm:p-9 flex flex-col justify-between shadow-[0_30px_90px_rgba(0,0,0,0.9)] overflow-hidden z-10">
+        {/* Soft Ambient Glows inside panel */}
+        <div className="absolute -bottom-16 -left-16 w-64 h-64 bg-teal-500/15 rounded-full blur-[80px] pointer-events-none" />
+        <div className="absolute top-1/2 -right-16 w-56 h-56 bg-amber-500/12 rounded-full blur-[80px] pointer-events-none" />
 
-      {/* Cinematic Tall Card */}
-      <div className="relative w-full max-w-[440px] min-h-[580px] bg-[#0d0e13]/90 border border-white/[0.08] rounded-3xl p-7 sm:p-8 flex flex-col justify-between shadow-[0_25px_70px_rgba(0,0,0,0.85)] backdrop-blur-2xl overflow-hidden z-10">
-        {/* Orbital Curved Lines SVG in Background */}
+        {/* Thin Flowing Curved Lines Artwork emerging from lower-left */}
         <svg
-          className="absolute inset-0 w-full h-full pointer-events-none opacity-25"
+          className="absolute inset-0 w-full h-full pointer-events-none select-none opacity-25"
+          viewBox="0 0 420 620"
           fill="none"
-          viewBox="0 0 440 600"
+          xmlns="http://www.w3.org/2000/svg"
           aria-hidden="true"
         >
-          <ellipse
-            cx="220"
-            cy="150"
-            rx="190"
-            ry="90"
-            stroke="rgba(255,255,255,0.12)"
-            strokeDasharray="4 8"
-            strokeWidth="1"
+          <path
+            d="M-40,580 C60,540 140,460 220,380 C300,300 370,240 460,220"
+            stroke="rgba(255,255,255,0.22)"
+            strokeWidth="1.2"
+            strokeDasharray="4 6"
           />
-          <ellipse
-            cx="220"
-            cy="150"
-            rx="260"
-            ry="140"
-            stroke="rgba(255,255,255,0.08)"
+          <path
+            d="M-20,620 C80,570 170,480 250,390 C330,300 400,240 480,210"
+            stroke="rgba(255,255,255,0.16)"
             strokeWidth="0.8"
           />
-          <ellipse
-            cx="220"
-            cy="150"
-            rx="340"
-            ry="190"
-            stroke="rgba(255,255,255,0.05)"
-            strokeDasharray="6 10"
+          <path
+            d="M0,660 C100,600 200,500 280,400 C360,300 430,230 500,200"
+            stroke="rgba(255,255,255,0.1)"
             strokeWidth="0.6"
+            strokeDasharray="6 8"
           />
         </svg>
 
-        {/* Card Top: Emoji / Avatar + Skip Pill */}
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-white/[0.05] border border-white/[0.1] flex items-center justify-center text-xl shadow-[0_0_15px_rgba(255,255,255,0.05)]">
-              🙂
-            </div>
-            <span className="text-xs font-semibold tracking-wider text-nocturn-muted uppercase">
-              Nocturn
-            </span>
-          </div>
-
+        {/* Card Top: Skip link */}
+        <div className="relative z-10 flex items-center justify-end">
           <button
             type="button"
             onClick={handleSkip}
@@ -111,9 +91,9 @@ export default function Onboarding() {
         </div>
 
         {/* Middle: Step Specific Content */}
-        <div className="relative z-10 my-auto py-6">
+        <div className="relative z-10 my-auto py-4">
           <AnimatePresence mode="wait">
-            {/* Step 0: Welcome */}
+            {/* Step 0: Welcome (Direct recreation of reference image) */}
             {step === 0 && (
               <motion.div
                 key="step-0"
@@ -121,38 +101,21 @@ export default function Onboarding() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -12 }}
                 transition={{ duration: 0.2 }}
-                className="space-y-4"
+                className="space-y-4 pt-2"
               >
-                <div className="space-y-1.5">
-                  <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                    Calm, intentional productivity.
-                  </h1>
-                  <p className="text-xs sm:text-sm text-nocturn-muted leading-relaxed">
-                    A distraction-free workspace combining structured daily scheduling with reliable Pomodoro focus sessions.
-                  </p>
-                </div>
+                {/* Smiling Emoji at Top-Left */}
+                <div className="text-3xl sm:text-4xl mb-3">🙂</div>
 
-                <div className="pt-3 space-y-2.5">
-                  <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent shrink-0">
-                      <Calendar className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-white block">Plan My Day</span>
-                      <span className="text-[11px] text-nocturn-muted block">AI-structured timeline from natural text</span>
-                    </div>
-                  </div>
+                {/* Large White Heading */}
+                <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
+                  Welcome
+                </h1>
 
-                  <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent shrink-0">
-                      <Timer className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-white block">Unbroken Focus</span>
-                      <span className="text-[11px] text-nocturn-muted block">Never loops or loses completed minutes</span>
-                    </div>
-                  </div>
-                </div>
+                {/* Two-Line Subtitle */}
+                <p className="text-base sm:text-lg text-nocturn-muted leading-snug font-normal pt-1">
+                  Manage your task<br />
+                  very easily!
+                </p>
               </motion.div>
             )}
 
@@ -361,14 +324,14 @@ export default function Onboarding() {
             ))}
           </div>
 
-          {/* Compact Pill Button */}
+          {/* Compact Pill Button matching reference */}
           <button
             type="button"
             onClick={handleNext}
-            className="px-4 py-2 rounded-full bg-white text-black hover:bg-white/90 text-xs font-bold transition-all duration-150 flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(255,255,255,0.15)] active:scale-95"
+            className="px-5 py-2 rounded-full bg-[#1c1d22] hover:bg-white text-white hover:text-black border border-white/10 text-xs font-semibold transition-all duration-150 flex items-center gap-2.5 cursor-pointer shadow-sm active:scale-95 group"
           >
             <span>{step === totalSteps - 1 ? 'Enter Nocturn' : 'Next'}</span>
-            <span className="text-[10px] tracking-tighter opacity-70">››</span>
+            <span className="text-[13px] tracking-tight text-white/70 group-hover:text-black transition-colors">»</span>
           </button>
         </div>
       </div>

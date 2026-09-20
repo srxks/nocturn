@@ -117,3 +117,27 @@ export function getLastSyncCompletedAt() {
 export function getLastSyncSource() {
   return lastSyncSource
 }
+
+/**
+ * Triggers an immediate manual sync pass (drains pending queue and runs full sync).
+ */
+export async function syncNow(userId = null) {
+  try {
+    const { forceManualSync, drainSyncQueue } = await import('./syncService.js')
+    if (userId) {
+      return await forceManualSync(userId)
+    }
+    const { supabase } = await import('../lib/supabase.js')
+    let uid = null
+    if (supabase) {
+      const { data } = await supabase.auth.getUser()
+      uid = data?.user?.id || null
+    }
+    if (uid) {
+      return await forceManualSync(uid)
+    }
+    return await drainSyncQueue()
+  } catch {
+    return { success: false }
+  }
+}

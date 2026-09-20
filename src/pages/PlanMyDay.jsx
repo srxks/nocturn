@@ -25,6 +25,7 @@ import { generateDailyPlan } from '../services/geminiPlannerService'
 import { savePlanSchedule, getPlanSchedule } from '../services/plannerPersistenceService'
 import { formatDateKey } from '../services/calendarService'
 import { Modal } from '../components/ui/Modal'
+import FlowingLines from '../components/common/FlowingLines'
 
 const EXAMPLE_PROMPTS = [
   "I have class from 9 to 2, gym at 6, need to study DSA, finish my project, revise vocabulary and complete today's assignments.",
@@ -467,8 +468,9 @@ export default function PlanMyDay() {
       </header>
 
       {/* Date & Context Bar */}
-      <div className="bg-nocturn-card border border-nocturn-border rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-        <div className="flex items-center gap-3">
+      <div className="relative overflow-hidden bg-nocturn-card border border-nocturn-border rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <FlowingLines variant="orbital" opacity={0.08} />
+        <div className="relative z-10 flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent shrink-0">
             <Calendar className="w-4.5 h-4.5 stroke-[2]" />
           </div>
@@ -482,7 +484,7 @@ export default function PlanMyDay() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="relative z-10 flex items-center gap-2">
           <span className="text-xs font-medium px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-nocturn-muted">
             {existingActiveTasks.length > 0
               ? `${existingActiveTasks.length} task${existingActiveTasks.length > 1 ? 's' : ''} in context`
@@ -492,8 +494,9 @@ export default function PlanMyDay() {
       </div>
 
       {/* Planning Prompt Card */}
-      <div className="bg-nocturn-card border border-nocturn-border rounded-2xl p-5 sm:p-6 space-y-4 shadow-sm">
-        <div className="space-y-2">
+      <div className="relative overflow-hidden bg-nocturn-card border border-nocturn-border rounded-2xl p-5 sm:p-6 space-y-4 shadow-sm">
+        <FlowingLines variant="corner" opacity={0.06} />
+        <div className="relative z-10 space-y-2">
           <label htmlFor="plan-prompt" className="text-xs sm:text-sm font-medium text-white flex items-center justify-between">
             <span>What does your day look like?</span>
             <span className="text-[11px] font-normal text-nocturn-muted">Natural language prompt</span>

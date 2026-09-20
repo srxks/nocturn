@@ -111,10 +111,30 @@ export default function Tasks() {
   const activeTasks = useMemo(() => filteredTasks.filter((t) => !t.completed), [filteredTasks])
   const completedTasks = useMemo(() => filteredTasks.filter((t) => t.completed), [filteredTasks])
 
+  // Contextual visual grouping for My Day view
+  const overdueTasks = useMemo(
+    () => activeTasks.filter((t) => t.dueDate && t.dueDate < todayKey),
+    [activeTasks, todayKey]
+  )
+  const dueTodayTasks = useMemo(
+    () => activeTasks.filter((t) => t.dueDate === todayKey),
+    [activeTasks, todayKey]
+  )
+  const noDeadlineTasks = useMemo(
+    () => activeTasks.filter((t) => !t.dueDate || t.dueDate > todayKey),
+    [activeTasks, todayKey]
+  )
+
   const totalCount = filteredTasks.length
   const completedCount = completedTasks.length
 
-  const handleAddTask = (title, day, explicitInMyDay = false) => {
+  const handleAddTask = (
+    title,
+    day,
+    explicitInMyDay = false,
+    priority = 'medium',
+    reminder = null
+  ) => {
     let dueDate = null
     if (day === 'today') {
       dueDate = todayKey
@@ -124,7 +144,7 @@ export default function Tasks() {
       dueDate = day
     }
     const inMyDay = activeListId === 'my-day' || Boolean(explicitInMyDay)
-    addTask(title, activeListId, dueDate, 'medium', false, inMyDay)
+    addTask(title, activeListId, dueDate, priority, false, inMyDay, 'user', reminder)
   }
 
   const HeaderIcon = currentListObj?.icon || CheckSquare
@@ -207,30 +227,133 @@ export default function Tasks() {
           ) : (
             <div className="space-y-6">
               {/* Active Tasks Group */}
-              {activeTasks.length > 0 && (
-                <div className="space-y-2.5">
-                  <AnimatePresence mode="popLayout">
-                    {activeTasks.map((task) => (
-                      <motion.div
-                        key={task.id}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.98, y: -2 }}
-                        transition={{ duration: 0.15, ease: 'easeOut' }}
-                      >
-                        <TaskItemRow
-                          task={task}
-                          lists={lists}
-                          onToggleComplete={toggleTask}
-                          onToggleStar={toggleStar}
-                          onSelectTask={setSelectedTask}
-                          onDeleteTask={deleteTask}
-                          isSelected={selectedTask?.id === task.id}
-                        />
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
+              {isMyDay ? (
+                <div className="space-y-6">
+                  {/* OVERDUE Section */}
+                  {overdueTasks.length > 0 && (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-rose-400 uppercase tracking-wider px-1">
+                        <span>Overdue</span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-300 text-[10px] font-mono border border-rose-500/30">
+                          {overdueTasks.length}
+                        </span>
+                      </div>
+                      <AnimatePresence mode="popLayout">
+                        {overdueTasks.map((task) => (
+                          <motion.div
+                            key={task.id}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.98, y: -2 }}
+                            transition={{ duration: 0.15, ease: 'easeOut' }}
+                          >
+                            <TaskItemRow
+                              task={task}
+                              lists={lists}
+                              onToggleComplete={toggleTask}
+                              onToggleStar={toggleStar}
+                              onSelectTask={setSelectedTask}
+                              onDeleteTask={deleteTask}
+                              isSelected={selectedTask?.id === task.id}
+                            />
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
+                  {/* DUE TODAY Section */}
+                  {dueTodayTasks.length > 0 && (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-nocturn-accent-bright uppercase tracking-wider px-1">
+                        <span>Due Today</span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-nocturn-accent/15 text-nocturn-accent-bright text-[10px] font-mono border border-nocturn-accent/30">
+                          {dueTodayTasks.length}
+                        </span>
+                      </div>
+                      <AnimatePresence mode="popLayout">
+                        {dueTodayTasks.map((task) => (
+                          <motion.div
+                            key={task.id}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.98, y: -2 }}
+                            transition={{ duration: 0.15, ease: 'easeOut' }}
+                          >
+                            <TaskItemRow
+                              task={task}
+                              lists={lists}
+                              onToggleComplete={toggleTask}
+                              onToggleStar={toggleStar}
+                              onSelectTask={setSelectedTask}
+                              onDeleteTask={deleteTask}
+                              isSelected={selectedTask?.id === task.id}
+                            />
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
+                  {/* NO DEADLINE / OTHER Section */}
+                  {noDeadlineTasks.length > 0 && (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-nocturn-muted uppercase tracking-wider px-1">
+                        <span>No Deadline</span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-white/[0.06] text-nocturn-muted text-[10px] font-mono border border-white/10">
+                          {noDeadlineTasks.length}
+                        </span>
+                      </div>
+                      <AnimatePresence mode="popLayout">
+                        {noDeadlineTasks.map((task) => (
+                          <motion.div
+                            key={task.id}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.98, y: -2 }}
+                            transition={{ duration: 0.15, ease: 'easeOut' }}
+                          >
+                            <TaskItemRow
+                              task={task}
+                              lists={lists}
+                              onToggleComplete={toggleTask}
+                              onToggleStar={toggleStar}
+                              onSelectTask={setSelectedTask}
+                              onDeleteTask={deleteTask}
+                              isSelected={selectedTask?.id === task.id}
+                            />
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  )}
                 </div>
+              ) : (
+                activeTasks.length > 0 && (
+                  <div className="space-y-2.5">
+                    <AnimatePresence mode="popLayout">
+                      {activeTasks.map((task) => (
+                        <motion.div
+                          key={task.id}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.98, y: -2 }}
+                          transition={{ duration: 0.15, ease: 'easeOut' }}
+                        >
+                          <TaskItemRow
+                            task={task}
+                            lists={lists}
+                            onToggleComplete={toggleTask}
+                            onToggleStar={toggleStar}
+                            onSelectTask={setSelectedTask}
+                            onDeleteTask={deleteTask}
+                            isSelected={selectedTask?.id === task.id}
+                          />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                )
               )}
 
               {/* Completed Tasks Group (Collapsible) */}

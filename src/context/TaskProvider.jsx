@@ -90,7 +90,8 @@ export function TaskProvider({ children }) {
     priority = 'medium',
     starred = false,
     inMyDayOverride = null,
-    source = 'user'
+    source = 'user',
+    reminder = null
   ) => {
     const isMyDayList = listId === 'my-day'
     const actualListId =
@@ -113,7 +114,7 @@ export function TaskProvider({ children }) {
       myDayDate: myDayDate,
       inMyDay: shouldBeInMyDay,
       source: source || 'user',
-      reminder: null,
+      reminder: reminder || null,
       recurrence: 'none',
       priority: resolvedPriority,
       starred: Boolean(starred || resolvedPriority === 'high'),

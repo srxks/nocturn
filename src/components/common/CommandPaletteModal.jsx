@@ -17,10 +17,21 @@ import {
   ArrowRight,
   Keyboard,
   PlusCircle,
+  Play,
+  Pause,
+  Maximize2,
+  Sun,
+  Palette,
 } from 'lucide-react'
 import { useTasks } from '../../context/useTasks'
 import { useVocab } from '../../hooks/useVocab'
 import { useTheme } from '../../context/useTheme'
+import { useTimerSession } from '../../context/useTimerSession'
+import {
+  playTimerStartSound,
+  playTimerPauseSound,
+  playTimerResumeSound,
+} from '../../services/soundService'
 
 const NAVIGATION_ACTIONS = [
   {
@@ -92,7 +103,8 @@ function CommandPaletteDialog({ onClose, onOpenShortcutsHelp }) {
   const navigate = useNavigate()
   const { tasks, lists, setSelectedTask, setActiveListId } = useTasks()
   const { allWords } = useVocab()
-  const { uiStyle } = useTheme()
+  const { uiStyle, activeTheme, presetThemes, applyTheme } = useTheme()
+  const { isRunning, isPaused, startTimer, pauseTimer, resumeTimer } = useTimerSession()
   const isAngular = uiStyle === 'angular'
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -121,9 +133,10 @@ function CommandPaletteDialog({ onClose, onOpenShortcutsHelp }) {
       )
     })
 
-    // Quick Command for New Task
+    // Action items list
     const actionItems = [...matchedActions]
     if (activeCategory === 'all' || activeCategory === 'navigation') {
+      // Create task
       if (!q || 'create new task add task'.includes(q)) {
         actionItems.unshift({
           id: 'action-create-task',
@@ -141,6 +154,97 @@ function CommandPaletteDialog({ onClose, onOpenShortcutsHelp }) {
           },
         })
       }
+
+      // Open My Day
+      if (!q || 'my day today open my day priorities'.includes(q)) {
+        actionItems.unshift({
+          id: 'action-open-my-day',
+          type: 'action',
+          category: 'navigation',
+          title: 'Open My Day',
+          subtitle: "Focus on today's prioritized goals and urgent tasks",
+          icon: Sun,
+          action: (nav) => {
+            setActiveListId('my-day')
+            nav('/tasks?view=myday')
+          },
+        })
+      }
+
+      // Start / Resume focus session
+      if (!q || 'start focus timer deep work pomodoro'.includes(q)) {
+        actionItems.unshift({
+          id: 'action-start-focus',
+          type: 'action',
+          category: 'navigation',
+          title: isRunning ? 'Resume / View Focus Timer' : 'Start Focus Session',
+          subtitle: 'Begin deep focus timer and track session',
+          icon: Play,
+          action: (nav) => {
+            if (isPaused) {
+              playTimerResumeSound()
+              resumeTimer()
+            } else if (!isRunning) {
+              playTimerStartSound()
+              startTimer()
+            }
+            nav('/timer')
+          },
+        })
+      }
+
+      // Pause timer
+      if (isRunning && (!q || 'pause focus timer stop hold'.includes(q))) {
+        actionItems.unshift({
+          id: 'action-pause-focus',
+          type: 'action',
+          category: 'navigation',
+          title: 'Pause Focus Timer',
+          subtitle: 'Temporarily pause active timer session',
+          icon: Pause,
+          action: () => {
+            playTimerPauseSound()
+            pauseTimer()
+          },
+        })
+      }
+
+      // Toggle Focus Mode
+      if (!q || 'focus mode fullscreen zen distraction free clock'.includes(q)) {
+        actionItems.push({
+          id: 'action-focus-mode',
+          type: 'action',
+          category: 'navigation',
+          title: 'Toggle Focus Mode',
+          subtitle: 'Distraction-free fullscreen focus clock and active task',
+          icon: Maximize2,
+          action: (nav) => {
+            nav('/timer', { state: { focusMode: true } })
+          },
+        })
+      }
+
+      // Toggle Theme
+      if (!q || 'toggle theme switch color palette'.includes(q)) {
+        actionItems.push({
+          id: 'action-toggle-theme',
+          type: 'action',
+          category: 'navigation',
+          title: 'Switch Color Theme',
+          subtitle: `Cycle theme (currently ${activeTheme?.name || 'Nocturn Violet'})`,
+          icon: Palette,
+          action: () => {
+            if (presetThemes && presetThemes.length > 1) {
+              const currentId = activeTheme?.id
+              const idx = presetThemes.findIndex((t) => t.id === currentId)
+              const nextTheme = presetThemes[(idx + 1) % presetThemes.length]
+              applyTheme(nextTheme)
+            }
+          },
+        })
+      }
+
+      // View shortcuts
       if (!q || 'shortcuts help keyboard'.includes(q)) {
         actionItems.push({
           id: 'action-shortcuts-help',
@@ -242,7 +346,24 @@ function CommandPaletteDialog({ onClose, onOpenShortcutsHelp }) {
     }
 
     return [...actionItems, ...matchedTasks, ...matchedLists, ...matchedVocab]
-  }, [searchQuery, activeCategory, tasks, lists, allWords, setSelectedTask, setActiveListId, onOpenShortcutsHelp])
+  }, [
+    searchQuery,
+    activeCategory,
+    tasks,
+    lists,
+    allWords,
+    setSelectedTask,
+    setActiveListId,
+    onOpenShortcutsHelp,
+    isRunning,
+    isPaused,
+    startTimer,
+    pauseTimer,
+    resumeTimer,
+    activeTheme,
+    presetThemes,
+    applyTheme,
+  ])
 
   // Clamped selected index derived safely during render
   const selectedIndex = filteredItems.length === 0 ? 0 : Math.min(rawSelectedIndex, filteredItems.length - 1)

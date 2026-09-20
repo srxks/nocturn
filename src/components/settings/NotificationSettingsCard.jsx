@@ -1,11 +1,19 @@
 import { useState } from 'react'
-import { Bell, BellRing, AlertCircle, Volume2 } from 'lucide-react'
-import { Card, Badge, Button } from '../ui'
+import { Bell, BellRing, AlertCircle, Volume2, Sparkles } from 'lucide-react'
+import { Card, Badge, Button, Switch } from '../ui'
 import {
   requestNotificationPermission,
   notifyTimerEnded,
   playCompletionChime,
 } from '../../services/notificationService'
+import {
+  isSoundEffectsEnabled,
+  setSoundEffectsEnabled,
+  isTimerSoundsEnabled,
+  setTimerSoundsEnabled,
+  playTimerStartSound,
+  playClickSound,
+} from '../../services/soundService'
 
 export default function NotificationSettingsCard() {
   const [isSupported] = useState(() => typeof window !== 'undefined' && 'Notification' in window)
@@ -16,6 +24,21 @@ export default function NotificationSettingsCard() {
     return 'default'
   })
   const [testSent, setTestSent] = useState(false)
+
+  const [soundEffects, setSoundEffects] = useState(() => isSoundEffectsEnabled())
+  const [timerSounds, setTimerSounds] = useState(() => isTimerSoundsEnabled())
+
+  const handleToggleSoundEffects = (checked) => {
+    setSoundEffects(checked)
+    setSoundEffectsEnabled(checked)
+    if (checked) playClickSound()
+  }
+
+  const handleToggleTimerSounds = (checked) => {
+    setTimerSounds(checked)
+    setTimerSoundsEnabled(checked)
+    if (checked) playTimerStartSound()
+  }
 
   const handleRequestPermission = async () => {
     const perm = await requestNotificationPermission()
@@ -35,7 +58,8 @@ export default function NotificationSettingsCard() {
         Desktop Notifications & Sound
       </h2>
 
-      <Card className="space-y-4">
+      <Card className="space-y-6">
+        {/* Native Push Notifications */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
             <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent shrink-0">
@@ -88,7 +112,7 @@ export default function NotificationSettingsCard() {
               onClick={handleTestNotification}
               icon={Volume2}
             >
-              {testSent ? 'Notification Sent!' : 'Test Sound & Alert'}
+              {testSent ? 'Alert Sent!' : 'Test Notification'}
             </Button>
           </div>
         </div>
@@ -101,6 +125,34 @@ export default function NotificationSettingsCard() {
             </span>
           </div>
         )}
+
+        {/* Audio Synthesis & Sound Feedback Controls */}
+        <div className="pt-4 border-t border-nocturn-border/70 space-y-4">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-nocturn-muted px-0.5">
+            <Sparkles className="w-3.5 h-3.5 text-nocturn-accent" />
+            <span>Audio & Synthesized Feedback</span>
+          </div>
+
+          <div className="divide-y divide-nocturn-border/50 space-y-4 pt-1">
+            <div className="pt-2">
+              <Switch
+                label="Tactile UI Sound Effects"
+                description="Subtle, low-latency audio ticks when creating tasks, switching filters, and interacting with controls."
+                checked={soundEffects}
+                onChange={handleToggleSoundEffects}
+              />
+            </div>
+
+            <div className="pt-4">
+              <Switch
+                label="Focus Timer Audio Cues"
+                description="Warm harmonic sine wave tones when focus sessions begin, pause, resume, or finish."
+                checked={timerSounds}
+                onChange={handleToggleTimerSounds}
+              />
+            </div>
+          </div>
+        </div>
       </Card>
     </section>
   )
