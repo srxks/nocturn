@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Search } from 'lucide-react'
 import BottomNav from './BottomNav'
 import SidebarNav from './SidebarNav'
@@ -53,18 +53,15 @@ export default function AppShell() {
         </header>
 
         <main className="w-full max-w-7xl xl:max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-10 xl:px-12 pt-6 sm:pt-8 lg:pt-10 pb-28 lg:pb-12 flex-1 flex flex-col">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
-              className="w-full flex-1 flex flex-col"
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.12, ease: 'easeOut' }}
+            className="w-full flex-1 flex flex-col"
+          >
+            <Outlet />
+          </motion.div>
         </main>
       </div>
 

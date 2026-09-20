@@ -12,13 +12,12 @@ export default function TimerSettingsRow({
   onIncrease,
 }) {
   const safeValue = Number.isFinite(Number(value)) && Number(value) >= min ? Number(value) : min
-  const [prevValue, setPrevValue] = useState(safeValue)
-  const [inputValue, setInputValue] = useState(String(safeValue))
+  const [isFocused, setIsFocused] = useState(false)
+  const [localInput, setLocalInput] = useState(String(safeValue))
 
-  // Render-phase sync when parent value prop changes (e.g. via +/- buttons)
-  if (safeValue !== prevValue) {
-    setPrevValue(safeValue)
-    setInputValue(String(safeValue))
+  const handleFocus = () => {
+    setIsFocused(true)
+    setLocalInput(String(safeValue))
   }
 
   const handleInputChange = (e) => {
@@ -26,13 +25,13 @@ export default function TimerSettingsRow({
 
     // Allow empty string temporarily so user can clear and retype
     if (raw === '') {
-      setInputValue('')
+      setLocalInput('')
       return
     }
 
     // Only allow positive integer digits
     if (/^\d+$/.test(raw)) {
-      setInputValue(raw)
+      setLocalInput(raw)
       const num = parseInt(raw, 10)
       if (!isNaN(num)) {
         const clamped = Math.max(min, max != null ? Math.min(max, num) : num)
@@ -42,16 +41,17 @@ export default function TimerSettingsRow({
   }
 
   const handleBlur = () => {
-    if (inputValue === '' || isNaN(parseInt(inputValue, 10))) {
-      setInputValue(String(value))
+    setIsFocused(false)
+    if (localInput === '' || isNaN(parseInt(localInput, 10))) {
       onChange(value)
     } else {
-      const num = parseInt(inputValue, 10)
+      const num = parseInt(localInput, 10)
       const clamped = Math.max(min, max != null ? Math.min(max, num) : num)
-      setInputValue(String(clamped))
       onChange(clamped)
     }
   }
+
+  const displayValue = isFocused ? localInput : String(safeValue)
 
   const isMin = safeValue <= min
   const isMax = max != null && safeValue >= max
@@ -85,7 +85,8 @@ export default function TimerSettingsRow({
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            value={inputValue}
+            value={displayValue}
+            onFocus={handleFocus}
             onChange={handleInputChange}
             onBlur={handleBlur}
             aria-label={`${label} in ${unit || 'units'}`}

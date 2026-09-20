@@ -1,1 +1,1 @@
-export { supabase, isSupabaseConfigured, testSupabaseConnection } from './supabaseClient.js'
+export { supabase, isSupabaseConfigured, testSupabaseConnection, isGuestUserId } from './supabaseClient.js'

@@ -27,8 +27,14 @@ import { drainSyncQueue } from './syncQueue.js'
 import { runCoordinatedSync } from './syncCoordinator.js'
 
 export async function syncWithCloud(userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) {
-    return { success: false, synced: 0, reason: 'Unconfigured or unauthenticated' }
+  if (
+    !isSupabaseConfigured ||
+    !supabase ||
+    !userId ||
+    userId === 'guest-local-user' ||
+    String(userId).startsWith('guest')
+  ) {
+    return { success: true, synced: 0, offline: true, reason: 'Guest or unconfigured' }
   }
 
   // Silent offline check: if user is offline, skip cloud network calls safely

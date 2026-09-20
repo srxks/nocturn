@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabaseClient.js'
+import { supabase, isSupabaseConfigured, isGuestUserId } from './supabaseClient.js'
 import { toUuid } from './idUtils.js'
 import { dedupeRequest } from '../services/syncCoordinator.js'
 import { classifyAndReportError } from '../services/networkStateService.js'
@@ -40,7 +40,7 @@ export function mapListToRow(list, userId) {
 }
 
 export async function fetchUserLists(userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return []
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return []
 
   return dedupeRequest(`lists:${userId}`, async () => {
     try {
@@ -64,7 +64,7 @@ export async function fetchUserLists(userId) {
 }
 
 export async function upsertListRemote(list, userId) {
-  if (!isSupabaseConfigured || !supabase || !userId || !list) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId) || !list) return null
 
   // Validate list name: name is NOT NULL in database schema
   const trimmedName = (list.name || '').trim()
@@ -120,7 +120,7 @@ export async function upsertListRemote(list, userId) {
 }
 
 export async function deleteListRemote(listId, userId) {
-  if (!isSupabaseConfigured || !supabase || !userId || !listId) return false
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId) || !listId) return false
   if (listId === userId || listId === 'tasks' || listId === 'my-day') return false
 
   try {

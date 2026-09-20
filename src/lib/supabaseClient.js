@@ -118,3 +118,11 @@ export async function testSupabaseConnection() {
   }
 }
 
+/**
+ * Checks if a given userId represents an offline/guest local session.
+ */
+export function isGuestUserId(userId) {
+  if (!userId || typeof userId !== 'string') return true
+  return userId === 'guest-local-user' || userId.startsWith('guest')
+}
+

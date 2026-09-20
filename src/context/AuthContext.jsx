@@ -8,10 +8,26 @@ import { drainSyncQueue } from '../services/syncQueue'
 import { db } from '../db/db'
 import { cleanupLegacyLocalStorage, setStorageItem } from '../utils/storageUtils'
 
+const isGuestUser = (u) => {
+  if (!u) return false
+  return Boolean(
+    u.isGuest ||
+    u.is_anonymous ||
+    u.id === 'guest-local-user' ||
+    (typeof u.id === 'string' && u.id.startsWith('guest'))
+  )
+}
+
 const getCachedAuthUser = () => {
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('nocturn_auth_user') : null
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed) {
+        if (isGuestUser(parsed)) parsed.isGuest = true
+        return parsed
+      }
+    }
   } catch {
     // ignore
   }
@@ -33,7 +49,10 @@ const getCachedAuthUser = () => {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => getCachedAuthUser())
-  const [session, setSession] = useState(null)
+  const [session, setSession] = useState(() => {
+    const cached = getCachedAuthUser()
+    return isGuestUser(cached) ? { user: cached } : null
+  })
   const [loading, setLoading] = useState(() => isSupabaseConfigured && Boolean(supabase) && !getCachedAuthUser())
 
   useEffect(() => {
@@ -56,12 +75,12 @@ export function AuthProvider({ children }) {
     // Safety timeout to ensure loading state unblocks even on connection drop / offline hang
     const safetyTimeoutId = setTimeout(() => {
       const fallbackUser = getCachedAuthUser()
-      endLoading(fallbackUser ?? null, null)
+      endLoading(fallbackUser ?? null, isGuestUser(fallbackUser) ? { user: fallbackUser } : null)
     }, 4000)
 
     // Handles all setup required after a user signs in
     const handleAuthUser = async (authUser, event = null) => {
-      if (!authUser?.id) return
+      if (!authUser?.id || isGuestUser(authUser)) return
       // Ignore token refresh events and redundant initializations
       if (event === 'TOKEN_REFRESHED') return
       if (lastInitializedUserId === authUser.id && event !== 'SIGNED_IN') return
@@ -120,7 +139,10 @@ export function AuthProvider({ children }) {
           endLoading(fallbackUser ?? null, null)
           return
         }
-        endLoading(initSession?.user ?? null, initSession ?? null)
+        const cachedUser = getCachedAuthUser()
+        const effectiveUser = initSession?.user ?? (cachedUser?.isGuest ? cachedUser : null)
+        const effectiveSession = initSession ?? (effectiveUser?.isGuest ? { user: effectiveUser } : null)
+        endLoading(effectiveUser, effectiveSession)
         if (initSession?.user) {
           try {
             localStorage.setItem('nocturn_auth_user', JSON.stringify(initSession.user))
@@ -134,7 +156,7 @@ export function AuthProvider({ children }) {
         clearTimeout(safetyTimeoutId)
         console.warn('[AuthProvider] getSession network failure, using cached offline state:', err)
         const fallbackUser = getCachedAuthUser()
-        endLoading(fallbackUser ?? null, null)
+        endLoading(fallbackUser ?? null, isGuestUser(fallbackUser) ? { user: fallbackUser } : null)
       })
 
     // Listen for auth state changes
@@ -142,7 +164,23 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, currentSession) => {
       clearTimeout(safetyTimeoutId)
-      endLoading(currentSession?.user ?? null, currentSession ?? null)
+
+      if (event === 'SIGNED_OUT') {
+        try {
+          localStorage.removeItem('nocturn_auth_user')
+        } catch {
+          // ignore storage error
+        }
+        lastInitializedUserId = null
+        stopRealtime()
+        endLoading(null, null)
+        return
+      }
+
+      const cachedUser = getCachedAuthUser()
+      const effectiveUser = currentSession?.user ?? (cachedUser?.isGuest ? cachedUser : null)
+      const effectiveSession = currentSession ?? (effectiveUser?.isGuest ? { user: effectiveUser } : null)
+      endLoading(effectiveUser, effectiveSession)
 
       if (currentSession?.user) {
         try {
@@ -151,14 +189,6 @@ export function AuthProvider({ children }) {
           // ignore storage error
         }
         handleAuthUser(currentSession.user, event)
-      } else if (event === 'SIGNED_OUT') {
-        try {
-          localStorage.removeItem('nocturn_auth_user')
-        } catch {
-          // ignore storage error
-        }
-        lastInitializedUserId = null
-        stopRealtime()
       }
     })
 
@@ -257,9 +287,28 @@ export function AuthProvider({ children }) {
     return data
   }
 
+  const continueAsGuest = () => {
+    const guestUser = {
+      id: 'guest-local-user',
+      email: 'guest@nocturn.local',
+      user_metadata: {
+        full_name:
+          (typeof localStorage !== 'undefined'
+            ? localStorage.getItem('nocturn_user_name')
+            : null) || 'Nocturn User',
+      },
+      is_anonymous: true,
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('nocturn_auth_user', JSON.stringify(guestUser))
+      localStorage.setItem('nocturn_onboarding_completed', 'true')
+    }
+    setUser(guestUser)
+    setSession({ user: guestUser })
+    return guestUser
+  }
+
   const signOut = async () => {
-    if (!isSupabaseConfigured || !supabase) return
-    // Stop realtime before signing out to prevent subscription errors
     stopRealtime()
     try {
       if (typeof localStorage !== 'undefined') {
@@ -288,8 +337,13 @@ export function AuthProvider({ children }) {
       console.warn('[AuthProvider] Local state cleanup notice on signOut:', err)
     }
 
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.auth.signOut()
+      } catch (err) {
+        console.warn('[AuthProvider] Supabase signOut notice:', err?.message || err)
+      }
+    }
     setUser(null)
     setSession(null)
   }
@@ -301,6 +355,7 @@ export function AuthProvider({ children }) {
         session,
         loading,
         isConfigured: isSupabaseConfigured,
+        continueAsGuest,
         signUpWithEmail,
         signInWithEmail,
         signInWithGoogle,

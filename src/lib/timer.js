@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabaseClient.js'
+import { supabase, isSupabaseConfigured, isGuestUserId } from './supabaseClient.js'
 import { toUuid } from './idUtils.js'
 import { dedupeRequest } from '../services/syncCoordinator.js'
 import { classifyAndReportError } from '../services/networkStateService.js'
@@ -74,7 +74,7 @@ export function mapRowToTimerSettings(data) {
  * Schema: id (uuid), user_id (uuid, unique), settings (jsonb), auto_start_breaks (boolean), created_at, updated_at.
  */
 export async function fetchTimerSettingsRemote(userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
   return dedupeRequest(`timer_settings:${userId}`, async () => {
     try {
@@ -114,7 +114,7 @@ export async function fetchTimerSettingsRemote(userId) {
  * Persists both configuration and live timerState inside the settings JSONB field.
  */
 export async function upsertTimerSettingsRemote(settings, userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
   try {
     const focusDuration = Number(settings.focusDuration)
@@ -194,7 +194,7 @@ export async function recordPomodoroHistoryRemote(
   sessionId = null,
   completed = true
 ) {
-  if (!isSupabaseConfigured || !supabase || !userId) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
   try {
     const validTaskId = taskId && taskId !== 'none' ? toUuid(taskId) : null
@@ -250,7 +250,7 @@ export async function recordPomodoroHistoryRemote(
  * Schema: id, user_id, task_id, start_time, end_time, duration_seconds, completed, created_at, updated_at.
  */
 export async function fetchUserFocusSessions(userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return []
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return []
 
   return dedupeRequest(`focus_sessions:${userId}`, async () => {
     try {

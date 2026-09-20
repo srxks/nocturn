@@ -11,11 +11,28 @@
  * 3. Provides safe, typed get/set/remove wrappers.
  */
 
-// Keys that are explicitly permitted in localStorage (e.g. offline queue, temporary UI preference)
+// Keys that are explicitly permitted in localStorage (active session, preferences, queues)
 const PERMITTED_KEYS = new Set([
+  'nocturn_auth_user',
+  'nocturn_onboarding_completed',
   'nocturn_sync_queue',
   'nocturn_user_name',
+  'nocturn_last_manual_sync',
+  'nocturn_cleared_notifs',
+  'nocturn_sound_effects',
+  'nocturn_timer_sounds',
+  'nocturn_theme_id',
+  'nocturn_ui_style',
+  'nocturn_timer_settings',
+  'nocturn_vocab_settings',
 ])
+
+function isPermittedKey(key) {
+  if (!key) return false
+  if (PERMITTED_KEYS.has(key)) return true
+  if (key.startsWith('vocab_') || key.startsWith('nocturn_vocab_')) return true
+  return false
+}
 
 /**
  * Returns true if a key is a protected Supabase auth/session key.
@@ -31,7 +48,7 @@ function isSupabaseAuthKey(key) {
 
 /**
  * Scans localStorage and safely purges obsolete cached user data from earlier versions
- * without touching active Supabase authentication tokens.
+ * without touching active Supabase authentication tokens or active session state.
  */
 export function cleanupLegacyLocalStorage() {
   if (typeof window === 'undefined' || !window.localStorage) return
@@ -45,21 +62,16 @@ export function cleanupLegacyLocalStorage() {
       // CRITICAL: NEVER delete Supabase auth tokens
       if (isSupabaseAuthKey(key)) continue
 
-      // Allow approved temporary UI keys
-      if (PERMITTED_KEYS.has(key)) continue
+      // Allow approved active keys
+      if (isPermittedKey(key)) continue
 
-      // Identify obsolete data keys
+      // Identify obsolete data keys from early prototypes (tasks v1, legacy caches)
       const lower = key.toLowerCase()
       const isLegacyData =
-        lower.startsWith('nocturn_') ||
-        lower.includes('task') ||
-        lower.includes('theme') ||
-        lower.includes('timer') ||
-        lower.includes('vocab') ||
-        lower.includes('plan') ||
-        lower.includes('schedule') ||
-        lower.includes('profile') ||
-        lower.includes('setting')
+        lower.startsWith('nocturn_tasks_v') ||
+        lower === 'tasks_cache' ||
+        lower === 'nocturn_tasks' ||
+        lower === 'nocturn_legacy_cache'
 
       if (isLegacyData) {
         keysToRemove.push(key)

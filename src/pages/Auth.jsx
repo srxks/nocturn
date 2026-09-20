@@ -7,7 +7,7 @@ import { useAuth } from '../context/useAuth'
 export default function Auth() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth()
+  const { user, signInWithEmail, signUpWithEmail, signInWithGoogle, continueAsGuest } = useAuth()
 
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
@@ -240,7 +240,10 @@ export default function Auth() {
         {/* Guest Mode Link */}
         <div className="text-center pt-2">
           <button
-            onClick={() => navigate('/tasks')}
+            onClick={() => {
+              continueAsGuest()
+              navigate(fromPath, { replace: true })
+            }}
             className="text-xs text-nocturn-muted hover:text-white transition-colors"
           >
             Continue as Guest (Local Offline Mode) →

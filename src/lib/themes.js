@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabaseClient.js'
+import { supabase, isSupabaseConfigured, isGuestUserId } from './supabaseClient.js'
 import { toUuid } from './idUtils.js'
 import { dedupeRequest } from '../services/syncCoordinator.js'
 import { classifyAndReportError } from '../services/networkStateService.js'
@@ -8,7 +8,7 @@ import { classifyAndReportError } from '../services/networkStateService.js'
  * Schema: id (uuid), user_id (uuid, unique), settings (jsonb), created_at, updated_at.
  */
 export async function fetchUserSettings(userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
   return dedupeRequest(`user_settings:${userId}`, async () => {
     try {
@@ -37,7 +37,7 @@ export async function fetchUserSettings(userId) {
  * Schema: id (uuid), user_id (uuid, unique), settings (jsonb), updated_at.
  */
 export async function upsertUserSettings(userId, newSettings = {}) {
-  if (!isSupabaseConfigured || !supabase || !userId) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
   try {
     const existing = await fetchUserSettings(userId)
@@ -80,7 +80,7 @@ export async function upsertUserSettings(userId, newSettings = {}) {
  * Schema: id (uuid), user_id (uuid), name (text), settings (jsonb), created_at, updated_at.
  */
 export async function fetchUserThemes(userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return []
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return []
 
   return dedupeRequest(`themes:${userId}`, async () => {
     try {
@@ -117,7 +117,7 @@ export async function fetchUserThemes(userId) {
  * Schema: id (uuid), user_id (uuid), name (text), settings (jsonb), updated_at.
  */
 export async function upsertUserThemeRemote(theme, userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
   try {
     const validId = toUuid(theme.id || `theme-${userId}-${theme.name}`)
@@ -171,7 +171,7 @@ export async function upsertUserThemeRemote(theme, userId) {
  * Deletes custom theme from themes table.
  */
 export async function deleteUserThemeRemote(themeId, userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return false
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return false
 
   try {
     const validId = toUuid(themeId)

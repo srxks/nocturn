@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabaseClient.js'
+import { supabase, isSupabaseConfigured, isGuestUserId } from './supabaseClient.js'
 import { dedupeRequest } from '../services/syncCoordinator.js'
 import { classifyAndReportError } from '../services/networkStateService.js'
 
@@ -14,7 +14,7 @@ import { classifyAndReportError } from '../services/networkStateService.js'
  *   updated_at (timestamptz)
  */
 export async function fetchUserProfileRemote(userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
   return dedupeRequest(`profile:${userId}`, async () => {
     try {
@@ -56,7 +56,7 @@ export async function fetchUserProfileRemote(userId) {
  * Upserts or updates the user's profile row correctly without 403 / RLS violations.
  */
 export async function updateUserProfileRemote(userId, profileUpdates) {
-  if (!isSupabaseConfigured || !supabase || !userId) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
   try {
     const existing = await fetchUserProfileRemote(userId)

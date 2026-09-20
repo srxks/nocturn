@@ -9,6 +9,7 @@ import {
   Palette,
 } from 'lucide-react'
 import { useTheme } from '../context/useTheme'
+import { useAuth } from '../context/useAuth'
 
 const FOCUS_GOALS = [
   { id: '2h', label: '2 Hours', subtitle: 'Gentle & Sustainable', hours: 2 },
@@ -20,6 +21,7 @@ const FOCUS_GOALS = [
 export default function Onboarding() {
   const navigate = useNavigate()
   const { activeTheme, presetThemes, applyTheme } = useTheme()
+  const { user, continueAsGuest } = useAuth()
 
   const [step, setStep] = useState(0)
   const [userName, setUserName] = useState(() => localStorage.getItem('nocturn_user_name') || '')
@@ -35,12 +37,18 @@ export default function Onboarding() {
       setStep((prev) => prev + 1)
     } else {
       localStorage.setItem('nocturn_onboarding_completed', 'true')
+      if (!user) {
+        continueAsGuest()
+      }
       navigate('/tasks')
     }
   }
 
   const handleSkip = () => {
     localStorage.setItem('nocturn_onboarding_completed', 'true')
+    if (!user) {
+      continueAsGuest()
+    }
     navigate('/tasks')
   }
 

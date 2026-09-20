@@ -19,6 +19,7 @@ export default function TimerSettings() {
   const { addToast } = useToast()
 
   const [isSaving, setIsSaving] = useState(false)
+  const [userHasEdited, setUserHasEdited] = useState(false)
   const [prevSettings, setPrevSettings] = useState(settings)
   const [localSettings, setLocalSettings] = useState(() => ({
     focusDuration: Number(settings?.focusDuration) || 25,
@@ -29,14 +30,16 @@ export default function TimerSettings() {
     autoStartPomo: Boolean(settings?.autoStartPomo),
   }))
 
-  // Render-phase sync when context settings update from external changes
+  // Render-phase sync when context settings update from external changes (only if user hasn't edited)
   if (
-    settings.focusDuration !== prevSettings.focusDuration ||
-    settings.shortBreakDuration !== prevSettings.shortBreakDuration ||
-    settings.longBreakDuration !== prevSettings.longBreakDuration ||
-    settings.sessions !== prevSettings.sessions ||
-    settings.autoStartBreaks !== prevSettings.autoStartBreaks ||
-    settings.autoStartPomo !== prevSettings.autoStartPomo
+    !userHasEdited && (
+      settings.focusDuration !== prevSettings.focusDuration ||
+      settings.shortBreakDuration !== prevSettings.shortBreakDuration ||
+      settings.longBreakDuration !== prevSettings.longBreakDuration ||
+      settings.sessions !== prevSettings.sessions ||
+      settings.autoStartBreaks !== prevSettings.autoStartBreaks ||
+      settings.autoStartPomo !== prevSettings.autoStartPomo
+    )
   ) {
     setPrevSettings(settings)
     setLocalSettings({
@@ -61,6 +64,7 @@ export default function TimerSettings() {
   }, [localSettings, settings])
 
   const handleChange = (key, delta, min = 1, max = 999) => {
+    setUserHasEdited(true)
     setLocalSettings((prev) => {
       const current = Number(prev[key]) || min
       const nextValue = Math.min(max, Math.max(min, current + delta))
@@ -72,6 +76,7 @@ export default function TimerSettings() {
   }
 
   const handleDirectSet = (key, newValue, min = 1, max = 999) => {
+    setUserHasEdited(true)
     const validValue = Math.min(max, Math.max(min, Number(newValue) || min))
     setLocalSettings((prev) => ({
       ...prev,
@@ -80,6 +85,7 @@ export default function TimerSettings() {
   }
 
   const handleApplyPreset = (preset) => {
+    setUserHasEdited(true)
     setLocalSettings((prev) => ({
       ...prev,
       focusDuration: preset.focus,
@@ -91,6 +97,7 @@ export default function TimerSettings() {
   }
 
   const handleResetToDefaults = () => {
+    setUserHasEdited(true)
     setLocalSettings({
       focusDuration: 25,
       shortBreakDuration: 5,

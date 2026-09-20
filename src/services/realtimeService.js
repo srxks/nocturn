@@ -374,7 +374,15 @@ const TABLE_HANDLERS = {
  * Start realtime subscriptions for the given authenticated user.
  */
 export function startRealtime(userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return
+  if (
+    !isSupabaseConfigured ||
+    !supabase ||
+    !userId ||
+    userId === 'guest-local-user' ||
+    String(userId).startsWith('guest')
+  ) {
+    return
+  }
 
   // Prevent duplicate channel creation for the same active user
   if (_currentUserId === userId && _channel) {

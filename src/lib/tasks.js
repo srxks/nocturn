@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabaseClient.js'
+import { supabase, isSupabaseConfigured, isGuestUserId } from './supabaseClient.js'
 import { toUuid } from './idUtils.js'
 import { dedupeRequest } from '../services/syncCoordinator.js'
 import { classifyAndReportError } from '../services/networkStateService.js'
@@ -150,7 +150,7 @@ export function mapTaskToRow(task, userId) {
  * Fetches all tasks (and their subtasks) for the current user from Supabase.
  */
 export async function fetchUserTasks(userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return []
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return []
 
   return dedupeRequest(`tasks:${userId}`, async () => {
     try {
@@ -199,7 +199,7 @@ export async function fetchUserTasks(userId) {
  * Returns the mapped task on success, null on failure.
  */
 export async function upsertTaskRemote(task, userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
   try {
     const row = mapTaskToRow(task, userId)
@@ -252,7 +252,7 @@ export async function upsertTaskRemote(task, userId) {
  * Deletes a task from Supabase.
  */
 export async function deleteTaskRemote(taskId, userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return false
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return false
 
   try {
     const validId = toUuid(taskId)
@@ -282,7 +282,7 @@ export async function deleteTaskRemote(taskId, userId) {
  * Upserts a single subtask to Supabase.
  */
 export async function upsertSubtaskRemote(subtask, taskId, userId, position = 0) {
-  if (!isSupabaseConfigured || !supabase || !userId) return null
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
   try {
     const row = {
@@ -321,7 +321,7 @@ export async function upsertSubtaskRemote(subtask, taskId, userId, position = 0)
  * Deletes a subtask from Supabase.
  */
 export async function deleteSubtaskRemote(subtaskId, userId) {
-  if (!isSupabaseConfigured || !supabase || !userId) return false
+  if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return false
 
   try {
     const validId = toUuid(subtaskId)
