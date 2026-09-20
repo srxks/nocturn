@@ -94,6 +94,7 @@ export default function NotificationCenterPanel({ isOpen, onClose }) {
     const allIds = new Set([...clearedIds, ...items.map((i) => i.id)])
     setClearedIds(allIds)
     localStorage.setItem('nocturn_cleared_notifs', JSON.stringify(Array.from(allIds)))
+    window.dispatchEvent(new Event('nocturn:notifications-updated'))
   }
 
   const handleDismissItem = (id) => {
@@ -101,6 +102,7 @@ export default function NotificationCenterPanel({ isOpen, onClose }) {
     next.add(id)
     setClearedIds(next)
     localStorage.setItem('nocturn_cleared_notifs', JSON.stringify(Array.from(next)))
+    window.dispatchEvent(new Event('nocturn:notifications-updated'))
   }
 
   return (
