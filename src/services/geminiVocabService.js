@@ -174,33 +174,41 @@ Return ONLY a valid JSON array containing exactly ${targetCount} objects with ke
 
   let edgeError = null
 
-  // 1. Primary backend: Supabase Edge Function 'generate-vocab'
+  // 1. Primary backend: Supabase Edge Function 'generate-vocab' with automatic retry
   if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-vocab', {
-        body: {
-          prompt: promptText,
-          model: GEMINI_MODEL,
-          existingWords: cleanExisting,
-          count: targetCount,
-        },
-      })
+    const maxAttempts = 2
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const { data, error } = await supabase.functions.invoke('generate-vocab', {
+          body: {
+            prompt: promptText,
+            model: GEMINI_MODEL,
+            existingWords: cleanExisting,
+            count: targetCount,
+          },
+        })
 
-      if (!error && data?.words) {
-        const validated = validateVocabResponse(data.words, targetCount)
-        const deduped = deduplicateAgainstExisting(validated.words, cleanExisting)
-        if (deduped.length > 0) {
-          return deduped
+        if (!error && data?.words) {
+          const validated = validateVocabResponse(data.words, targetCount)
+          const deduped = deduplicateAgainstExisting(validated.words, cleanExisting)
+          if (deduped.length > 0) {
+            return deduped
+          }
         }
+
+        if (error) {
+          console.warn(`[geminiVocabService] Supabase Edge Function notice (attempt ${attempt + 1}/${maxAttempts}):`, error)
+          edgeError = error.message || 'Supabase Edge Function returned an error'
+        }
+      } catch (err) {
+        console.warn(`[geminiVocabService] Exception invoking generate-vocab (attempt ${attempt + 1}/${maxAttempts}):`, err)
+        edgeError = err?.message || 'Network error connecting to vocabulary generator'
       }
 
-      if (error) {
-        console.warn('[geminiVocabService] Supabase Edge Function notice:', error)
-        edgeError = error.message || 'Supabase Edge Function returned an error'
+      // If first attempt failed with network/QUIC glitch, wait briefly before retrying
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 600))
       }
-    } catch (err) {
-      console.warn('[geminiVocabService] Exception invoking generate-vocab Edge Function:', err)
-      edgeError = err?.message || 'Network error connecting to vocabulary generator'
     }
   }
 
@@ -238,6 +246,12 @@ Return ONLY a valid JSON array containing exactly ${targetCount} objects with ke
   const finalError =
     edgeError && edgeError.includes('GEMINI_API_KEY')
       ? 'GEMINI_API_KEY is not configured in Supabase Edge Function secrets.'
+      : edgeError &&
+        (edgeError.toLowerCase().includes('failed to fetch') ||
+          edgeError.toLowerCase().includes('network') ||
+          edgeError.toLowerCase().includes('quic') ||
+          edgeError.toLowerCase().includes('timeout'))
+      ? 'Network connection interrupted while reaching vocabulary generator. Please retry.'
       : 'Vocabulary generation is temporarily unavailable. Please try again.'
 
   throw new Error(finalError)

@@ -262,13 +262,15 @@ export async function fetchUserFocusSessions(userId) {
 
       if (error) {
         classifyAndReportError(error)
-        throw new Error(`[focus_sessions] SELECT failed: ${error.message}`)
+        console.warn(`[focus_sessions] Remote fetch deferred (offline/network): ${error.message}`)
+        return []
       }
 
       return data || []
     } catch (err) {
       classifyAndReportError(err)
-      throw err
+      console.warn(`[focus_sessions] Remote fetch exception (offline/network): ${err?.message || err}`)
+      return []
     }
   })
 }

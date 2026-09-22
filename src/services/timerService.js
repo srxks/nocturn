@@ -1,5 +1,5 @@
 import { db } from '../db/db'
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
+import { supabase, isSupabaseConfigured, isGuestUserId } from '../lib/supabaseClient'
 import { recordPomodoroHistoryRemote } from '../lib/timer'
 
 /**
@@ -149,8 +149,20 @@ export async function recordPomodoroSession({
     const validDurationMinutes = Math.round((validDurationSeconds / 60) * 10) / 10
 
     let sessionUserId = null
-    if (isSupabaseConfigured && supabase) {
-      const { data: { session } } = await supabase.auth.getSession()
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('nocturn_auth_user') : null
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed?.id && !isGuestUserId(parsed.id)) {
+          sessionUserId = parsed.id
+        }
+      }
+    } catch {
+      // Ignore localStorage parse errors
+    }
+
+    if (!sessionUserId && isSupabaseConfigured && supabase) {
+      const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }))
       sessionUserId = session?.user?.id || null
     }
 
@@ -168,10 +180,14 @@ export async function recordPomodoroSession({
       completed,
     }
 
+    // 1. Local Dexie write ALWAYS happens first!
     await db.pomodoroSessions.put(sessionObj)
 
-    if (sessionUserId) {
-      await recordPomodoroHistoryRemote(validDurationMinutes, sessionType, taskId, taskTitle, sessionUserId, sessionId, completed)
+    // 2. Remote synchronization happens in background without blocking
+    if (sessionUserId && !isGuestUserId(sessionUserId)) {
+      recordPomodoroHistoryRemote(validDurationMinutes, sessionType, taskId, taskTitle, sessionUserId, sessionId, completed).catch((err) => {
+        console.warn('[timerService] Remote pomodoro history sync deferred:', err)
+      })
     }
 
     return sessionObj

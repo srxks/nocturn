@@ -114,13 +114,17 @@ export default function Profile() {
     if (!user?.id) return
     let isMounted = true
 
-    fetchUserProfileRemote(user.id).then((p) => {
-      if (isMounted && p?.display_name) {
-        setDisplayName(p.display_name)
-        setNameInput(p.display_name)
-        setStorageItem('nocturn_user_name', p.display_name)
-      }
-    })
+    fetchUserProfileRemote(user.id)
+      .then((p) => {
+        if (isMounted && p?.display_name) {
+          setDisplayName(p.display_name)
+          setNameInput(p.display_name)
+          setStorageItem('nocturn_user_name', p.display_name)
+        }
+      })
+      .catch((err) => {
+        console.warn('[Profile] Remote profile load skipped (offline/network):', err?.message || err)
+      })
 
     const handleProfileUpdated = (e) => {
       if (e.detail?.display_name) {

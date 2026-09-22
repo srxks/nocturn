@@ -32,11 +32,17 @@ export default function VocabReview() {
   const todayKey = getTodayDateKey()
   const reviewWordsKey = `nocturn_review_words_${userId || 'guest'}_${todayKey}`
   const reviewProgressKey = `nocturn_review_progress_${userId || 'guest'}_${todayKey}`
+  const reviewCompletedKey = `nocturn_review_completed_${userId || 'guest'}_${todayKey}`
 
   useEffect(() => {
     let active = true
     async function loadReviewWords() {
       try {
+        // If today's review session was already completed, show empty state immediately
+        const alreadyCompleted =
+          typeof localStorage !== 'undefined' &&
+          localStorage.getItem(reviewCompletedKey) === 'true'
+
         const savedWordsRaw =
           (typeof localStorage !== 'undefined' && localStorage.getItem(reviewWordsKey)) ||
           sessionStorage.getItem(reviewWordsKey)
@@ -44,13 +50,21 @@ export default function VocabReview() {
           (typeof localStorage !== 'undefined' && localStorage.getItem(reviewProgressKey)) ||
           sessionStorage.getItem(reviewProgressKey)
 
-        if (savedWordsRaw && savedProgressRaw) {
+        if (!alreadyCompleted && savedWordsRaw && savedProgressRaw) {
           const savedWords = JSON.parse(savedWordsRaw)
           const savedProgress = JSON.parse(savedProgressRaw)
           if (Array.isArray(savedWords) && savedWords.length > 0 && active) {
             setQuizWords(savedWords)
             setCurrentIndex(Math.min(savedProgress.currentIndex || 0, savedWords.length - 1))
             setScore(savedProgress.score || { correct: 0, incorrect: 0 })
+            setIsLoading(false)
+            return
+          }
+        }
+
+        if (alreadyCompleted) {
+          if (active) {
+            setQuizWords([])
             setIsLoading(false)
             return
           }
@@ -81,7 +95,7 @@ export default function VocabReview() {
     return () => {
       active = false
     }
-  }, [userId, dailyLimit, reviewWordsKey, reviewProgressKey])
+  }, [userId, dailyLimit, reviewWordsKey, reviewProgressKey, reviewCompletedKey])
 
   // Persist review progress so refresh/reload/browser close preserves progress
   useEffect(() => {
@@ -128,9 +142,9 @@ export default function VocabReview() {
       }))
 
       // Update word state in IndexedDB (correct_count & last_quizzed_date)
-      await recordQuizResult(currentWord.id, isCorrect)
+      await recordQuizResult(currentWord.id, isCorrect, userId)
     },
-    [isAnswered, currentWord, recordQuizResult]
+    [isAnswered, currentWord, recordQuizResult, userId]
   )
 
   // Advance to Next Question
@@ -143,9 +157,11 @@ export default function VocabReview() {
       setIsCompleted(true)
       try {
         if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(reviewCompletedKey, 'true')
           localStorage.removeItem(reviewWordsKey)
           localStorage.removeItem(reviewProgressKey)
         }
+        sessionStorage.setItem(reviewCompletedKey, 'true')
         sessionStorage.removeItem(reviewWordsKey)
         sessionStorage.removeItem(reviewProgressKey)
       } catch {

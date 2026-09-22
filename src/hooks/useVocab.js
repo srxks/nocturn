@@ -274,9 +274,12 @@ export function useVocab() {
   )
 
   // 7. Record Quiz Result Action
-  const recordQuizResult = useCallback(async (wordId, isCorrect) => {
-    return await updateWordQuizResult(wordId, isCorrect)
-  }, [])
+  const recordQuizResult = useCallback(
+    async (wordId, isCorrect, passedUserId = null) => {
+      return await updateWordQuizResult(wordId, isCorrect, passedUserId || userId)
+    },
+    [userId]
+  )
 
   // 8. CRUD Actions
   const addWord = useCallback(

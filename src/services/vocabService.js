@@ -1,5 +1,5 @@
 import { db } from '../db/db.js'
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient.js'
+import { supabase, isSupabaseConfigured, isGuestUserId } from '../lib/supabaseClient.js'
 import {
   upsertVocabWordsRemote,
   deleteVocabWordRemote,
@@ -10,6 +10,24 @@ import { isRealtimeWrite } from './realtimeService.js'
 import { enqueueMutation, purgePendingVocabMutations } from './syncQueue.js'
 import { recordTombstone } from './conflictService.js'
 import { toUuid } from '../lib/idUtils.js'
+
+/**
+ * Synchronous, offline-first helper to retrieve the active user ID without
+ * triggering remote network roundtrips or QUIC connection failures.
+ */
+export function getActiveUserId(passedUserId = null) {
+  if (passedUserId && !isGuestUserId(passedUserId)) return passedUserId
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('nocturn_auth_user') : null
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed?.id && !isGuestUserId(parsed.id)) return parsed.id
+    }
+  } catch {
+    // Ignore localStorage parse errors
+  }
+  return null
+}
 
 // Fallback curated GRE definitions for distractor options when vocabulary set is small
 const CURATED_GRE_DISTRACTORS = [
@@ -65,12 +83,7 @@ export async function saveDailyVocabLog(dailyLog) {
 export async function getAllLearnedWords(userId = null) {
   try {
     if (!db || !db.vocab) return []
-    let sessionUserId = userId
-    if (!sessionUserId && isSupabaseConfigured && supabase) {
-      const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }))
-      sessionUserId = session?.user?.id || null
-    }
-
+    const sessionUserId = getActiveUserId(userId)
     const all = await db.vocab.toArray()
     if (sessionUserId) {
       return all.filter((w) => !w.userId || w.userId === sessionUserId)
@@ -84,12 +97,7 @@ export async function getAllLearnedWords(userId = null) {
 
 export async function saveLearnedWord(wordRecord) {
   try {
-    let sessionUserId = null
-    if (isSupabaseConfigured && supabase) {
-      const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }))
-      sessionUserId = session?.user?.id || null
-    }
-
+    const sessionUserId = getActiveUserId(wordRecord.userId)
     const normalizedWord = (wordRecord.word || '').trim().toLowerCase()
     const allLocal = await db.vocab.toArray()
     const existing = allLocal.find((w) => w.word?.trim().toLowerCase() === normalizedWord)
@@ -115,17 +123,20 @@ export async function saveLearnedWord(wordRecord) {
       updatedAt: nowIso,
     }
 
+    // 1. Local Dexie write ALWAYS happens first!
     await db.vocab.put(record)
 
-    if (sessionUserId && !isRealtimeWrite()) {
-      try {
-        const res = await upsertVocabWordsRemote([record], sessionUserId)
-        if (!res || res.length === 0) {
+    // 2. Non-blocking remote sync with offline queue fallback
+    if (sessionUserId && !isRealtimeWrite() && isSupabaseConfigured && supabase) {
+      upsertVocabWordsRemote([record], sessionUserId)
+        .then((res) => {
+          if (!res || res.length === 0) {
+            enqueueMutation('upsert', 'vocab_words', mapVocabWordToRow(record, sessionUserId))
+          }
+        })
+        .catch(() => {
           enqueueMutation('upsert', 'vocab_words', mapVocabWordToRow(record, sessionUserId))
-        }
-      } catch {
-        enqueueMutation('upsert', 'vocab_words', mapVocabWordToRow(record, sessionUserId))
-      }
+        })
     }
 
     return record
@@ -138,11 +149,7 @@ export async function saveLearnedWord(wordRecord) {
 export async function deleteLearnedWord(wordId) {
   try {
     const existing = await db.vocab.get(wordId)
-    let sessionUserId = existing?.userId || null
-    if (!sessionUserId && isSupabaseConfigured && supabase) {
-      const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }))
-      sessionUserId = session?.user?.id || null
-    }
+    const sessionUserId = existing?.userId || getActiveUserId()
 
     if (sessionUserId) {
       await recordTombstone('vocab_words', wordId, sessionUserId)
@@ -153,15 +160,16 @@ export async function deleteLearnedWord(wordId) {
 
     await db.vocab.delete(wordId)
 
-    if (sessionUserId && !isRealtimeWrite()) {
-      try {
-        const ok = await deleteVocabWordRemote(wordId, sessionUserId)
-        if (!ok) {
+    if (sessionUserId && !isRealtimeWrite() && isSupabaseConfigured && supabase) {
+      deleteVocabWordRemote(wordId, sessionUserId)
+        .then((ok) => {
+          if (!ok) {
+            enqueueMutation('delete', 'vocab_words', { id: wordId, user_id: sessionUserId })
+          }
+        })
+        .catch(() => {
           enqueueMutation('delete', 'vocab_words', { id: wordId, user_id: sessionUserId })
-        }
-      } catch {
-        enqueueMutation('delete', 'vocab_words', { id: wordId, user_id: sessionUserId })
-      }
+        })
     }
 
     return true
@@ -173,12 +181,7 @@ export async function deleteLearnedWord(wordId) {
 
 export async function deleteAllVocabWords(userId = null) {
   try {
-    let sessionUserId = userId
-    if (!sessionUserId && isSupabaseConfigured && supabase) {
-      const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }))
-      sessionUserId = session?.user?.id || null
-    }
-
+    const sessionUserId = getActiveUserId(userId)
     const allLocal = await db.vocab.toArray()
     const userWords = sessionUserId
       ? allLocal.filter((w) => !w.userId || w.userId === sessionUserId)
@@ -200,7 +203,7 @@ export async function deleteAllVocabWords(userId = null) {
     // 2. Purge pending offline sync queue upserts for this user's vocab
     purgePendingVocabMutations(sessionUserId)
 
-    // 3. Wipe local Dexie records
+    // 3. Wipe local Dexie records immediately
     if (wordIds.length > 0) {
       await db.vocab.bulkDelete(wordIds)
     }
@@ -208,17 +211,18 @@ export async function deleteAllVocabWords(userId = null) {
       await db.dailyVocabLogs.clear()
     }
 
-    // 4. Remote deletion for current user only
+    // 4. Remote deletion in background
     const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
     if (sessionUserId && isOnline && !isRealtimeWrite() && isSupabaseConfigured && supabase) {
-      try {
-        const ok = await deleteAllVocabWordsRemote(sessionUserId)
-        if (!ok) {
+      deleteAllVocabWordsRemote(sessionUserId)
+        .then((ok) => {
+          if (!ok) {
+            enqueueMutation('delete_all_user_vocab', 'vocab_words', { user_id: sessionUserId })
+          }
+        })
+        .catch(() => {
           enqueueMutation('delete_all_user_vocab', 'vocab_words', { user_id: sessionUserId })
-        }
-      } catch {
-        enqueueMutation('delete_all_user_vocab', 'vocab_words', { user_id: sessionUserId })
-      }
+        })
     } else if (sessionUserId && !isRealtimeWrite()) {
       enqueueMutation('delete_all_user_vocab', 'vocab_words', { user_id: sessionUserId })
     }
@@ -235,21 +239,16 @@ export async function deleteAllVocabWords(userId = null) {
   }
 }
 
-export async function updateWordQuizResult(wordId, isCorrect) {
+export async function updateWordQuizResult(wordId, isCorrect, passedUserId = null) {
   try {
     const existing = await db.vocab.get(wordId)
     if (!existing) return null
 
-    let sessionUserId = null
-    if (isSupabaseConfigured && supabase) {
-      const { data: { session } } = await supabase.auth.getSession()
-      sessionUserId = session?.user?.id || null
-    }
-
+    const sessionUserId = existing.userId || getActiveUserId(passedUserId)
     const today = getTodayDateKey()
     const newCount = isCorrect
-      ? Math.min(existing.correct_count + 1, 5)
-      : existing.correct_count
+      ? Math.min((existing.correct_count || 0) + 1, 5)
+      : (existing.correct_count || 0)
 
     const updated = {
       ...existing,
@@ -258,17 +257,20 @@ export async function updateWordQuizResult(wordId, isCorrect) {
       updatedAt: new Date().toISOString(),
     }
 
+    // 1. Local Dexie write ALWAYS happens first!
     await db.vocab.put(updated)
 
-    if (sessionUserId && !isRealtimeWrite()) {
-      try {
-        const res = await upsertVocabWordsRemote([updated], sessionUserId)
-        if (!res || res.length === 0) {
+    // 2. Non-blocking remote sync with offline queue fallback
+    if (sessionUserId && !isRealtimeWrite() && isSupabaseConfigured && supabase) {
+      upsertVocabWordsRemote([updated], sessionUserId)
+        .then((res) => {
+          if (!res || res.length === 0) {
+            enqueueMutation('upsert', 'vocab_words', mapVocabWordToRow(updated, sessionUserId))
+          }
+        })
+        .catch(() => {
           enqueueMutation('upsert', 'vocab_words', mapVocabWordToRow(updated, sessionUserId))
-        }
-      } catch {
-        enqueueMutation('upsert', 'vocab_words', mapVocabWordToRow(updated, sessionUserId))
-      }
+        })
     }
 
     return updated
@@ -304,8 +306,16 @@ function shuffleArray(arr, rng) {
 
 export async function getReviewQueueWords(userId = null, limit = 10) {
   try {
-    const allWords = await getAllLearnedWords(userId)
     const today = getTodayDateKey()
+    const sessionUserId = getActiveUserId(userId)
+
+    // Check if user has explicitly completed their review session for today
+    const completedFlagKey = `nocturn_review_completed_${sessionUserId || 'guest'}_${today}`
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(completedFlagKey) === 'true') {
+      return []
+    }
+
+    const allWords = await getAllLearnedWords(userId)
     const maxLimit = Math.min(10, Math.max(1, Number(limit) || 10))
 
     // 1. Filter:

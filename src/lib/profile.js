@@ -27,7 +27,8 @@ export async function fetchUserProfileRemote(userId) {
 
       if (error && error.code !== 'PGRST116') {
         classifyAndReportError(error)
-        throw new Error(`[user_profiles] SELECT failed: ${error.message}`)
+        console.warn(`[user_profiles] Remote fetch deferred (offline/network): ${error.message}`)
+        return null
       }
 
       if (data) return data
@@ -41,13 +42,15 @@ export async function fetchUserProfileRemote(userId) {
 
       if (fallbackErr && fallbackErr.code !== 'PGRST116') {
         classifyAndReportError(fallbackErr)
-        throw new Error(`[user_profiles] SELECT fallback failed: ${fallbackErr.message}`)
+        console.warn(`[user_profiles] Remote fallback deferred (offline/network): ${fallbackErr.message}`)
+        return null
       }
 
       return fallbackData || null
     } catch (err) {
       classifyAndReportError(err)
-      throw err
+      console.warn(`[user_profiles] Remote fetch exception (offline/network): ${err?.message || err}`)
+      return null
     }
   })
 }

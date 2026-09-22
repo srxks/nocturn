@@ -57,8 +57,42 @@ export const isSupabaseConfigured = Boolean(
   !supabaseKey.includes('your-supabase-anon-key')
 )
 
+/**
+ * Resilient fetch wrapper for Supabase client.
+ * Handles transient network dropouts, HTTP/3 QUIC protocol errors (ERR_QUIC_PROTOCOL_ERROR),
+ * and automatic TCP fallback retries.
+ */
+async function resilientFetch(input, init) {
+  const maxRetries = 2
+  let lastError = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetch(input, init)
+    } catch (err) {
+      lastError = err
+      const msg = (err?.message || '').toLowerCase()
+      const isNetworkError =
+        err?.name === 'TypeError' ||
+        msg.includes('failed to fetch') ||
+        msg.includes('quic') ||
+        msg.includes('network') ||
+        msg.includes('aborted')
+
+      if (isNetworkError && attempt < maxRetries) {
+        // Chromium falls back from QUIC to TCP upon retrying
+        const delay = (attempt + 1) * 200
+        await new Promise((r) => setTimeout(r, delay))
+        continue
+      }
+      throw err
+    }
+  }
+  throw lastError
+}
+
 // Initialize exactly one canonical Supabase client instance.
-// Explicitly injects apikey into global headers to prevent missing apikey header in REST calls.
+// Explicitly injects apikey into global headers and uses resilientFetch for QUIC/network recovery.
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseKey, {
       auth: {
@@ -70,6 +104,7 @@ export const supabase = isSupabaseConfigured
         headers: {
           apikey: supabaseKey,
         },
+        fetch: resilientFetch,
       },
     })
   : null
