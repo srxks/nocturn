@@ -8,8 +8,12 @@
  */
 
 import puppeteer from 'puppeteer-core'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+const USER_DATA_DIR = path.resolve(__dirname, '../../.chrome-session')
 const BASE_URL = 'http://localhost:5173'
 
 const consoleErrors = []
@@ -26,11 +30,14 @@ async function runBrowserQA() {
   const browser = await puppeteer.launch({
     executablePath: CHROME_PATH,
     headless: true,
+    userDataDir: USER_DATA_DIR,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-web-security',
       '--disable-features=IsolateOrigins,site-per-process',
+      '--host-resolver-rules=MAP odajpktecgrbpwjtmszk.supabase.co 104.18.38.10',
+      '--disable-quic',
     ],
     defaultViewport: { width: 1280, height: 800 },
   })

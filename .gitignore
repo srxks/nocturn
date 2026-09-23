@@ -36,3 +36,10 @@ dist-ssr
 
 # Vercel deployment
 .vercel
+
+# Browser QA profile sessions
+.chrome-session
+.chrome-session/*
+.auth-status.json
+
+

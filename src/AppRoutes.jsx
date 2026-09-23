@@ -42,6 +42,8 @@ function AppRoutes() {
       {/* Standalone Onboarding & Auth routes */}
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/auth" element={<Auth />} />
+      <Route path="/login" element={<Navigate to="/auth" replace />} />
+      <Route path="/signup" element={<Navigate to="/auth" replace />} />
 
       {/* Core app routes wrapped in AppShell with ProtectedRoute */}
       <Route
