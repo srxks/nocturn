@@ -163,15 +163,32 @@ const handleTimerSettings = withRealtimeGuard(async (payload, userId) => {
   if (newRow.user_id && newRow.user_id !== userId) return
 
   const currentLocal = await db.timerSettings.get('default')
+  const activeSession = await db.activeSessions.get('active')
+  const isLocalActive =
+    (activeSession && (activeSession.status === 'active' || activeSession.status === 'paused')) ||
+    (currentLocal?.timerState && (currentLocal.timerState.status === 'running' || currentLocal.timerState.status === 'paused'))
+
   const remoteUpdatedAt = getTimestampMs(newRow)
   const localUpdatedAt = getTimestampMs(currentLocal)
 
   const s = newRow.settings
+  const localActionAt = currentLocal?.timerState?.lastActionAt
+    ? new Date(currentLocal.timerState.lastActionAt).getTime()
+    : 0
+  const remoteActionAt = s.timerState?.lastActionAt
+    ? new Date(s.timerState.lastActionAt).getTime()
+    : 0
+
+  // If local is currently running/paused, do NOT let an older or idle remote event overwrite the local active timer!
+  if (isLocalActive && remoteActionAt <= localActionAt) {
+    s.timerState = currentLocal.timerState
+  }
+
   const isNewAction =
     s.timerState?.actionId && s.timerState.actionId !== currentLocal?.timerState?.actionId
 
   // Adopt remote timer state if new user action occurred or remote timestamp is newer
-  if (!isNewAction && localUpdatedAt > remoteUpdatedAt) {
+  if (!isNewAction && localUpdatedAt > remoteUpdatedAt && !isLocalActive) {
     return
   }
 

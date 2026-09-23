@@ -253,24 +253,56 @@ export async function syncWithCloud(userId) {
     }
   }
 
-  // ─── 5. Timer Settings Sync (LWW) ───────────────────────────────────────────
+  // ─── 5. Timer Settings Sync (LWW with Active Session Protection) ─────────────
   try {
     const localTimer = await db.timerSettings.get('default')
     const remoteTimer = await fetchTimerSettingsRemote(userId)
+    const activeSession = await db.activeSessions.get('active')
+
+    const isLocalActive =
+      (activeSession && (activeSession.status === 'active' || activeSession.status === 'paused')) ||
+      (localTimer?.timerState && (localTimer.timerState.status === 'running' || localTimer.timerState.status === 'paused'))
+
+    const localActionTime = localTimer?.timerState?.lastActionAt
+      ? new Date(localTimer.timerState.lastActionAt).getTime()
+      : 0
+    const remoteActionTime = remoteTimer?.timerState?.lastActionAt
+      ? new Date(remoteTimer.timerState.lastActionAt).getTime()
+      : 0
 
     if (remoteTimer && localTimer) {
-      const conflict = resolveConflict(localTimer, remoteTimer)
-      if (conflict === 'local') {
-        const saved = await upsertTimerSettingsRemote(localTimer, userId)
-        if (saved?.updatedAt) {
-          await db.timerSettings.put({ ...localTimer, id: 'default', userId, updatedAt: saved.updatedAt })
+      if (isLocalActive && localActionTime >= remoteActionTime) {
+        // Local active running session takes priority: preserve local timerState, push to cloud
+        const mergedSettings = {
+          ...remoteTimer,
+          ...localTimer,
+          id: 'default',
+          userId,
+          timerState: localTimer.timerState,
+          updatedAt: new Date().toISOString(),
         }
+        await db.timerSettings.put(mergedSettings)
+        await upsertTimerSettingsRemote(mergedSettings, userId)
         totalSynced++
       } else {
-        await db.timerSettings.put({ id: 'default', userId, ...remoteTimer })
+        const conflict = resolveConflict(localTimer, remoteTimer)
+        if (conflict === 'local') {
+          const saved = await upsertTimerSettingsRemote(localTimer, userId)
+          if (saved?.updatedAt) {
+            await db.timerSettings.put({ ...localTimer, id: 'default', userId, updatedAt: saved.updatedAt })
+          }
+          totalSynced++
+        } else if (conflict === 'remote') {
+          const finalTimerState = isLocalActive && !remoteTimer.timerState
+            ? localTimer.timerState
+            : remoteTimer.timerState
+          await db.timerSettings.put({ id: 'default', userId, ...remoteTimer, timerState: finalTimerState })
+        }
+        // When equal: do not overwrite to prevent useLiveQuery churn
       }
     } else if (remoteTimer) {
-      await db.timerSettings.put({ id: 'default', userId, ...remoteTimer })
+      const finalTimerState = isLocalActive ? (localTimer?.timerState || null) : remoteTimer.timerState
+      await db.timerSettings.put({ id: 'default', userId, ...remoteTimer, timerState: finalTimerState })
     } else if (localTimer) {
       const saved = await upsertTimerSettingsRemote(localTimer, userId)
       if (saved?.updatedAt) {

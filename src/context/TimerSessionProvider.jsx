@@ -27,6 +27,15 @@ export function TimerSessionProvider({ children }) {
   const [currentSession, setCurrentSession] = useState(1)
   const [taskName, setTaskName] = useState('')
 
+  const isRunningRef = useRef(isRunning)
+  const isPausedRef = useRef(isPaused)
+  const lastActionAtRef = useRef(0)
+
+  useEffect(() => {
+    isRunningRef.current = isRunning
+    isPausedRef.current = isPaused
+  }, [isRunning, isPaused])
+
   // Track if 5-minute warning was already notified for current session
   const hasWarned5mRef = useRef(false)
 
@@ -94,15 +103,9 @@ export function TimerSessionProvider({ children }) {
     if (!isRunning && !isPaused && !activeSession) {
       setTotalSeconds(targetDurationForMode)
       setRemainingSeconds(targetDurationForMode)
-    } else {
-      // Dynamic duration adjustment while running or paused (Part 13):
-      // newRemaining = newTotal - elapsed
-      const newTotal = targetDurationForMode
-      const elapsed = elapsedSeconds
-      const newRemaining = Math.max(0, newTotal - elapsed)
-      setTotalSeconds(newTotal)
-      setRemainingSeconds(newRemaining)
     }
+    // In-flight running or paused sessions MUST preserve their active duration and countdown.
+    // Background cloud sync of default settings must never reset or recalculate active sessions!
   }
 
   // Synchronize duration adjustments while running or paused across instances
@@ -112,13 +115,15 @@ export function TimerSessionProvider({ children }) {
       prevRunningTotalRef.current = totalSeconds
       if ((isRunning || isPaused) && updateTimerState) {
         const actionId = crypto.randomUUID()
+        const actionNow = Date.now()
         lastActionIdRef.current = actionId
+        lastActionAtRef.current = actionNow
         updateTimerState({
           actionId,
           totalSeconds,
           configuredDuration: totalSeconds,
           remainingSecondsWhenPaused: isPaused ? remainingSeconds : undefined,
-          lastActionAt: new Date().toISOString(),
+          lastActionAt: new Date(actionNow).toISOString(),
         }).catch(() => {})
       }
     }
@@ -131,10 +136,16 @@ export function TimerSessionProvider({ children }) {
     let isMounted = true
 
     async function restoreSession() {
+      // If timer is already running or paused in memory, never overwrite with storage
+      if (isRunningRef.current || isPausedRef.current) return
+
       // Prioritize cloud timerState if available
       const cloudTimerState = settings?.timerState
       if (cloudTimerState && cloudTimerState.actionId) {
         lastActionIdRef.current = cloudTimerState.actionId
+        if (cloudTimerState.lastActionAt) {
+          lastActionAtRef.current = new Date(cloudTimerState.lastActionAt).getTime()
+        }
         const cloudMode = cloudTimerState.mode || 'focus'
         const cloudTotal =
           Number(cloudTimerState.configuredDuration) ||
@@ -163,6 +174,19 @@ export function TimerSessionProvider({ children }) {
           const remaining = Math.max(0, cloudTotal - elapsed)
 
           if (remaining > 0) {
+            const restoredSession = {
+              sessionId: `session-${cloudTimerState.actionId}`,
+              taskName: cloudTimerState.taskName || '',
+              sessionType: cloudMode === 'shortBreak' ? 'short_break' : cloudMode === 'longBreak' ? 'long_break' : 'focus',
+              configuredDuration: Math.round(cloudTotal / 60) || 25,
+              startedAt: new Date(canonStart).toISOString(),
+              expectedEndAt: new Date(canonStart + cloudTotal * 1000).toISOString(),
+              status: 'active',
+              currentSession: Number(cloudTimerState.currentSession) || 1,
+            }
+            updateActiveSession(restoredSession)
+            recordActiveSession(restoredSession).catch(() => {})
+
             setCanonicalStartTime(canonStart)
             setElapsedSeconds(elapsed)
             setRemainingSeconds(remaining)
@@ -178,6 +202,19 @@ export function TimerSessionProvider({ children }) {
               ? Number(cloudTimerState.remainingSecondsWhenPaused)
               : Math.max(0, cloudTotal - elapsed)
 
+          const restoredSession = {
+            sessionId: `session-${cloudTimerState.actionId}`,
+            taskName: cloudTimerState.taskName || '',
+            sessionType: cloudMode === 'shortBreak' ? 'short_break' : cloudMode === 'longBreak' ? 'long_break' : 'focus',
+            configuredDuration: Math.round(cloudTotal / 60) || 25,
+            remainingSecondsWhenPaused: remaining,
+            elapsedSeconds: elapsed,
+            status: 'paused',
+            currentSession: Number(cloudTimerState.currentSession) || 1,
+          }
+          updateActiveSession(restoredSession)
+          recordActiveSession(restoredSession).catch(() => {})
+
           setCanonicalStartTime(null)
           setElapsedSeconds(elapsed)
           setRemainingSeconds(remaining)
@@ -190,6 +227,7 @@ export function TimerSessionProvider({ children }) {
       // Fall back to local Dexie active session
       const persisted = await getActiveSession()
       if (!isMounted || !persisted) return
+      if (isRunningRef.current || isPausedRef.current) return
 
       const modeKey =
         persisted.sessionType === 'short_break'
@@ -262,7 +300,7 @@ export function TimerSessionProvider({ children }) {
     return () => {
       isMounted = false
     }
-  }, [getModeDurationSeconds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 2. React to Remote Realtime changes in settings.timerState
   useEffect(() => {
@@ -272,11 +310,29 @@ export function TimerSessionProvider({ children }) {
       return
     }
 
+    const isCurrentlyActive = isRunningRef.current || isPausedRef.current || Boolean(activeSessionRef.current)
+    const remoteTime = remoteState.lastActionAt ? new Date(remoteState.lastActionAt).getTime() : 0
+    const localTime = lastActionAtRef.current || 0
+
+    // Safety guard: if local client is actively running or paused, reject any incoming
+    // remote timerState that is not strictly newer than the local user's action timestamp.
+    // This stops background sync (or stale remote rows) from clobbering an in-flight timer!
+    if (isCurrentlyActive && remoteTime <= localTime) {
+      return
+    }
+
+    // Do NOT allow a remote idle/stopped state to kill an active session unless remote is strictly newer
+    if (isCurrentlyActive && (remoteState.status === 'idle' || !remoteState.status) && remoteTime <= localTime) {
+      return
+    }
+
     queueMicrotask(() => {
       if (!isCurrent) return
       if (!remoteState?.actionId || remoteState.actionId === lastActionIdRef.current) return
+      if (isCurrentlyActive && remoteTime <= (lastActionAtRef.current || 0)) return
 
       lastActionIdRef.current = remoteState.actionId
+      lastActionAtRef.current = remoteTime || Date.now()
 
       const targetMode = remoteState.mode || 'focus'
       const targetConfigured =
@@ -311,6 +367,19 @@ export function TimerSessionProvider({ children }) {
         setRemainingSeconds(remaining)
         setIsRunning(remaining > 0)
         setIsPaused(false)
+
+        const activeObj = {
+          sessionId: `session-${remoteState.actionId}`,
+          taskName: remoteState.taskName || '',
+          sessionType: targetMode === 'shortBreak' ? 'short_break' : targetMode === 'longBreak' ? 'long_break' : 'focus',
+          configuredDuration: Math.round(targetConfigured / 60) || 25,
+          startedAt: new Date(canonStart).toISOString(),
+          expectedEndAt: new Date(canonStart + targetConfigured * 1000).toISOString(),
+          status: 'active',
+          currentSession: targetSession,
+        }
+        updateActiveSession(activeObj)
+        recordActiveSession(activeObj).catch(() => {})
       } else if (remoteState.status === 'paused') {
         const elapsed = Number(remoteState.elapsedSeconds) || 0
         const remaining =
@@ -324,6 +393,19 @@ export function TimerSessionProvider({ children }) {
         setRemainingSeconds(remaining)
         setIsRunning(false)
         setIsPaused(true)
+
+        const activeObj = {
+          sessionId: `session-${remoteState.actionId}`,
+          taskName: remoteState.taskName || '',
+          sessionType: targetMode === 'shortBreak' ? 'short_break' : targetMode === 'longBreak' ? 'long_break' : 'focus',
+          configuredDuration: Math.round(targetConfigured / 60) || 25,
+          remainingSecondsWhenPaused: remaining,
+          elapsedSeconds: elapsed,
+          status: 'paused',
+          currentSession: targetSession,
+        }
+        updateActiveSession(activeObj)
+        recordActiveSession(activeObj).catch(() => {})
       } else {
         // 'idle' / stopped
         setCanonicalStartTime(null)
@@ -362,7 +444,9 @@ export function TimerSessionProvider({ children }) {
       setCanonicalStartTime(null)
 
       const actionId = crypto.randomUUID()
+      const actionNow = Date.now()
       lastActionIdRef.current = actionId
+      lastActionAtRef.current = actionNow
 
       const currentTotal = totalSeconds
       const currentMode = mode
@@ -465,7 +549,7 @@ export function TimerSessionProvider({ children }) {
             taskId: null,
             planBlockId: null,
             startedAt: null,
-            lastActionAt: new Date().toISOString(),
+            lastActionAt: new Date(actionNow).toISOString(),
           })
         }
 
@@ -511,7 +595,7 @@ export function TimerSessionProvider({ children }) {
             taskId: null,
             planBlockId: null,
             startedAt: null,
-            lastActionAt: new Date().toISOString(),
+            lastActionAt: new Date(actionNow).toISOString(),
           })
         }
       }
@@ -634,7 +718,9 @@ export function TimerSessionProvider({ children }) {
     const endMs = nowMs + durationSeconds * 1000
 
     const actionId = crypto.randomUUID()
+    const actionNow = Date.now()
     lastActionIdRef.current = actionId
+    lastActionAtRef.current = actionNow
 
     const sessionType =
       targetMode === 'shortBreak'
@@ -687,7 +773,7 @@ export function TimerSessionProvider({ children }) {
         taskName: targetTaskName,
         taskId: targetTaskId,
         startedAt: new Date(nowMs).toISOString(),
-        lastActionAt: new Date().toISOString(),
+        lastActionAt: new Date(actionNow).toISOString(),
       })
     }
   }
@@ -743,7 +829,9 @@ export function TimerSessionProvider({ children }) {
     const endMs = nowMs + durationSeconds * 1000
 
     const actionId = crypto.randomUUID()
+    const actionNow = Date.now()
     lastActionIdRef.current = actionId
+    lastActionAtRef.current = actionNow
 
     const sessionType =
       targetMode === 'shortBreak'
@@ -801,7 +889,7 @@ export function TimerSessionProvider({ children }) {
       planId: planId || null,
       blockTimeRange: blockTimeRange || null,
       startedAt: new Date(nowMs).toISOString(),
-      lastActionAt: new Date().toISOString(),
+      lastActionAt: new Date(actionNow).toISOString(),
     }
 
     if (updateSettings) {
@@ -827,7 +915,9 @@ export function TimerSessionProvider({ children }) {
     const safeRemaining = Math.max(0, totalSeconds - currentElapsed)
 
     const actionId = crypto.randomUUID()
+    const actionNow = Date.now()
     lastActionIdRef.current = actionId
+    lastActionAtRef.current = actionNow
 
     const sessionType =
       mode === 'shortBreak' ? 'short_break' : mode === 'longBreak' ? 'long_break' : 'focus'
@@ -869,7 +959,7 @@ export function TimerSessionProvider({ children }) {
         taskName,
         taskId: activeSessionRef.current?.taskId || null,
         startedAt: activeSessionRef.current?.startedAt || null,
-        lastActionAt: new Date().toISOString(),
+        lastActionAt: new Date(actionNow).toISOString(),
       })
     }
   }
@@ -883,7 +973,9 @@ export function TimerSessionProvider({ children }) {
     const endMs = nowMs + safeRemaining * 1000
 
     const actionId = crypto.randomUUID()
+    const actionNow = Date.now()
     lastActionIdRef.current = actionId
+    lastActionAtRef.current = actionNow
 
     const sessionType =
       mode === 'shortBreak' ? 'short_break' : mode === 'longBreak' ? 'long_break' : 'focus'
@@ -925,7 +1017,7 @@ export function TimerSessionProvider({ children }) {
         taskName,
         taskId: activeSessionRef.current?.taskId || null,
         startedAt: activeSessionRef.current?.startedAt || new Date(virtualStartTime).toISOString(),
-        lastActionAt: new Date().toISOString(),
+        lastActionAt: new Date(actionNow).toISOString(),
       })
     }
   }
@@ -973,7 +1065,9 @@ export function TimerSessionProvider({ children }) {
     setElapsedSeconds(0)
 
     const actionId = crypto.randomUUID()
+    const actionNow = Date.now()
     lastActionIdRef.current = actionId
+    lastActionAtRef.current = actionNow
 
     await clearActiveSession()
     updateActiveSession(null)
@@ -997,7 +1091,7 @@ export function TimerSessionProvider({ children }) {
         taskName: '',
         taskId: null,
         startedAt: null,
-        lastActionAt: new Date().toISOString(),
+        lastActionAt: new Date(actionNow).toISOString(),
       })
     }
   }
@@ -1037,7 +1131,9 @@ export function TimerSessionProvider({ children }) {
     setElapsedSeconds(0)
 
     const actionId = crypto.randomUUID()
+    const actionNow = Date.now()
     lastActionIdRef.current = actionId
+    lastActionAtRef.current = actionNow
 
     const durationSecs = getModeDurationSeconds(mode)
     setRemainingSeconds(durationSecs)
@@ -1058,7 +1154,7 @@ export function TimerSessionProvider({ children }) {
         taskName: '',
         taskId: null,
         startedAt: null,
-        lastActionAt: new Date().toISOString(),
+        lastActionAt: new Date(actionNow).toISOString(),
       })
     }
   }
@@ -1092,7 +1188,9 @@ export function TimerSessionProvider({ children }) {
     setElapsedSeconds(0)
 
     const actionId = crypto.randomUUID()
+    const actionNow = Date.now()
     lastActionIdRef.current = actionId
+    lastActionAtRef.current = actionNow
 
     await clearActiveSession()
     updateActiveSession(null)
@@ -1135,7 +1233,7 @@ export function TimerSessionProvider({ children }) {
         taskName: '',
         taskId: null,
         startedAt: null,
-        lastActionAt: new Date().toISOString(),
+        lastActionAt: new Date(actionNow).toISOString(),
       })
     }
   }
