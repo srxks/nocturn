@@ -4,22 +4,38 @@
 @theme {
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 
-  --color-nocturn-bg: var(--color-nocturn-bg, #090A0C);
-  --color-nocturn-bg-secondary: var(--color-nocturn-bg-secondary, #0F1115);
-  --color-nocturn-card: var(--color-nocturn-card, #121418);
-  --color-nocturn-surface: var(--color-nocturn-surface, #16191F);
-  --color-nocturn-elevated: var(--color-nocturn-elevated, #1C2026);
-  --color-nocturn-timer: #090A0C;
+  --color-nocturn-bg: var(--color-nocturn-bg, #0B0D11);
+  --color-nocturn-bg-secondary: var(--color-nocturn-bg-secondary, #101318);
+  --color-nocturn-card: var(--color-nocturn-card, #13171F);
+  --color-nocturn-surface: var(--color-nocturn-surface, #181D26);
+  --color-nocturn-surface-hover: var(--color-nocturn-surface-hover, #1E2430);
+  --color-nocturn-surface-active: var(--color-nocturn-surface-active, #242B3A);
+  --color-nocturn-elevated: var(--color-nocturn-elevated, #1F2532);
+  --color-nocturn-timer: #0B0D11;
   --color-nocturn-accent: var(--color-nocturn-accent, #6366F1);
+  --color-nocturn-accent-soft: var(--color-nocturn-accent-soft, rgba(99, 102, 241, 0.12));
   --color-nocturn-accent-bright: var(--color-nocturn-accent-bright, #818CF8);
   --color-nocturn-text: var(--color-nocturn-text, #F8FAFC);
   --color-nocturn-muted: var(--color-nocturn-muted, #94A3B8);
   --color-nocturn-dim: var(--color-nocturn-dim, #64748B);
   --color-nocturn-border: var(--color-nocturn-border, rgba(255, 255, 255, 0.08));
+  --color-nocturn-border-subtle: var(--color-nocturn-border-subtle, rgba(255, 255, 255, 0.04));
+
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+  --color-info: #38BDF8;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
 
   --radius-card: 1rem;
   --radius-card-lg: 1.25rem;
 
+  --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.25);
   --shadow-card: 0 8px 24px -6px rgba(0, 0, 0, 0.45);
   --shadow-elevated: 0 16px 36px -8px rgba(0, 0, 0, 0.55);
 }
@@ -33,9 +49,15 @@ html {
   font-size: 15px;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 768px) {
   html {
     font-size: 15.5px;
+  }
+}
+
+@media (min-width: 1280px) {
+  html {
+    font-size: 16px;
   }
 }
 
@@ -47,7 +69,8 @@ body {
   min-height: 100dvh;
   font-family: var(--font-sans);
   color: var(--color-nocturn-text);
-  background: var(--color-nocturn-bg, #090A0C);
+  background-color: var(--color-nocturn-bg, #0B0D11);
+  background-image: radial-gradient(circle at 50% 0%, rgba(var(--color-nocturn-accent-rgb, 99, 102, 241), 0.04) 0%, transparent 60%);
   background-attachment: fixed;
   overflow-x: hidden;
   text-rendering: optimizeLegibility;
@@ -150,6 +173,12 @@ body {
   outline-offset: 2px;
 }
 
+.nocturn-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
 .nocturn-btn-secondary {
   display: inline-flex;
   align-items: center;
@@ -165,18 +194,77 @@ body {
   transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.1s ease;
 }
 
-.nocturn-btn-secondary:hover {
+.nocturn-btn-secondary:hover:not(:disabled) {
   background-color: var(--color-nocturn-surface);
   border-color: rgba(255, 255, 255, 0.15);
 }
 
-.nocturn-btn-secondary:active {
+.nocturn-btn-secondary:active:not(:disabled) {
   transform: scale(0.98);
 }
 
-.nocturn-btn-secondary:focus-visible {
-  outline: 2px solid var(--color-nocturn-accent);
-  outline-offset: 2px;
+.nocturn-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nocturn-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  color: var(--color-nocturn-muted);
+  font-weight: 500;
+  font-size: 0.875rem;
+  border-radius: 0.75rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.1s ease;
+}
+
+.nocturn-btn-ghost:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--color-nocturn-text);
+}
+
+.nocturn-btn-ghost:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.nocturn-btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nocturn-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(239, 68, 68, 0.08);
+  color: #F87171;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border-radius: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.1s ease;
+}
+
+.nocturn-btn-danger:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #FEF2F2;
+}
+
+.nocturn-btn-danger:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.nocturn-btn-danger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .nocturn-nav-active {

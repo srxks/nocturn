@@ -1,4 +1,5 @@
-import { Star, Calendar, Repeat, ListChecks, Sun, Trash2, Edit3 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Star, Calendar, Repeat, ListChecks, Sun, Trash2, Edit3, Play } from 'lucide-react'
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
 import { Checkbox } from '../ui/Checkbox'
 
@@ -11,6 +12,7 @@ export default function TaskItemRow({
   onDeleteTask,
   isSelected = false,
 }) {
+  const navigate = useNavigate()
   const deadlineConfig = getTaskDeadlineConfig(task)
   const listObj = lists.find((l) => l.id === task.listId)
   const subtasksTotal = task.subtasks ? task.subtasks.length : 0
@@ -145,6 +147,22 @@ export default function TaskItemRow({
 
       {/* Contextual Action Buttons */}
       <div className="flex items-center gap-1 shrink-0">
+        {/* Start Focus Button */}
+        {!task.completed && (
+          <button
+            type="button"
+            aria-label={`Start Focus on "${task.title}"`}
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate('/timer', { state: { taskName: task.title, taskId: task.id } })
+            }}
+            className="p-1.5 rounded-lg text-nocturn-muted hover:text-nocturn-accent hover:bg-nocturn-accent/10 transition-all opacity-70 sm:opacity-0 group-hover:opacity-100 cursor-pointer"
+            title="Start Focus Timer on this task"
+          >
+            <Play className="w-4 h-4 fill-current" />
+          </button>
+        )}
+
         {/* Direct Edit Button */}
         <button
           type="button"
