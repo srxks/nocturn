@@ -18,6 +18,7 @@ import {
   Edit3,
   Trash2,
   AlertTriangle,
+  Moon,
 } from 'lucide-react'
 import { useTasks } from '../context/useTasks'
 import { useTimerSession } from '../context/useTimerSession'
@@ -29,6 +30,7 @@ import { playTaskCompleteSound } from '../services/soundService'
 import { Modal } from '../components/ui/Modal'
 import { Skeleton } from '../components/ui/Skeleton'
 import FlowingLines from '../components/common/FlowingLines'
+import EveningReviewModal from '../components/planner/EveningReviewModal'
 
 const EXAMPLE_PROMPTS = [
   "I have class from 9 to 2, gym at 6, need to study DSA, finish my project, revise vocabulary and complete today's assignments.",
@@ -58,6 +60,7 @@ export default function PlanMyDay() {
 
   // Plan overwrite confirmation modal
   const [showReplaceModal, setShowReplaceModal] = useState(false)
+  const [isEveningReviewOpen, setIsEveningReviewOpen] = useState(false)
 
   // Block editing modal
   const [editingBlock, setEditingBlock] = useState(null)
@@ -576,6 +579,114 @@ export default function PlanMyDay() {
     }
   }
 
+  // Schedule Drift Detection: compares current time vs planned block schedule
+  const driftInfo = useMemo(() => {
+    if (!plan?.blocks || plan.blocks.length === 0) return null
+    const now = new Date()
+    const nowMinutes = now.getHours() * 60 + now.getMinutes()
+
+    let maxDriftMinutes = 0
+    let lateBlocksCount = 0
+
+    plan.blocks.forEach((block) => {
+      if (block.completed) return
+      if (!block.endTime) return
+      const [eh, em] = block.endTime.split(':').map(Number)
+      if (!Number.isFinite(eh) || !Number.isFinite(em)) return
+      const endMins = eh * 60 + em
+      if (nowMinutes > endMins) {
+        const drift = nowMinutes - endMins
+        if (drift > maxDriftMinutes) {
+          maxDriftMinutes = drift
+        }
+        lateBlocksCount++
+      }
+    })
+
+    if (maxDriftMinutes > 15) {
+      return {
+        isDrifting: true,
+        minutes: maxDriftMinutes,
+        lateBlocksCount,
+      }
+    }
+
+    return {
+      isDrifting: false,
+      minutes: 0,
+      lateBlocksCount: 0,
+    }
+  }, [plan?.blocks])
+
+  // Shift remaining unfinished blocks to start right now
+  const handleShiftScheduleToNow = async () => {
+    if (!plan?.blocks || plan.blocks.length === 0) return
+    const now = new Date()
+    let currentStartMinutes = now.getHours() * 60 + now.getMinutes()
+
+    const updatedBlocks = plan.blocks.map((block) => {
+      if (block.completed) return block
+      const duration = Number(block.duration) || 30
+      const startH = Math.floor(currentStartMinutes / 60)
+      const startM = currentStartMinutes % 60
+      const endMinutes = currentStartMinutes + duration
+      const endH = Math.floor(endMinutes / 60)
+      const endM = endMinutes % 60
+
+      const formatTime = (h, m) =>
+        `${String(h % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+
+      currentStartMinutes = endMinutes + 5 // 5-minute buffer
+
+      return {
+        ...block,
+        startTime: formatTime(startH, startM),
+        endTime: formatTime(endH, endM),
+      }
+    })
+
+    const updatedPlan = { ...plan, blocks: updatedBlocks }
+    setPlan(updatedPlan)
+    await savePlanSchedule(todayKey, updatedPlan)
+    addToast('Schedule aligned with current time', { type: 'success' })
+  }
+
+  // Evening Review: Roll over selected unfinished tasks to tomorrow
+  const handleRolloverTasks = async (taskIds) => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowKey = formatDateKey(tomorrow)
+
+    for (const id of taskIds) {
+      try {
+        const task = tasks.find((t) => t.id === id)
+        if (task) {
+          await db.tasks.update(id, {
+            dueDate: tomorrowKey,
+            inMyDay: false,
+            myDayDate: null,
+            updatedAt: new Date().toISOString(),
+          })
+        }
+      } catch (err) {
+        console.warn('[PlanMyDay] Task rollover error:', id, err)
+      }
+    }
+    addToast(`Rolled over ${taskIds.length} task${taskIds.length > 1 ? 's' : ''} to tomorrow`, {
+      type: 'info',
+    })
+  }
+
+  // Evening Review: Persist review record
+  const handleSaveEveningReview = async (reviewData) => {
+    try {
+      localStorage.setItem(`nocturn_review_${todayKey}`, JSON.stringify(reviewData))
+      addToast('Evening reflection saved! Great job today.', { type: 'success' })
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -611,7 +722,17 @@ export default function PlanMyDay() {
           </div>
         </div>
 
-        <div className="relative z-10 flex items-center gap-2">
+        <div className="relative z-10 flex items-center gap-2 flex-wrap">
+          {plan?.blocks && plan.blocks.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setIsEveningReviewOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25 border border-indigo-500/30 text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            >
+              <Moon className="w-3.5 h-3.5" />
+              <span>Evening Review</span>
+            </button>
+          )}
           <span className="text-xs font-medium px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-nocturn-muted">
             {existingActiveTasks.length > 0
               ? `${existingActiveTasks.length} task${existingActiveTasks.length > 1 ? 's' : ''} in context`
@@ -908,6 +1029,25 @@ export default function PlanMyDay() {
                 </button>
               </div>
             </div>
+
+            {/* Real-time Schedule Drift Alert */}
+            {driftInfo?.isDrifting && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs shadow-sm">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    You are ~{driftInfo.minutes} mins behind planned schedule across {driftInfo.lateBlocksCount} block{driftInfo.lateBlocksCount > 1 ? 's' : ''}.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleShiftScheduleToNow}
+                  className="px-3 py-1.5 rounded-xl bg-amber-400 text-black font-semibold text-xs hover:bg-amber-300 transition-colors shrink-0 cursor-pointer shadow-sm active:scale-95"
+                >
+                  Shift Schedule to Now
+                </button>
+              </div>
+            )}
 
             <div className="space-y-3">
               {plan.blocks.map((block, idx) => {
@@ -1381,6 +1521,16 @@ export default function PlanMyDay() {
           </div>
         </div>
       </Modal>
+
+      {/* Evening Reflection / Day Review Ritual Modal */}
+      <EveningReviewModal
+        isOpen={isEveningReviewOpen}
+        onClose={() => setIsEveningReviewOpen(false)}
+        plan={plan}
+        tasks={tasks}
+        onRolloverTasks={handleRolloverTasks}
+        onSaveReview={handleSaveEveningReview}
+      />
     </motion.div>
   )
 }
