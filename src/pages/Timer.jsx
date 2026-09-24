@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
   Settings,
   Clock,
@@ -152,7 +153,7 @@ export default function Timer() {
 
       {/* Preset Rhythm Selector (only when timer is not running) */}
       {!isRunning && !isPaused && (
-        <div className="flex items-center gap-1.5 p-1 bg-nocturn-card border border-nocturn-border/80 rounded-2xl overflow-x-auto max-w-full no-scrollbar shadow-sm">
+        <div className="flex items-center gap-1.5 p-1 bg-[#11131a]/80 backdrop-blur-xl border border-white/[0.08] rounded-2xl overflow-x-auto max-w-full no-scrollbar shadow-sm">
           {TIMER_PRESETS.map((preset) => {
             const isSelected = selectedPreset === preset.id
             return (
@@ -160,13 +161,18 @@ export default function Timer() {
                 key={preset.id}
                 type="button"
                 onClick={() => handleSelectPreset(preset)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer ${
-                  isSelected
-                    ? 'bg-nocturn-accent/15 text-nocturn-accent-bright font-semibold border border-nocturn-accent/30 shadow-sm'
-                    : 'text-nocturn-muted hover:text-white hover:bg-white/[0.04] border border-transparent'
+                className={`relative px-3.5 py-1.5 rounded-xl text-xs font-medium transition-colors shrink-0 cursor-pointer ${
+                  isSelected ? 'text-white font-semibold' : 'text-nocturn-muted hover:text-white'
                 }`}
               >
-                {preset.name}
+                {isSelected && (
+                  <motion.div
+                    layoutId="timerPresetPill"
+                    className="absolute inset-0 bg-nocturn-accent/15 border border-nocturn-accent/30 rounded-xl shadow-sm"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+                <span className="relative z-10">{preset.name}</span>
               </button>
             )
           })}
