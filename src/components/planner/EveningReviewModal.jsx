@@ -117,11 +117,13 @@ export default function EveningReviewModal({
             </label>
             <div className="flex items-center gap-2">
               {[1, 2, 3, 4, 5].map((star) => (
-                <button
+                <motion.button
                   key={star}
+                  whileHover={{ scale: 1.25, rotate: 12 }}
+                  whileTap={{ scale: 0.9 }}
                   type="button"
                   onClick={() => setProductivityRating(star)}
-                  className={`p-2 rounded-xl transition-all cursor-pointer ${
+                  className={`p-2 rounded-xl transition-colors cursor-pointer ${
                     productivityRating >= star
                       ? 'bg-amber-400/15 text-amber-400 border border-amber-400/30'
                       : 'bg-white/[0.03] text-nocturn-muted border border-transparent hover:text-white'
@@ -130,7 +132,7 @@ export default function EveningReviewModal({
                   <Star
                     className={`w-5 h-5 ${productivityRating >= star ? 'fill-amber-400' : ''}`}
                   />
-                </button>
+                </motion.button>
               ))}
               <span className="text-xs font-medium text-nocturn-muted pl-2">
                 {productivityRating === 5
