@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
   Sun,
   Inbox,
@@ -114,21 +115,28 @@ export default function TaskListNav({ onSelectView }) {
                 key={view.id}
                 type="button"
                 onClick={() => handleSelect(view.id)}
-                className={`flex-1 sm:flex-none flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-150 cursor-pointer shrink-0 ${
+                className={`relative flex-1 sm:flex-none flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors cursor-pointer shrink-0 ${
                   active
-                    ? 'bg-nocturn-accent/12 text-white font-medium border border-nocturn-accent/25 shadow-sm'
-                    : 'text-nocturn-muted hover:text-white hover:bg-white/[0.04] border border-transparent'
+                    ? 'text-white font-semibold'
+                    : 'text-nocturn-muted hover:text-white hover:bg-white/[0.04]'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
-                  <Icon className={`w-4 h-4 stroke-[2] ${active ? 'text-nocturn-accent-bright' : ''}`} />
+                {active && (
+                  <motion.div
+                    layoutId="viewPill"
+                    className="absolute inset-0 bg-nocturn-accent/15 border border-nocturn-accent/30 rounded-xl shadow-sm"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+                <div className="relative z-10 flex items-center gap-2.5">
+                  <Icon className={`w-4 h-4 stroke-[2] ${active ? 'text-nocturn-accent' : ''}`} />
                   <span>{view.name}</span>
                 </div>
                 {view.count > 0 && (
                   <span
-                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                    className={`relative z-10 text-[10px] font-mono px-2 py-0.5 rounded-full ${
                       active
-                        ? 'bg-nocturn-accent/25 text-nocturn-accent-bright font-medium'
+                        ? 'bg-nocturn-accent/25 text-nocturn-accent font-medium'
                         : 'bg-white/[0.05] text-nocturn-muted border border-white/[0.06]'
                     }`}
                   >

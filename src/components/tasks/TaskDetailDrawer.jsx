@@ -118,18 +118,21 @@ export default function TaskDetailDrawer({
 
   const content = (
     <motion.div
-      initial={{ opacity: 0, x: isDesktopInline ? 12 : 24 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: isDesktopInline ? 12 : 24 }}
-      transition={{ duration: 0.15, ease: 'easeOut' }}
+      initial={{ x: isDesktopInline ? 0 : '100%' }}
+      animate={{ x: 0 }}
+      exit={{ x: isDesktopInline ? 0 : '100%' }}
+      transition={{ type: 'spring', stiffness: 320, damping: 32 }}
       role="dialog"
       aria-modal={!isDesktopInline}
       aria-label={`Task details for ${task.title}`}
       className={
         isDesktopInline
-          ? 'w-full bg-nocturn-card border border-nocturn-border rounded-2xl shadow-xl flex flex-col justify-between overflow-hidden max-h-[calc(100vh-6rem)]'
-          : 'fixed inset-y-0 right-0 z-[75] w-full sm:w-[420px] bg-nocturn-card border-l border-nocturn-border shadow-2xl flex flex-col justify-between overflow-hidden'
+          ? 'w-full bg-[#11131a] border border-white/[0.08] rounded-2xl shadow-xl flex flex-col justify-between overflow-hidden max-h-[calc(100vh-6rem)]'
+          : 'fixed inset-y-0 right-0 z-[75] w-full sm:w-[420px] bg-[#11131a]/95 backdrop-blur-2xl border-l border-white/[0.08] sm:rounded-l-[20px] shadow-2xl flex flex-col justify-between overflow-hidden'
       }
+      style={{
+        boxShadow: 'var(--elev-2)',
+      }}
     >
       {/* Drawer Header */}
       <div className="p-4 sm:p-5 border-b border-nocturn-border flex items-center justify-between gap-3 bg-nocturn-card">
@@ -574,42 +577,48 @@ export default function TaskDetailDrawer({
       </div>
 
       {/* Drawer Footer Actions */}
-      <div className="flex-shrink-0 p-4 pb-12 sm:pb-5 border-t border-nocturn-border bg-nocturn-card flex items-center justify-between gap-2 relative z-10 pointer-events-auto">
+      <div className="flex-shrink-0 p-4 pb-12 sm:pb-5 border-t border-white/[0.08] bg-[#11131a]/95 backdrop-blur-xl flex items-center justify-between gap-2 relative z-10 pointer-events-auto">
         {/* Start Focus Timer Button */}
-        <button
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.96 }}
           type="button"
           onClick={handleFocus}
-          className="nocturn-btn-primary py-2 px-3 sm:px-4 text-xs font-semibold inline-flex items-center gap-1.5 shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.35)] cursor-pointer relative z-20 pointer-events-auto"
+          className="py-2.5 px-4 rounded-xl bg-nocturn-accent hover:bg-nocturn-accent-bright text-white text-xs font-semibold inline-flex items-center gap-2 shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.35)] cursor-pointer relative z-20 pointer-events-auto transition-colors"
         >
-          <Timer className="w-4 h-4 fill-black stroke-black" />
-          Focus Task
-        </button>
+          <Timer className="w-4 h-4 fill-white stroke-white" />
+          <span>Focus Task</span>
+        </motion.button>
 
         <div className="flex items-center gap-2">
           {/* Duplicate Task Button */}
           {onDuplicateTask && (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.96 }}
               type="button"
               onClick={() => onDuplicateTask(task.id)}
               aria-label="Duplicate task"
-              className="py-2 px-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-nocturn-muted hover:text-white border border-nocturn-border transition-all font-semibold text-xs inline-flex items-center gap-1.5 cursor-pointer"
+              className="py-2 px-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-nocturn-muted hover:text-white border border-white/[0.08] transition-all font-medium text-xs inline-flex items-center gap-1.5 cursor-pointer"
               title="Duplicate this task"
             >
               <Copy className="w-3.5 h-3.5" />
               <span>Duplicate</span>
-            </button>
+            </motion.button>
           )}
 
           {/* Delete Task Button */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.96 }}
             type="button"
             onClick={() => setShowDeleteConfirm(true)}
             aria-label="Delete task"
-            className="py-2 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/30 transition-all font-semibold text-xs inline-flex items-center gap-1.5 cursor-pointer relative z-20 pointer-events-auto"
+            className="py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/30 transition-all font-medium text-xs inline-flex items-center gap-1.5 cursor-pointer relative z-20 pointer-events-auto"
           >
             <Trash2 className="w-3.5 h-3.5 stroke-[2]" />
-            <span>Delete</span>
-          </button>
+            <span>Delete Task</span>
+          </motion.button>
         </div>
       </div>
 
