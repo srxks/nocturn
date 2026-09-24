@@ -233,7 +233,11 @@ export default function Statistics() {
       {/* Overview Metrics Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Metric 1: Total Focus */}
-        <div className="nocturn-card p-4 sm:p-5 border border-nocturn-border rounded-2xl relative overflow-hidden group">
+        <motion.div
+          whileHover={{ y: -2 }}
+          transition={{ duration: 0.15 }}
+          className="nocturn-card p-4 sm:p-5 border border-white/[0.08] hover:border-white/20 rounded-2xl relative overflow-hidden group shadow-sm"
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-nocturn-muted">Total Focus</span>
             <div className="p-2 rounded-xl bg-nocturn-accent/10 text-nocturn-accent border border-nocturn-accent/20">
@@ -250,10 +254,14 @@ export default function Statistics() {
             <TrendingUp className="w-3.5 h-3.5 text-nocturn-accent" />
             <span>{stats.periodSessionsCount} sessions in {stats.periodLabel || 'this period'}</span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Metric 2: Tasks Completed */}
-        <div className="nocturn-card p-4 sm:p-5 border border-nocturn-border rounded-2xl relative overflow-hidden group">
+        <motion.div
+          whileHover={{ y: -2 }}
+          transition={{ duration: 0.15 }}
+          className="nocturn-card p-4 sm:p-5 border border-white/[0.08] hover:border-white/20 rounded-2xl relative overflow-hidden group shadow-sm"
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-nocturn-muted">Tasks Completed</span>
             <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -270,10 +278,14 @@ export default function Statistics() {
             <span className="text-emerald-400 font-semibold">{completionRate}%</span>
             <span>lifetime completion rate</span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Metric 3: Focus Streak */}
-        <div className="nocturn-card p-4 sm:p-5 border border-nocturn-border rounded-2xl relative overflow-hidden group">
+        <motion.div
+          whileHover={{ y: -2 }}
+          transition={{ duration: 0.15 }}
+          className="nocturn-card p-4 sm:p-5 border border-white/[0.08] hover:border-white/20 rounded-2xl relative overflow-hidden group shadow-sm"
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-nocturn-muted">Active Streak</span>
             <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -289,10 +301,14 @@ export default function Statistics() {
           <div className="mt-2 text-[11px] text-nocturn-dim">
             {stats.streak > 0 ? 'Consecutive days with focus or task' : 'Log a session today to start your streak'}
           </div>
-        </div>
+        </motion.div>
 
         {/* Metric 4: Session Averages */}
-        <div className="nocturn-card p-4 sm:p-5 border border-nocturn-border rounded-2xl relative overflow-hidden group">
+        <motion.div
+          whileHover={{ y: -2 }}
+          transition={{ duration: 0.15 }}
+          className="nocturn-card p-4 sm:p-5 border border-white/[0.08] hover:border-white/20 rounded-2xl relative overflow-hidden group shadow-sm"
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-nocturn-muted">Average Session</span>
             <div className="p-2 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
@@ -310,7 +326,7 @@ export default function Statistics() {
             <span className="mx-1.5">·</span>
             <span>{sessions.length} total sessions</span>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Main Charts Row: Daily Bars + 60-Day Activity Heatmap */}
@@ -396,10 +412,12 @@ export default function Statistics() {
                 if (cell.level === 4) bgClass = 'bg-nocturn-accent border-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.6)]'
 
                 return (
-                  <div
+                  <motion.div
                     key={cell.dateKey}
+                    whileHover={{ scale: 1.4 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                     title={`${cell.dateKey}: ${cell.minutes}m focused, ${cell.taskCount} tasks`}
-                    className={`w-3.5 h-3.5 rounded-sm border transition-transform hover:scale-125 cursor-pointer ${bgClass}`}
+                    className={`w-3.5 h-3.5 rounded-sm border cursor-pointer z-10 ${bgClass}`}
                   />
                 )
               })}
