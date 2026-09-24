@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, ensureSeedData } from '../db/db'
 import { ThemeContext } from './ThemeContext'
-import { DEFAULT_NOCTURN_THEME, PRESET_THEMES } from '../constants/presetThemes'
+import { DEFAULT_NOCTURN_THEME, PRESET_THEMES, V3_THEME_PRESETS } from '../constants/presetThemes'
 import { useAuth } from './useAuth'
 import {
   upsertUserSettings,
@@ -49,6 +49,20 @@ export function ThemeProvider({ children }) {
     if (!db || !db.userSettings) return null
     return await db.userSettings.get('preferences')
   }, [])
+
+  const [activePreset, setActivePreset] = useState(() => {
+    return (typeof window !== 'undefined' && localStorage.getItem('nocturn_theme_preset')) || 'indigo'
+  })
+
+  // Sync data-theme attribute to documentElement immediately with 240ms crossfade
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', activePreset)
+      try {
+        localStorage.setItem('nocturn_theme_preset', activePreset)
+      } catch {}
+    }
+  }, [activePreset])
 
   const uiStyle = userSettings?.uiStyle === 'angular' ? 'angular' : 'normal'
 
@@ -225,12 +239,47 @@ export function ThemeProvider({ children }) {
     }
   }
 
-  // 5. Reset to Default Nocturn Theme
+  // 5. Apply Theme Preset (v3 7-preset instant switch)
+  const applyThemePreset = async (presetKey) => {
+    setActivePreset(presetKey)
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', presetKey)
+      try {
+        localStorage.setItem('nocturn_theme_preset', presetKey)
+      } catch {}
+    }
+    const matched = V3_THEME_PRESETS.find((p) => p.key === presetKey || p.id === presetKey)
+    if (matched) {
+      const themeObj = {
+        id: `preset-${presetKey}`,
+        name: matched.name,
+        isPreset: true,
+        colors: {
+          background: matched.background,
+          surface: matched.surface,
+          elevated: matched.elevated,
+          accent: matched.accent,
+          accentGlow: matched.accentGlow,
+          text: '#F8FAFC',
+          textSecondary: '#94A3B8',
+          border: 'rgba(255, 255, 255, 0.08)',
+          overdue: '#EF4444',
+          today: matched.accent,
+          tomorrow: '#F59E0B',
+          future: '#10B981',
+        },
+      }
+      await applyTheme(themeObj)
+    }
+  }
+
+  // 6. Reset to Default Nocturn Theme
   const resetToNocturn = async () => {
+    await applyThemePreset('indigo')
     await applyTheme(DEFAULT_NOCTURN_THEME)
   }
 
-  // 6. Set and Persist UI Style ('normal' | 'angular')
+  // 7. Set and Persist UI Style ('normal' | 'angular')
   const setUiStyle = async (newStyle) => {
     const validStyle = newStyle === 'angular' ? 'angular' : 'normal'
     if (typeof document !== 'undefined') {
@@ -261,6 +310,9 @@ export function ThemeProvider({ children }) {
     <ThemeContext.Provider
       value={{
         activeTheme,
+        activePreset,
+        applyThemePreset,
+        v3Presets: V3_THEME_PRESETS,
         presetThemes,
         savedThemes,
         applyTheme,

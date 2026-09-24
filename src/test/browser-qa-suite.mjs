@@ -474,7 +474,17 @@ async function runBrowserQA() {
       const buttons = Array.from(document.querySelectorAll('button'))
       return buttons.filter((b) => {
         const text = b.innerText || ''
-        return text.includes('Nocturn') || text.includes('Midnight') || text.includes('Slate') || text.includes('Frost') || text.includes('Aurora') || text.includes('Rosewood') || text.includes('Monochrome')
+        return (
+          text.includes('Indigo') ||
+          text.includes('Emerald') ||
+          text.includes('Midnight') ||
+          text.includes('Violet') ||
+          text.includes('Rose') ||
+          text.includes('Amber') ||
+          text.includes('Cyan') ||
+          text.includes('Nocturn') ||
+          text.includes('Monochrome')
+        )
       }).length
     })
     assert('Settings Appearance displays expanded preset theme grid (>= 5 preset buttons)', presetButtonsCount >= 5, `Found ${presetButtonsCount}`)

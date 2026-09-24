@@ -33,6 +33,11 @@ export default function BulkActionBar({
   const [customDate, setCustomDate] = useState('')
   const [labelInput, setLabelInput] = useState('')
 
+  const hasSelection = Boolean(selectedTaskIds && selectedTaskIds.length > 0)
+  if (typeof document !== 'undefined') {
+    document.body.dataset.bulkActive = hasSelection ? 'true' : 'false'
+  }
+
   if (!selectedTaskIds || selectedTaskIds.length === 0) return null
 
   const count = selectedTaskIds.length
@@ -82,17 +87,29 @@ export default function BulkActionBar({
   }
 
   return (
-    <div className="fixed bottom-20 lg:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-2xl select-none">
+    <div className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px)+12px)] lg:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-2xl select-none">
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
+        initial={{ y: 80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 20, opacity: 0 }}
+        exit={{ y: 80, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.8 }}
         className="bg-[#12141c]/95 backdrop-blur-xl border border-white/15 rounded-2xl p-2.5 sm:p-3 shadow-[0_12px_40px_rgba(0,0,0,0.85)] flex items-center justify-between gap-2"
       >
         {/* Left Count & Selection Control */}
         <div className="flex items-center gap-2 pl-2">
-          <span className="text-xs font-bold text-white font-mono bg-nocturn-accent/15 text-nocturn-accent-bright px-2 py-0.5 rounded-lg border border-nocturn-accent/30">
-            {count}
+          <span className="relative inline-flex items-center overflow-hidden">
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span
+                key={count}
+                initial={{ y: 12, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -12, opacity: 0 }}
+                transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                className="text-xs font-bold font-mono bg-nocturn-accent/15 text-nocturn-accent-bright px-2 py-0.5 rounded-lg border border-nocturn-accent/30 tabular-nums"
+              >
+                {count}
+              </motion.span>
+            </AnimatePresence>
           </span>
           <span className="text-xs font-semibold text-white hidden sm:inline">
             selected
@@ -111,7 +128,9 @@ export default function BulkActionBar({
         {/* Action Buttons */}
         <div className="flex items-center gap-1 sm:gap-1.5 relative">
           {/* Complete All */}
-          <button
+          <motion.button
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.95 }}
             type="button"
             onClick={handleComplete}
             className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-nocturn-accent text-black font-semibold text-xs flex items-center gap-1.5 hover:bg-nocturn-accent-bright shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.3)] cursor-pointer"
@@ -119,11 +138,13 @@ export default function BulkActionBar({
           >
             <CheckCheck className="w-4 h-4 stroke-[2.5]" />
             <span className="hidden sm:inline">Complete</span>
-          </button>
+          </motion.button>
 
           {/* Reschedule */}
           <div className="relative">
-            <button
+            <motion.button
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.95 }}
               type="button"
               onClick={() => setActiveMenu(activeMenu === 'reschedule' ? null : 'reschedule')}
               className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-nocturn-muted hover:text-white border border-white/10 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -131,7 +152,7 @@ export default function BulkActionBar({
             >
               <Calendar className="w-4 h-4 text-nocturn-accent" />
               <span className="hidden md:inline">Schedule</span>
-            </button>
+            </motion.button>
 
             {activeMenu === 'reschedule' && (
               <div className="absolute bottom-full mb-2 left-0 w-48 bg-nocturn-card border border-nocturn-border rounded-xl shadow-2xl p-2 space-y-1 z-50">
@@ -172,7 +193,9 @@ export default function BulkActionBar({
 
           {/* Priority */}
           <div className="relative">
-            <button
+            <motion.button
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.95 }}
               type="button"
               onClick={() => setActiveMenu(activeMenu === 'priority' ? null : 'priority')}
               className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-nocturn-muted hover:text-white border border-white/10 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -180,7 +203,7 @@ export default function BulkActionBar({
             >
               <Flag className="w-4 h-4 text-amber-400" />
               <span className="hidden md:inline">Priority</span>
-            </button>
+            </motion.button>
 
             {activeMenu === 'priority' && (
               <div className="absolute bottom-full mb-2 left-0 w-36 bg-nocturn-card border border-nocturn-border rounded-xl shadow-2xl p-1.5 space-y-1 z-50">
@@ -211,7 +234,9 @@ export default function BulkActionBar({
 
           {/* Move to List */}
           <div className="relative">
-            <button
+            <motion.button
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.95 }}
               type="button"
               onClick={() => setActiveMenu(activeMenu === 'move' ? null : 'move')}
               className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-nocturn-muted hover:text-white border border-white/10 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -219,7 +244,7 @@ export default function BulkActionBar({
             >
               <Folder className="w-4 h-4 text-sky-400" />
               <span className="hidden md:inline">Move</span>
-            </button>
+            </motion.button>
 
             {activeMenu === 'move' && (
               <div className="absolute bottom-full mb-2 left-0 w-44 bg-nocturn-card border border-nocturn-border rounded-xl shadow-2xl p-1.5 space-y-1 z-50 max-h-48 overflow-y-auto">
@@ -246,7 +271,9 @@ export default function BulkActionBar({
 
           {/* Apply Label */}
           <div className="relative">
-            <button
+            <motion.button
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.95 }}
               type="button"
               onClick={() => setActiveMenu(activeMenu === 'label' ? null : 'label')}
               className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-nocturn-muted hover:text-white border border-white/10 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -254,7 +281,7 @@ export default function BulkActionBar({
             >
               <Tag className="w-4 h-4 text-emerald-400" />
               <span className="hidden md:inline">Tag</span>
-            </button>
+            </motion.button>
 
             {activeMenu === 'label' && (
               <form
@@ -281,7 +308,9 @@ export default function BulkActionBar({
           </div>
 
           {/* Delete Selected */}
-          <button
+          <motion.button
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.95 }}
             type="button"
             onClick={handleDelete}
             className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -289,7 +318,7 @@ export default function BulkActionBar({
           >
             <Trash2 className="w-4 h-4" />
             <span className="hidden md:inline">Delete</span>
-          </button>
+          </motion.button>
         </div>
 
         {/* Clear Selection X */}

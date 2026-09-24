@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -12,6 +12,7 @@ import {
   Zap,
   Plus,
   Trash2,
+  Volume2,
 } from 'lucide-react'
 import { useVocab } from '../hooks/useVocab'
 import VocabWordModal from '../components/vocab/VocabWordModal'
@@ -74,6 +75,22 @@ export default function Vocab() {
   const settledCount = allWords.filter(
     (w) => w.correct_count === 5 && w.last_quizzed_date
   ).length
+
+  const wordOfTheDay = useMemo(() => {
+    if (!allWords || allWords.length === 0) return null
+    const daySeed = new Date().getDate()
+    return allWords[daySeed % allWords.length]
+  }, [allWords])
+
+  const playPronunciation = (word) => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(word)
+      utterance.rate = 0.9
+      utterance.pitch = 1.0
+      window.speechSynthesis.speak(utterance)
+    }
+  }
 
   return (
     <motion.div
@@ -141,6 +158,53 @@ export default function Vocab() {
           <div className="space-y-1">
             <p className="font-semibold">Vocabulary Generation Error</p>
             <p className="text-xs text-rose-300/80">{generationError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Word of the Day Hero Banner with glow & TTS pronunciation */}
+      {wordOfTheDay && (
+        <div className="relative overflow-hidden p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-nocturn-card via-nocturn-surface/50 to-nocturn-card border border-nocturn-accent/35 shadow-[0_0_35px_rgba(var(--color-nocturn-accent-rgb),0.15)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-nocturn-accent/15 text-nocturn-accent-bright border border-nocturn-accent/30">
+                Word of the Day
+              </span>
+              {wordOfTheDay.part_of_speech && (
+                <span className="text-xs text-nocturn-muted italic font-serif">
+                  ({wordOfTheDay.part_of_speech})
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                {wordOfTheDay.word}
+              </h2>
+              <button
+                type="button"
+                onClick={() => playPronunciation(wordOfTheDay.word)}
+                className="p-2 rounded-xl bg-white/[0.06] hover:bg-nocturn-accent/20 text-nocturn-muted hover:text-nocturn-accent-bright transition-colors cursor-pointer"
+                title="Listen to pronunciation"
+                aria-label={`Pronounce ${wordOfTheDay.word}`}
+              >
+                <Volume2 className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-sm text-nocturn-dim leading-relaxed">
+              {wordOfTheDay.definition}
+            </p>
+            {wordOfTheDay.example_sentence && (
+              <p className="text-xs text-nocturn-muted/75 italic border-l-2 border-nocturn-accent/40 pl-2 mt-1">
+                "{wordOfTheDay.example_sentence}"
+              </p>
+            )}
+          </div>
+          {/* Mini Mastery Ring / Status */}
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+            <span className="text-xs text-nocturn-muted font-medium">Mastery:</span>
+            <span className="text-xs font-mono font-bold text-nocturn-accent-bright">
+              {wordOfTheDay.correct_count || 0}/5
+            </span>
           </div>
         </div>
       )}

@@ -53,9 +53,6 @@
 
 :root {
   color-scheme: dark;
-  --color-nocturn-accent-rgb: 99, 102, 241;
-
-  /* Global Quiet Luxury Design Tokens */
   --canvas: #07070a;
   --card: #11131a;
   --surface: #161924;
@@ -64,14 +61,84 @@
   --text-primary: #F5F6FA;
   --text-secondary: #9CA3B0;
   --text-muted: #5B6172;
-  --theme-accent: var(--color-nocturn-accent, #6366F1);
-  --accent: var(--theme-accent);
-  --glow: color-mix(in oklab, var(--accent) 40%, transparent);
+  --accent: #6366F1;
+  --accent-soft: color-mix(in oklab, var(--accent) 14%, transparent);
+  --accent-glow: color-mix(in oklab, var(--accent) 40%, transparent);
+
+  /* Theme and Component Compatibility */
+  --color-nocturn-bg: var(--canvas);
+  --color-nocturn-card: var(--card);
+  --color-nocturn-surface: var(--surface);
+  --color-nocturn-accent: var(--accent);
+  --color-nocturn-accent-bright: var(--accent);
+  --theme-accent: var(--accent);
+  --glow: var(--accent-glow);
+  --color-nocturn-accent-rgb: 99, 102, 241;
 
   /* Elevation Layers */
   --elev-1: 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.4);
   --elev-2: 0 1px 0 rgba(255, 255, 255, 0.06), 0 20px 48px rgba(0, 0, 0, 0.55);
   --elev-focus: 0 0 0 1px var(--accent), 0 0 32px var(--glow);
+}
+
+/* Preset Themes Token Contract */
+[data-theme="indigo"]   { --accent: #6366F1; --color-nocturn-accent-rgb: 99, 102, 241; }
+[data-theme="emerald"]  { --accent: #10B981; --color-nocturn-accent-rgb: 16, 185, 129; }
+[data-theme="midnight"] { --accent: #3B82F6; --canvas: #05060d; --card: #0c0e1a; --surface: #121524; --color-nocturn-accent-rgb: 59, 130, 246; }
+[data-theme="violet"]   { --accent: #A855F7; --color-nocturn-accent-rgb: 168, 85, 247; }
+[data-theme="rose"]     { --accent: #F43F5E; --color-nocturn-accent-rgb: 244, 63, 94; }
+[data-theme="amber"]    { --accent: #F59E0B; --color-nocturn-accent-rgb: 245, 158, 11; }
+[data-theme="cyan"]     { --accent: #06B6D4; --color-nocturn-accent-rgb: 6, 182, 212; }
+
+/* Global 240ms Color Crossfade on Theme Change */
+* {
+  transition: background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+              color 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+
+/* Collision-Safe Mini-Timer Rules */
+.mini-timer {
+  bottom: 24px;
+  right: 24px;
+  width: 260px;
+  height: 64px;
+}
+
+@media (max-width: 1023px) {
+  .mini-timer {
+    bottom: 24px;
+    right: 16px;
+    width: 220px;
+    height: 56px;
+  }
+}
+
+@media (max-width: 767px) {
+  .mini-timer {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 12px);
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: calc(100vw - 24px);
+    max-width: 380px;
+    height: 56px;
+  }
+
+  /* If bulk bar active, hide mini-timer completely on mobile */
+  body[data-bulk-active="true"] .mini-timer {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+}
+
+/* If task drawer is open on desktop, shift mini-timer left */
+body[data-drawer-open="true"] .mini-timer {
+  right: calc(420px + 24px);
+  transition: right 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html {
@@ -130,13 +197,33 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.35);
+  background: rgba(148, 163, 184, 0.4);
+}
+
+::selection {
+  background-color: var(--accent);
+  color: #000;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--elev-focus);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Typography Ramp (Quiet Luxury) */
 .font-display { font-family: var(--font-display); }
 .font-sans { font-family: var(--font-sans); }
-.font-mono { font-family: var(--font-mono); font-feature-settings: 'tnum' 1; }
+.font-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.tabular-nums { font-variant-numeric: tabular-nums; }
 
 .text-h1 {
   font-family: var(--font-display);

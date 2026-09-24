@@ -13,9 +13,10 @@ import {
   Bell,
   User,
   LogOut,
+  Keyboard,
+  RotateCcw,
 } from 'lucide-react'
 import PreferenceCard from '../components/settings/PreferenceCard'
-import UiStyleSettingsCard from '../components/settings/UiStyleSettingsCard'
 import VocabSettingsCard from '../components/settings/VocabSettingsCard'
 import ThemeSettingsCard from '../components/settings/ThemeSettingsCard'
 import IntegrationCard from '../components/settings/IntegrationCard'
@@ -103,15 +104,57 @@ export default function Settings() {
       {/* 1. Appearance & Theme Section */}
       {showAppearance && (
         <section className="space-y-5">
-          <div className="border-b border-white/[0.06] pb-2">
+          <div className="border-b border-white/[0.06] pb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-nocturn-muted">
               Appearance & Layout
             </h2>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.removeItem('nocturn_theme')
+                localStorage.removeItem('nocturn_ui_style')
+                window.location.reload()
+              }}
+              className="text-[11px] text-nocturn-muted hover:text-white flex items-center gap-1 cursor-pointer transition-colors"
+              title="Reset appearance to default"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset to default</span>
+            </button>
           </div>
 
-          <UiStyleSettingsCard />
           <PreferenceCard />
           <ThemeSettingsCard />
+
+          {/* Keyboard Shortcuts Placeholder */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-nocturn-muted px-0.5">
+                Keyboard Shortcuts
+              </h3>
+              <span className="text-[10px] uppercase font-bold text-nocturn-accent bg-nocturn-accent/10 px-2 py-0.5 rounded-full border border-nocturn-accent/20">
+                Coming soon
+              </span>
+            </div>
+            <Card className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent shrink-0">
+                  <Keyboard className="w-5 h-5 stroke-[2]" />
+                </div>
+                <div>
+                  <span className="text-sm sm:text-base font-semibold text-white block">
+                    Custom Shortcuts System
+                  </span>
+                  <span className="text-xs text-nocturn-muted block mt-0.5">
+                    Global keyboard shortcuts have been disabled. Active shortcut: Spacebar on Timer. Custom keybindings are coming in a future release.
+                  </span>
+                </div>
+              </div>
+              <span className="text-xs font-mono font-medium text-nocturn-muted bg-white/[0.04] px-3 py-1 rounded-full border border-white/[0.06] shrink-0">
+                Spacebar · Timer
+              </span>
+            </Card>
+          </div>
         </section>
       )}
 

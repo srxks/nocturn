@@ -1,20 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap,
-  Search,
-  Keyboard,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
 import { NAV_GROUPS } from './navConfig'
 import SyncStatusIndicator from '../common/SyncStatusIndicator'
 import { getStorageItem, setStorageItem } from '../../utils/storageUtils'
+import { useTasks } from '../../context/useTasks'
+import { formatDateKey } from '../../services/calendarService'
 
-export default function SidebarNav({ onOpenCommandPalette, onOpenShortcutsHelp }) {
+export default function SidebarNav() {
   const location = useLocation()
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  const { tasks } = useTasks()
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return getStorageItem('nocturn_sidebar_collapsed', 'false') === 'true'
@@ -37,6 +37,24 @@ export default function SidebarNav({ onOpenCommandPalette, onOpenShortcutsHelp }
     window.addEventListener('nocturn:profile-updated', handleProfileUpdated)
     return () => window.removeEventListener('nocturn:profile-updated', handleProfileUpdated)
   }, [])
+
+  // Calculate task counts for badges (Feature 25)
+  const todayKey = formatDateKey(new Date())
+  const myDayCount = useMemo(() => {
+    return (tasks || []).filter(
+      (t) => !t.completed && (t.inMyDay || t.myDayDate === todayKey || t.dueDate === todayKey)
+    ).length
+  }, [tasks, todayKey])
+
+  const allCount = useMemo(() => {
+    return (tasks || []).filter((t) => !t.completed).length
+  }, [tasks])
+
+  const getItemCount = (itemId) => {
+    if (itemId === 'my-day') return myDayCount > 0 ? myDayCount : null
+    if (itemId === 'tasks') return allCount > 0 ? allCount : null
+    return null
+  }
 
   return (
     <motion.aside
@@ -76,58 +94,32 @@ export default function SidebarNav({ onOpenCommandPalette, onOpenShortcutsHelp }
             )}
           </Link>
 
-          {/* Collapse Toggle Button */}
+          {/* Collapse Toggle Button with 180ms rotation */}
           {!isCollapsed && (
-            <button
+            <motion.button
+              whileTap={{ scale: 0.92 }}
               type="button"
               onClick={() => setIsCollapsed(true)}
               title="Collapse sidebar"
               className="p-1 rounded-lg text-nocturn-dim hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
-            </button>
+            </motion.button>
           )}
         </div>
 
         {/* When collapsed, show expand button */}
         {isCollapsed && (
           <div className="flex justify-center">
-            <button
+            <motion.button
+              whileTap={{ scale: 0.92 }}
               type="button"
               onClick={() => setIsCollapsed(false)}
               title="Expand sidebar"
               className="p-1.5 rounded-lg text-nocturn-dim hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
             >
               <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* Quick Search Trigger */}
-        {!isCollapsed ? (
-          <button
-            type="button"
-            onClick={onOpenCommandPalette}
-            className="w-full flex items-center justify-between px-3 py-2 text-xs text-nocturn-muted hover:text-white bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] hover:border-white/[0.12] rounded-xl transition-all cursor-pointer group shadow-sm"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Search className="w-3.5 h-3.5 text-nocturn-muted group-hover:text-nocturn-accent transition-colors shrink-0" />
-              <span className="truncate font-medium">Quick search...</span>
-            </div>
-            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-white/[0.06] border border-white/10 text-nocturn-muted group-hover:text-white shrink-0">
-              {isMac ? '⌘K' : 'Ctrl+K'}
-            </kbd>
-          </button>
-        ) : (
-          <div className="flex justify-center">
-            <button
-              type="button"
-              onClick={onOpenCommandPalette}
-              title={`Quick search (${isMac ? '⌘K' : 'Ctrl+K'})`}
-              className="p-2 rounded-xl text-nocturn-muted hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-colors cursor-pointer"
-            >
-              <Search className="w-4 h-4 text-nocturn-muted hover:text-nocturn-accent" />
-            </button>
+            </motion.button>
           </div>
         )}
 
@@ -185,7 +177,14 @@ export default function SidebarNav({ onOpenCommandPalette, onOpenShortcutsHelp }
                       </motion.div>
 
                       {!isCollapsed && (
-                        <span className="truncate text-[13.5px]">{item.name}</span>
+                        <div className="flex items-center justify-between flex-1 min-w-0">
+                          <span className="truncate text-[13.5px]">{item.name}</span>
+                          {getItemCount(item.id) !== null && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-white/[0.06] text-nocturn-muted group-hover:text-white">
+                              {getItemCount(item.id)}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </Link>
                   )
@@ -231,16 +230,6 @@ export default function SidebarNav({ onOpenCommandPalette, onOpenShortcutsHelp }
         {/* Sync Status Bar */}
         <div className="flex items-center justify-between px-1">
           <SyncStatusIndicator compact={isCollapsed} />
-          {!isCollapsed && (
-            <button
-              type="button"
-              onClick={onOpenShortcutsHelp}
-              title="Keyboard Shortcuts (?)"
-              className="p-1 text-nocturn-muted hover:text-white hover:bg-white/[0.08] rounded-md transition-colors cursor-pointer"
-            >
-              <Keyboard className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
       </div>
     </motion.aside>

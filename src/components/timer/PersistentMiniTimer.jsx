@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Play, Pause, SkipForward, Clock } from 'lucide-react'
 import { useTimerSession } from '../../context/useTimerSession'
+import { useTasks } from '../../context/useTasks'
 import {
   playTimerStartSound,
   playTimerPauseSound,
@@ -13,6 +14,17 @@ export default function PersistentMiniTimer() {
   const navigate = useNavigate()
   const location = useLocation()
   const [isHovered, setIsHovered] = useState(false)
+
+  // Track viewport width for responsive collision matrix
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1280
+  )
+
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const {
     isRunning,
@@ -25,11 +37,36 @@ export default function PersistentMiniTimer() {
     skipSession,
   } = useTimerSession()
 
-  // Only show when timer is active and user is outside of /timer
-  const isTimerActive = isRunning || isPaused
-  const isTimerPage = location.pathname === '/timer'
+  // Safely read selectedTask and selectedTaskIds from useTasks
+  let selectedTask = null
+  let selectedTaskIds = []
+  try {
+    const taskContext = useTasks()
+    selectedTask = taskContext?.selectedTask || null
+    selectedTaskIds = taskContext?.selectedTaskIds || []
+  } catch {
+    // Graceful fallback outside TaskProvider
+  }
 
+  const isTimerActive = isRunning || isPaused
+  const isTimerPage = location.pathname.startsWith('/timer')
+  const isTasksPage = location.pathname.startsWith('/tasks')
+
+  // Collision state
+  const isLg = viewportWidth >= 1024
+  const isMd = viewportWidth >= 768 && viewportWidth < 1024
+  const isSmOrXs = viewportWidth < 768
+
+  const isDrawerOpen = Boolean(selectedTask)
+  const isBulkActive = Boolean(selectedTaskIds && selectedTaskIds.length > 0 && isTasksPage)
+
+  // RULE 4: On /timer route -> hidden
   if (!isTimerActive || isTimerPage) {
+    return null
+  }
+
+  // RULE 1: On sm/xs, if bulk bar is active -> mini-timer hides (bulk bar takes priority)
+  if (isSmOrXs && isBulkActive) {
     return null
   }
 
@@ -66,23 +103,64 @@ export default function PersistentMiniTimer() {
     navigate('/timer')
   }
 
+  // Collision positioning calculations:
+  // lg+: Fixed bottom 24px, right: if drawer open -> calc(420px + 24px) = 444px, else 24px
+  // md: Fixed bottom 24px, right 16px, width: if bulk active -> 180px, else 220px, opacity: if drawer open -> 0.4
+  // sm/xs: Fixed bottom calc(64px + env(safe-area-inset-bottom, 0px) + 12px), centered 100% - 24px wide, opacity: if drawer open -> 0.4
+  let dynamicWidth = 260
+  let dynamicHeight = 64
+  let dynamicOpacity = 1
+  let dynamicStyle = {}
+
+  if (isLg) {
+    dynamicWidth = isHovered ? 290 : 260
+    dynamicHeight = 64
+    dynamicOpacity = 1
+    dynamicStyle = {
+      bottom: '24px',
+      right: isDrawerOpen ? '444px' : '24px',
+      width: `${dynamicWidth}px`,
+      height: `${dynamicHeight}px`,
+    }
+  } else if (isMd) {
+    dynamicWidth = isBulkActive ? 180 : isHovered ? 240 : 220
+    dynamicHeight = 56
+    dynamicOpacity = isDrawerOpen ? 0.4 : 1
+    dynamicStyle = {
+      bottom: '24px',
+      right: '16px',
+      width: `${dynamicWidth}px`,
+      height: `${dynamicHeight}px`,
+    }
+  } else {
+    dynamicHeight = 56
+    dynamicOpacity = isDrawerOpen ? 0.4 : 1
+    dynamicStyle = {
+      bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 12px)',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      width: 'calc(100% - 24px)',
+      height: `${dynamicHeight}px`,
+    }
+  }
+
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ y: 80, opacity: 0, scale: 0.95 }}
+        layout
+        initial={{ y: 80, opacity: 0 }}
         animate={{
           y: 0,
-          opacity: 1,
-          scale: 1,
-          width: isHovered ? 290 : 260,
+          opacity: dynamicOpacity,
         }}
-        exit={{ y: 80, opacity: 0, scale: 0.95 }}
-        transition={{ type: 'spring', stiffness: 280, damping: 26 }}
+        exit={{ y: 80, opacity: 0, transition: { duration: 0.2, ease: [0.22, 1, 0.36, 1] } }}
+        transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.8 }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onClick={handleOpenTimer}
-        className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-40 h-16 rounded-2xl border border-white/[0.08] hover:border-nocturn-accent/40 px-3.5 shadow-2xl flex items-center justify-between cursor-pointer group select-none transition-colors"
+        className="mini-timer fixed z-40 rounded-2xl border border-white/[0.08] hover:border-nocturn-accent/40 px-3.5 shadow-2xl flex items-center justify-between cursor-pointer group select-none transition-colors"
         style={{
+          ...dynamicStyle,
           background: 'rgba(17, 19, 26, 0.72)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',

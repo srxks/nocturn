@@ -36,6 +36,7 @@ export function TaskProvider({ children }) {
 
   const [activeListId, setActiveListId] = useState('my-day')
   const [selectedTaskId, setSelectedTaskId] = useState(null)
+  const [selectedTaskIds, setSelectedTaskIds] = useState([])
 
   useEffect(() => {
     ensureSeedData()
@@ -944,6 +945,9 @@ export function TaskProvider({ children }) {
         setActiveListId,
         selectedTask,
         setSelectedTask,
+        selectedTaskIds,
+        setSelectedTaskIds,
+        isBulkActive: selectedTaskIds.length > 0,
         addTask,
         updateTask,
         editTask,

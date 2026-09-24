@@ -1082,33 +1082,61 @@ export default function PlanMyDay() {
                   }
                 }
 
+                // Current hour highlight check
+                const [startHour, startMin] = (block.startTime || '00:00').split(':').map(Number)
+                const [endHour, endMin] = (block.endTime || '23:59').split(':').map(Number)
+                const startMins = (!isNaN(startHour) ? startHour : 0) * 60 + (!isNaN(startMin) ? startMin : 0)
+                const endMins = (!isNaN(endHour) ? endHour : 24) * 60 + (!isNaN(endMin) ? endMin : 0)
+                const isCurrentHour = !isCompletedBlock && currentMinutes >= startMins && currentMinutes < endMins
+
+                // Overlap check with previous block
+                const prevBlock = idx > 0 ? plan.blocks[idx - 1] : null
+                let isOverlapping = false
+                if (prevBlock && prevBlock.endTime && block.startTime) {
+                  const [peh, pem] = prevBlock.endTime.split(':').map(Number)
+                  const [bsh, bsm] = block.startTime.split(':').map(Number)
+                  if (!isNaN(peh) && !isNaN(bsh)) {
+                    if (peh * 60 + (pem || 0) > bsh * 60 + (bsm || 0)) {
+                      isOverlapping = true
+                    }
+                  }
+                }
+
                 // Next up check
                 const isNextUp = Boolean(nextFocusBlock && block.id === nextFocusBlock.id && !isBlockActive && !isCompletedBlock)
 
                 return (
-                  <div
-                    key={block.id || idx}
-                    onClick={() => {
-                      if (!isBlockActive && (isFocus || isBreak)) {
-                        handleApplyTimerAndFocus(block)
-                      }
-                    }}
-                    className={`p-4 sm:p-5 rounded-2xl border transition-all duration-150 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer ${
-                      isCompletedBlock
-                        ? 'bg-nocturn-card/50 border-nocturn-border/40 opacity-75'
-                        : isBlockActive
-                        ? 'bg-rose-950/25 border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.15)] ring-1 ring-rose-500/30'
-                        : isOverdue
-                        ? 'bg-red-950/15 border-red-500/40 shadow-sm'
-                        : isNextUp
-                        ? 'bg-nocturn-card border-indigo-500/40 shadow-sm'
-                        : isFocus
-                        ? 'bg-nocturn-card border-nocturn-border hover:border-nocturn-accent/40 shadow-sm'
-                        : isBreak
-                        ? 'bg-white/[0.02] border-white/[0.05] hover:border-white/10'
-                        : 'bg-nocturn-card border-nocturn-border hover:border-white/15'
-                    }`}
-                  >
+                  <div key={block.id || idx} className="space-y-1.5">
+                    {isOverlapping && (
+                      <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/25 rounded-lg text-[11px] text-amber-300">
+                        <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span>Schedule Overlap: Previous block runs until {prevBlock?.endTime}</span>
+                      </div>
+                    )}
+                    <div
+                      onClick={() => {
+                        if (!isBlockActive && (isFocus || isBreak)) {
+                          handleApplyTimerAndFocus(block)
+                        }
+                      }}
+                      className={`p-4 sm:p-5 rounded-2xl border transition-all duration-150 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer ${
+                        isCompletedBlock
+                          ? 'bg-nocturn-card/50 border-nocturn-border/40 opacity-75'
+                          : isBlockActive
+                          ? 'bg-rose-950/25 border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.15)] ring-1 ring-rose-500/30'
+                          : isCurrentHour
+                          ? 'bg-nocturn-accent/[0.07] border-nocturn-accent/40 shadow-sm ring-1 ring-nocturn-accent/25'
+                          : isOverdue
+                          ? 'bg-red-950/15 border-red-500/40 shadow-sm'
+                          : isNextUp
+                          ? 'bg-nocturn-card border-indigo-500/40 shadow-sm'
+                          : isFocus
+                          ? 'bg-nocturn-card border-nocturn-border hover:border-nocturn-accent/40 shadow-sm'
+                          : isBreak
+                          ? 'bg-white/[0.02] border-white/[0.05] hover:border-white/10'
+                          : 'bg-nocturn-card border-nocturn-border hover:border-white/15'
+                      }`}
+                    >
                     {/* Left Details: Time + Title */}
                     <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
                       {/* Checkbox for existing task or unlinked block */}
@@ -1303,8 +1331,9 @@ export default function PlanMyDay() {
                       )}
                     </div>
                   </div>
-                )
-              })}
+                </div>
+              )
+            })}
             </div>
           </div>
         </div>

@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Search } from 'lucide-react'
+import { Volume2, VolumeX, WifiOff } from 'lucide-react'
 import SyncStatusIndicator from '../common/SyncStatusIndicator'
 import NotificationBell from '../common/NotificationBell'
 import { getStorageItem } from '../../utils/storageUtils'
+import {
+  isSoundEffectsEnabled,
+  setSoundEffectsEnabled,
+  isTimerSoundsEnabled,
+  setTimerSoundsEnabled,
+} from '../../services/soundService'
 
 const ROUTE_LABELS = {
   '/tasks': 'Tasks',
@@ -21,14 +27,35 @@ const ROUTE_LABELS = {
   '/profile': 'Profile & Account',
 }
 
-export default function TopBar({ onOpenCommandPalette }) {
+export default function TopBar() {
   const location = useLocation()
   const [isScrolled, setIsScrolled] = useState(false)
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true))
+  const [isSoundMuted, setIsSoundMuted] = useState(() => !isSoundEffectsEnabled() && !isTimerSoundsEnabled())
 
   const [displayName, setDisplayName] = useState(() => {
     return getStorageItem('nocturn_user_name', 'Nocturn User')
   })
+
+  // Online / Offline listener
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  const handleToggleSound = () => {
+    const nextMuted = !isSoundMuted
+    setIsSoundMuted(nextMuted)
+    setSoundEffectsEnabled(!nextMuted)
+    setTimerSoundsEnabled(!nextMuted)
+    window.dispatchEvent(new CustomEvent('nocturn:sound-toggled', { detail: { muted: nextMuted } }))
+  }
 
   useEffect(() => {
     const handleScroll = (e) => {
@@ -91,23 +118,31 @@ export default function TopBar({ onOpenCommandPalette }) {
         </h1>
       </div>
 
-      {/* Right Controls: Command Palette Pill, Sync status, Notifications, Profile Avatar */}
-      <div className="flex items-center gap-3">
-        {/* Command Palette Trigger Pill */}
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          type="button"
-          onClick={onOpenCommandPalette}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] text-xs text-nocturn-muted hover:text-white transition-all cursor-pointer shadow-sm group"
-        >
-          <Search className="w-3.5 h-3.5 text-nocturn-dim group-hover:text-nocturn-accent transition-colors" />
-          <span className="hidden md:inline text-[11px] font-medium text-nocturn-muted">
-            Search or Jump
+      {/* Right Controls: Offline indicator, Sound toggle, Sync status, Notifications, Profile Avatar */}
+      <div className="flex items-center gap-2.5 sm:gap-3">
+        {/* Offline Pill (Feature 3) */}
+        {!isOnline && (
+          <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-mono flex items-center gap-1.5 shadow-sm">
+            <WifiOff className="w-3 h-3 text-amber-400" />
+            <span>Offline</span>
           </span>
-          <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] text-nocturn-dim group-hover:text-white border border-white/10">
-            {isMac ? '⌘K' : 'Ctrl+K'}
-          </kbd>
+        )}
+
+        {/* Global Sound Mute/Unmute Toggle (Feature 7) */}
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          type="button"
+          onClick={handleToggleSound}
+          title={isSoundMuted ? 'Sound muted (click to unmute)' : 'Sound enabled (click to mute)'}
+          aria-label={isSoundMuted ? 'Unmute sounds' : 'Mute sounds'}
+          className="p-2 rounded-xl text-nocturn-muted hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] transition-colors cursor-pointer"
+        >
+          {isSoundMuted ? (
+            <VolumeX className="w-4 h-4 text-nocturn-muted" />
+          ) : (
+            <Volume2 className="w-4 h-4 text-nocturn-accent" />
+          )}
         </motion.button>
 
         {/* Sync Status */}

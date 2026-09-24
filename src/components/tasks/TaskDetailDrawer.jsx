@@ -54,6 +54,17 @@ export default function TaskDetailDrawer({
   }
 
   useEffect(() => {
+    if (task) {
+      document.body.dataset.drawerOpen = 'true'
+    } else {
+      document.body.dataset.drawerOpen = 'false'
+    }
+    return () => {
+      document.body.dataset.drawerOpen = 'false'
+    }
+  }, [Boolean(task)])
+
+  useEffect(() => {
     return () => {
       if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
       if (notesTimeoutRef.current) clearTimeout(notesTimeoutRef.current)

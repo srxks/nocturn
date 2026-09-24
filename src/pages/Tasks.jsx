@@ -121,12 +121,17 @@ export default function Tasks() {
     addSubtask,
     toggleSubtask,
     deleteSubtask,
+    selectedTaskIds: contextSelectedTaskIds,
+    setSelectedTaskIds: contextSetSelectedTaskIds,
   } = useTasks()
+
+  const [localSelectedTaskIds, setLocalSelectedTaskIds] = useState([])
+  const selectedTaskIds = contextSelectedTaskIds !== undefined ? contextSelectedTaskIds : localSelectedTaskIds
+  const setSelectedTaskIds = contextSetSelectedTaskIds || setLocalSelectedTaskIds
 
   const [isCompletedOpen, setIsCompletedOpen] = useState(false)
   const [isMobileQuickAddOpen, setIsMobileQuickAddOpen] = useState(false)
   const [isSelectMode, setIsSelectMode] = useState(false)
-  const [selectedTaskIds, setSelectedTaskIds] = useState([])
   const [sortBy, setSortBy] = useState('default')
   const [sortDirection, setSortDirection] = useState('asc')
   const [groupBy, setGroupBy] = useState('default')

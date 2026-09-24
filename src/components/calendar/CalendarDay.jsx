@@ -59,7 +59,7 @@ export default function CalendarDay({
         )}
       </div>
 
-      {/* Events Chips List */}
+      {/* Events Chips List & Dot Indicators */}
       <div className="space-y-1 w-full my-1">
         {visibleEvents.map((evt) => (
           <CalendarEvent key={evt.id} event={evt} />
@@ -70,6 +70,24 @@ export default function CalendarDay({
           </span>
         )}
       </div>
+
+      {/* Task Dot Indicators (max 3, then '+') */}
+      {events.length > 0 && (
+        <div className="flex items-center gap-1 mt-auto pt-0.5">
+          {events.slice(0, 3).map((evt, idx) => (
+            <span
+              key={evt.id || idx}
+              className="w-1.5 h-1.5 rounded-full bg-nocturn-accent shadow-[0_0_4px_rgba(var(--color-nocturn-accent-rgb),0.5)] shrink-0"
+              title={evt.title}
+            />
+          ))}
+          {events.length > 3 && (
+            <span className="text-[9px] font-mono text-nocturn-accent font-bold leading-none">
+              +
+            </span>
+          )}
+        </div>
+      )}
     </motion.button>
   )
 }

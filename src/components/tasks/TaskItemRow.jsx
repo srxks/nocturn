@@ -1,7 +1,9 @@
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Star, Calendar, Repeat, ListChecks, Sun, Trash2, Edit3, Play, Clock, Tag, AlertCircle, Check } from 'lucide-react'
+import { Star, Calendar, Repeat, ListChecks, Sun, Trash2, Edit3, Play, Clock, Tag, AlertCircle, Check, Copy } from 'lucide-react'
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
 import { Checkbox } from '../ui/Checkbox'
+import { useTasks } from '../../context/useTasks'
 
 export default function TaskItemRow({
   task,
@@ -16,14 +18,70 @@ export default function TaskItemRow({
   onToggleBulkSelect = null,
 }) {
   const navigate = useNavigate()
+  const { updateTask, duplicateTask } = useTasks()
   const deadlineConfig = getTaskDeadlineConfig(task)
   const listObj = lists.find((l) => l.id === task.listId)
   const subtasksTotal = task.subtasks ? task.subtasks.length : 0
   const subtasksDone = task.subtasks ? task.subtasks.filter((s) => s.completed).length : 0
 
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [editedTitle, setEditedTitle] = useState(task.title)
+  const [showPreview, setShowPreview] = useState(false)
+  const hoverTimerRef = useRef(null)
+  const titleInputRef = useRef(null)
+
+  useEffect(() => {
+    setEditedTitle(task.title)
+  }, [task.title])
+
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus()
+      titleInputRef.current.select()
+    }
+  }, [isEditingTitle])
+
+  const handleMouseEnter = () => {
+    if (task.notes || task.description) {
+      hoverTimerRef.current = setTimeout(() => {
+        setShowPreview(true)
+      }, 400)
+    }
+  }
+
+  const handleMouseLeave = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+    setShowPreview(false)
+  }
+
+  const handleSaveTitle = () => {
+    const trimmed = editedTitle.trim()
+    if (trimmed && trimmed !== task.title) {
+      updateTask(task.id, { title: trimmed })
+    } else {
+      setEditedTitle(task.title)
+    }
+    setIsEditingTitle(false)
+  }
+
+  const handleCancelTitle = () => {
+    setEditedTitle(task.title)
+    setIsEditingTitle(false)
+  }
+
+  const handleSetPriority = (p, e) => {
+    e.stopPropagation()
+    updateTask(task.id, { priority: p })
+  }
+
   return (
     <div
       onClick={() => onSelectTask(task)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className={`group relative flex items-center justify-between gap-3 px-3.5 py-3 sm:px-4 sm:py-3.5 border rounded-xl transition-all duration-150 cursor-pointer select-none ${
         task.completed
           ? 'bg-nocturn-card/40 border-nocturn-border/50 opacity-60'
@@ -32,6 +90,14 @@ export default function TaskItemRow({
           : 'bg-nocturn-card border-nocturn-border hover:border-white/15 hover:bg-nocturn-surface/70 shadow-sm'
       }`}
     >
+      {/* 400ms Hover Notes Preview Tooltip */}
+      {showPreview && (task.notes || task.description) && (
+        <div className="absolute left-6 -top-10 z-40 max-w-sm px-3 py-1.5 bg-[#12141c]/95 border border-white/15 rounded-xl shadow-2xl backdrop-blur-md text-xs text-white/90 truncate pointer-events-none animate-in fade-in zoom-in-95 duration-150">
+          <span className="text-[10px] text-nocturn-accent font-semibold block uppercase">Notes Preview</span>
+          {task.notes || task.description}
+        </div>
+      )}
+
       {/* Left Deadline Accent Pill Indicator */}
       {!task.completed && deadlineConfig.status !== 'none' && (
         <div
@@ -77,15 +143,40 @@ export default function TaskItemRow({
             {!task.completed && deadlineConfig.status !== 'none' && (
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${deadlineConfig.dotClass}`} />
             )}
-            <span
-              className={`text-sm sm:text-[15px] font-medium break-words block transition-all duration-150 ${
-                task.completed
-                  ? 'line-through text-nocturn-dim font-normal'
-                  : 'text-white'
-              }`}
-            >
-              {task.title}
-            </span>
+            {isEditingTitle ? (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1.5 flex-1 min-w-0"
+              >
+                <input
+                  ref={titleInputRef}
+                  type="text"
+                  value={editedTitle}
+                  onChange={(e) => setEditedTitle(e.target.value)}
+                  onBlur={handleSaveTitle}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveTitle()
+                    if (e.key === 'Escape') handleCancelTitle()
+                  }}
+                  className="w-full bg-[#161924] text-white text-sm font-medium px-2 py-0.5 rounded-lg border border-nocturn-accent focus:outline-none ring-1 ring-nocturn-accent/40"
+                />
+              </div>
+            ) : (
+              <span
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  setIsEditingTitle(true)
+                }}
+                title="Double-click to edit title"
+                className={`text-sm sm:text-[15px] font-medium break-words block transition-all duration-150 cursor-text ${
+                  task.completed
+                    ? 'line-through text-nocturn-dim font-normal'
+                    : 'text-white'
+                }`}
+              >
+                {task.title}
+              </span>
+            )}
           </div>
 
           {/* Badges Row */}
@@ -167,24 +258,53 @@ export default function TaskItemRow({
               </span>
             )}
 
-            {/* Priority Badge */}
-            {task.priority && task.priority !== 'none' && (
-              <span
-                className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-md border font-medium capitalize ${
-                  task.priority === 'high'
-                    ? 'text-rose-300 bg-rose-500/10 border-rose-500/25'
+            {/* Priority Badge & Quick-set Hover Dots */}
+            <div className="inline-flex items-center gap-1.5">
+              {task.priority && task.priority !== 'none' && (
+                <span
+                  className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-md border font-medium capitalize ${
+                    task.priority === 'high'
+                      ? 'text-rose-300 bg-rose-500/10 border-rose-500/25'
+                      : task.priority === 'low'
+                      ? 'text-sky-300 bg-sky-500/10 border-sky-500/25'
+                      : 'text-amber-300 bg-amber-500/10 border-amber-500/25'
+                  }`}
+                >
+                  {task.priority === 'high'
+                    ? 'High'
                     : task.priority === 'low'
-                    ? 'text-sky-300 bg-sky-500/10 border-sky-500/25'
-                    : 'text-amber-300 bg-amber-500/10 border-amber-500/25'
-                }`}
-              >
-                {task.priority === 'high'
-                  ? 'High'
-                  : task.priority === 'low'
-                  ? 'Low'
-                  : 'Medium'}
-              </span>
-            )}
+                    ? 'Low'
+                    : 'Medium'}
+                </span>
+              )}
+              {/* Quick-set Dots on Hover */}
+              <div className="hidden group-hover:inline-flex items-center gap-1 px-1 py-0.5 rounded bg-white/[0.04] border border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={(e) => handleSetPriority('low', e)}
+                  className={`w-2 h-2 rounded-full cursor-pointer transition-transform hover:scale-125 ${
+                    task.priority === 'low' ? 'bg-sky-400 ring-1 ring-sky-400/50' : 'bg-sky-400/40 hover:bg-sky-400'
+                  }`}
+                  title="Quick-set: Low Priority"
+                />
+                <button
+                  type="button"
+                  onClick={(e) => handleSetPriority('medium', e)}
+                  className={`w-2 h-2 rounded-full cursor-pointer transition-transform hover:scale-125 ${
+                    task.priority === 'medium' || !task.priority ? 'bg-amber-400 ring-1 ring-amber-400/50' : 'bg-amber-400/40 hover:bg-amber-400'
+                  }`}
+                  title="Quick-set: Medium Priority"
+                />
+                <button
+                  type="button"
+                  onClick={(e) => handleSetPriority('high', e)}
+                  className={`w-2 h-2 rounded-full cursor-pointer transition-transform hover:scale-125 ${
+                    task.priority === 'high' ? 'bg-rose-400 ring-1 ring-rose-400/50' : 'bg-rose-400/40 hover:bg-rose-400'
+                  }`}
+                  title="Quick-set: High Priority"
+                />
+              </div>
+            </div>
 
             {/* Subtasks Count */}
             {subtasksTotal > 0 && (
@@ -214,6 +334,20 @@ export default function TaskItemRow({
             <Play className="w-4 h-4 fill-current" />
           </button>
         )}
+
+        {/* Duplicate Task Button */}
+        <button
+          type="button"
+          aria-label={`Duplicate task "${task.title}"`}
+          onClick={(e) => {
+            e.stopPropagation()
+            duplicateTask && duplicateTask(task.id)
+          }}
+          className="p-1.5 rounded-lg text-nocturn-muted hover:text-white hover:bg-white/[0.08] transition-all opacity-70 sm:opacity-0 group-hover:opacity-100 cursor-pointer"
+          title="Duplicate task"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
 
         {/* Direct Edit Button */}
         <button

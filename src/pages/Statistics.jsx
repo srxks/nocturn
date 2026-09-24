@@ -12,7 +12,6 @@ import {
   getSessionDurationMinutes,
   getActiveSessionMinutes,
 } from '../services/statsService'
-import { formatDateKey } from '../services/calendarService'
 import {
   BarChart3,
   Timer,
@@ -27,11 +26,12 @@ import {
   ArrowUpRight,
   FileText,
   Sparkles,
+  Download,
 } from 'lucide-react'
 
 export default function Statistics() {
   const { tasks, lists } = useTasks()
-  const [period, setPeriod] = useState('week') // 'today' | 'week' | 'month' | 'year'
+  const [period, setPeriod] = useState('week') // '7d' ('week') | '30d' ('month') | '90d' ('year')
   const [periodOffset, setPeriodOffset] = useState(0)
 
   // Live queries for persisted sessions and active session
@@ -42,6 +42,17 @@ export default function Statistics() {
   const activeSession = useLiveQuery(async () => {
     return await db.activeSessions.get('active')
   }, []) || null
+
+  const todayKey = formatDateKey(new Date())
+  const hasCompletedToday = useMemo(() => {
+    const todaySessions = sessions.some((s) => {
+      const d = formatDateKey(new Date(s.completedAt || s.startedAt))
+      return d === todayKey
+    })
+    const todayTasks = tasks.some((t) => t.completed && t.dueDate === todayKey)
+    return todaySessions || todayTasks
+  }, [sessions, tasks, todayKey])
+  const isStreakAtRisk = (stats?.streak || 0) > 0 && !hasCompletedToday
 
   const stats = useMemo(() => {
     return calculateProductivityStats(
@@ -170,14 +181,14 @@ export default function Statistics() {
           </p>
         </div>
 
-        {/* Period Selector & Pagination */}
-        <div className="flex items-center gap-2">
+        {/* Period Selector & Pagination & Export */}
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center p-1 rounded-xl bg-nocturn-card border border-nocturn-border">
             {[
               { id: 'today', label: 'Today' },
-              { id: 'week', label: 'Week' },
-              { id: 'month', label: 'Month' },
-              { id: 'year', label: 'Year' },
+              { id: 'week', label: '7d' },
+              { id: 'month', label: '30d' },
+              { id: 'year', label: '90d' },
             ].map((p) => (
               <button
                 key={p.id}
@@ -227,6 +238,22 @@ export default function Statistics() {
               </button>
             </div>
           )}
+
+          {/* Export Stats Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ stats, totalSessions: sessions.length, exportedAt: new Date().toISOString() }, null, 2))
+              const a = document.createElement('a')
+              a.href = dataStr
+              a.download = `nocturn-stats-${new Date().toISOString().slice(0, 10)}.json`
+              a.click()
+            }}
+            className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-nocturn-muted hover:text-white border border-white/[0.08] transition-colors cursor-pointer"
+            title="Export statistics data as JSON"
+          >
+            <Download className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -298,8 +325,14 @@ export default function Statistics() {
             </span>
             <span className="text-xs font-semibold text-nocturn-muted">{stats.streak === 1 ? 'day' : 'days'}</span>
           </div>
-          <div className="mt-2 text-[11px] text-nocturn-dim">
-            {stats.streak > 0 ? 'Consecutive days with focus or task' : 'Log a session today to start your streak'}
+          <div className="mt-2 text-[11px] text-nocturn-dim flex items-center justify-between">
+            <span>{stats.streak > 0 ? 'Consecutive active days' : 'Log a session today to start'}</span>
+            {isStreakAtRisk && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-semibold bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/25">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                At Risk
+              </span>
+            )}
           </div>
         </motion.div>
 

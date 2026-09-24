@@ -8,14 +8,15 @@ const USER_DATA_DIR = path.resolve(__dirname, '../../.chrome-session')
 const BASE_URL = 'http://localhost:5173'
 
 const VIEWPORTS = [
-  { name: 'Desktop 1920x1080', width: 1920, height: 1080, isMobile: false },
+  { name: 'iPhone SE 320x568', width: 320, height: 568, isMobile: true },
+  { name: 'iPhone 8 375x667', width: 375, height: 667, isMobile: true },
+  { name: 'iPhone 14 390x844', width: 390, height: 844, isMobile: true },
+  { name: 'iPad Portrait 768x1024', width: 768, height: 1024, isMobile: true },
+  { name: 'iPad Landscape 1024x768', width: 1024, height: 768, isMobile: false },
+  { name: 'Laptop 1280x800', width: 1280, height: 800, isMobile: false },
   { name: 'Desktop 1440x900', width: 1440, height: 900, isMobile: false },
-  { name: 'Desktop 1280x720', width: 1280, height: 720, isMobile: false },
-  { name: 'Tablet 1024x768', width: 1024, height: 768, isMobile: false },
-  { name: 'Tablet 768x1024', width: 768, height: 1024, isMobile: true },
-  { name: 'Mobile 430x932', width: 430, height: 932, isMobile: true },
-  { name: 'Mobile 390x844', width: 390, height: 844, isMobile: true },
-  { name: 'Mobile 375x812', width: 375, height: 812, isMobile: true },
+  { name: 'FHD 1920x1080', width: 1920, height: 1080, isMobile: false },
+  { name: 'QHD 2560x1440', width: 2560, height: 1440, isMobile: false },
 ]
 
 const ROUTES = [

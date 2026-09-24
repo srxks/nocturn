@@ -17,6 +17,9 @@ import { useTheme } from '../../context/useTheme'
 export default function ThemeSettingsCard() {
   const {
     activeTheme,
+    activePreset,
+    applyThemePreset,
+    v3Presets,
     presetThemes,
     savedThemes,
     applyTheme,
@@ -155,50 +158,45 @@ export default function ThemeSettingsCard() {
         </div>
       </div>
 
-      {/* Preset Themes Section */}
+      {/* Preset Themes Section with 40px Circle Swatches */}
       <div className="space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-nocturn-muted flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5 text-nocturn-accent" />
           <span>Preset Themes</span>
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {presetThemes.map((preset) => {
-            const isActive = activeTheme.id === preset.id
-
+        <div className="flex flex-wrap items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.06]">
+          {(v3Presets || []).map((p) => {
+            const isSelected = activePreset === p.key
             return (
-              <motion.button
-                key={preset.id}
+              <button
+                key={p.id}
                 type="button"
-                whileHover={{ y: -2, scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                onClick={() => applyTheme(preset)}
-                className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between gap-3 transition-colors cursor-pointer ${
-                  isActive
-                    ? 'bg-nocturn-accent/[0.06] border-nocturn-accent shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.2)] ring-1 ring-nocturn-accent/40'
-                    : 'bg-white/[0.02] hover:bg-white/[0.04] border-white/[0.06] hover:border-white/[0.14]'
-                }`}
+                onClick={() => applyThemePreset(p.key)}
+                className="group flex flex-col items-center gap-2 cursor-pointer focus:outline-none"
+                title={p.name}
               >
-                <div className="flex items-center justify-between gap-2 w-full">
-                  <span className="text-sm font-semibold text-white tracking-tight truncate">
-                    {preset.name}
-                  </span>
-                  {isActive && (
-                    <span className="w-5 h-5 rounded-full bg-nocturn-accent text-black flex items-center justify-center shrink-0">
-                      <Check className="w-3 h-3 stroke-[3]" />
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-lg border border-white/10 ring-1 ring-black/20" style={{ backgroundColor: preset.colors.background }} title="Background" />
-                  <span className="w-5 h-5 rounded-lg border border-white/10 ring-1 ring-black/20" style={{ backgroundColor: preset.colors.surface }} title="Surface" />
-                  <span className="w-5 h-5 rounded-lg border border-white/10 ring-1 ring-black/20" style={{ backgroundColor: preset.colors.elevated }} title="Elevated" />
-                  <span className="w-5 h-5 rounded-lg border border-white/10 ring-1 ring-black/20" style={{ backgroundColor: preset.colors.accent }} title="Accent" />
-                  <span className="w-5 h-5 rounded-lg border border-white/10 ring-1 ring-black/20 ml-auto" style={{ backgroundColor: preset.colors.text }} title="Text" />
-                </div>
-              </motion.button>
+                <motion.div
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                    isSelected
+                      ? 'ring-2 ring-white ring-offset-2 ring-offset-[#07070a] shadow-lg shadow-black/60'
+                      : 'hover:ring-1 hover:ring-white/40'
+                  }`}
+                  style={{ backgroundColor: p.accent }}
+                >
+                  {isSelected && <Check className="w-5 h-5 text-white stroke-[3] drop-shadow-md" />}
+                </motion.div>
+                <span
+                  className={`text-xs font-medium transition-colors ${
+                    isSelected ? 'text-white font-bold' : 'text-nocturn-muted group-hover:text-white'
+                  }`}
+                >
+                  {p.name.replace('Default ', '')}
+                </span>
+              </button>
             )
           })}
         </div>

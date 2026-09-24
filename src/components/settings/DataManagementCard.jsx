@@ -73,6 +73,12 @@ export default function DataManagementCard() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
+      try {
+        localStorage.setItem('nocturn_last_export_timestamp', String(Date.now()))
+      } catch {
+        // storage quota or private mode
+      }
+
       addToast(
         `Exported ${userTasks.length} tasks and ${userVocab.length} vocabulary words`,
         'success',
@@ -188,11 +194,27 @@ export default function DataManagementCard() {
     }
   }
 
+  const lastExportTs = typeof window !== 'undefined' ? Number(localStorage.getItem('nocturn_last_export_timestamp') || 0) : 0
+  const daysSinceExport = lastExportTs ? Math.floor((Date.now() - lastExportTs) / (1000 * 60 * 60 * 24)) : null
+  const isBackupRecommended = !lastExportTs || (daysSinceExport !== null && daysSinceExport > 7)
+
   return (
     <section className="space-y-3">
       <h2 className="text-sm sm:text-base font-semibold text-white tracking-wide px-1">
         {isAngular ? '[ DATA_MANAGEMENT ]' : 'Data & Backups'}
       </h2>
+
+      {/* Backup Reminder Banner */}
+      {isBackupRecommended && (
+        <div className="flex items-center gap-2.5 p-3 sm:p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300 shadow-sm">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>
+            {daysSinceExport !== null
+              ? `Backup reminder: Your data was last exported ${daysSinceExport} days ago. Back up your tasks to prevent data loss.`
+              : 'Backup reminder: No backup exported yet. Download a JSON snapshot to keep your data safe offline.'}
+          </span>
+        </div>
+      )}
 
       <div
         className={`nocturn-card p-5 sm:p-6 border border-nocturn-border flex flex-col gap-4 ${
