@@ -20,13 +20,16 @@ const VIEWPORTS = [
 
 const ROUTES = [
   { path: '/tasks?view=myday', label: 'My Day' },
+  { path: '/tasks?view=inbox', label: 'Inbox' },
+  { path: '/tasks?view=upcoming', label: 'Upcoming Tasks' },
   { path: '/tasks?view=all', label: 'All Tasks' },
   { path: '/calendar', label: 'Calendar' },
   { path: '/plan', label: 'Plan My Day' },
   { path: '/timer', label: 'Timer' },
   { path: '/timer-settings', label: 'Timer Settings' },
+  { path: '/statistics', label: 'Statistics' },
   { path: '/vocab', label: 'Vocabulary' },
-  { path: '/profile', label: 'Statistics' },
+  { path: '/profile', label: 'Profile' },
   { path: '/settings', label: 'Settings' },
 ]
 
@@ -62,7 +65,8 @@ async function runResponsiveQA() {
       totalTests++
       try {
         await page.goto(`${BASE_URL}${route.path}`, { waitUntil: 'domcontentloaded', timeout: 10000 })
-        await page.waitForNetworkIdle({ timeout: 4000 }).catch(() => {})
+        await page.waitForSelector('main, #root', { timeout: 3000 }).catch(() => {})
+        await new Promise((r) => setTimeout(r, 100))
 
         // Check for horizontal overflow
         const overflow = await page.evaluate(() => {
