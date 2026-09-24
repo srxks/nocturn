@@ -1,9 +1,15 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MoreVertical, CheckCheck, Trash2, AlertCircle } from 'lucide-react'
+import { MoreVertical, CheckCheck, Trash2, AlertCircle, CheckSquare } from 'lucide-react'
 import { useTasks } from '../../context/useTasks'
 
-export default function BulkTaskMenu({ activeListId, completedCount, totalCount }) {
+export default function BulkTaskMenu({
+  activeListId,
+  completedCount,
+  totalCount,
+  isSelectMode = false,
+  onToggleSelectMode = null,
+}) {
   const { clearCompleted, clearList } = useTasks()
   const [isOpen, setIsOpen] = useState(false)
   const [confirmModal, setConfirmModal] = useState(null) // 'clear-completed' | 'clear-list' | null
@@ -49,8 +55,23 @@ export default function BulkTaskMenu({ activeListId, completedCount, totalCount 
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: -4 }}
               transition={{ duration: 0.12 }}
-              className="absolute right-0 z-50 mt-1 w-48 rounded-2xl bg-nocturn-card border border-nocturn-border shadow-2xl p-1.5 space-y-1"
+              className="absolute right-0 z-50 mt-1 w-52 rounded-2xl bg-nocturn-card border border-nocturn-border shadow-2xl p-1.5 space-y-1"
             >
+              {/* Select Tasks Toggle */}
+              {onToggleSelectMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggleSelectMode()
+                    setIsOpen(false)
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-nocturn-muted hover:text-white hover:bg-nocturn-surface transition-colors text-left cursor-pointer"
+                >
+                  <CheckSquare className="w-4 h-4 text-nocturn-accent shrink-0" />
+                  <span>{isSelectMode ? 'Exit select mode' : 'Select tasks'}</span>
+                </button>
+              )}
+
               {/* Clear Completed Option */}
               <button
                 type="button"

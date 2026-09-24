@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Sun,
+  Inbox,
+  CalendarClock,
   ListTodo,
   CheckCircle2,
   CheckSquare,
@@ -13,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { useTasks } from '../../context/useTasks'
+import { formatDateKey } from '../../services/calendarService'
 
 export default function TaskListNav({ onSelectView }) {
   const {
@@ -34,6 +37,10 @@ export default function TaskListNav({ onSelectView }) {
     setActiveListId(viewId)
     if (viewId === 'my-day') {
       setSearchParams({ view: 'myday' }, { replace: true })
+    } else if (viewId === 'inbox') {
+      setSearchParams({ view: 'inbox' }, { replace: true })
+    } else if (viewId === 'upcoming') {
+      setSearchParams({ view: 'upcoming' }, { replace: true })
     } else if (viewId === 'all') {
       setSearchParams({ view: 'all' }, { replace: true })
     } else if (viewId === 'completed') {
@@ -69,13 +76,24 @@ export default function TaskListNav({ onSelectView }) {
   }
 
   // Count helper functions
-  const myDayCount = tasks.filter((t) => (t.inMyDay || t.dueDate === new Date().toISOString().slice(0, 10)) && !t.completed).length
+  const todayKey = formatDateKey(new Date())
+  const myDayCount = tasks.filter(
+    (t) => (t.inMyDay || t.dueDate === todayKey || t.myDayDate === todayKey) && !t.completed
+  ).length
+  const inboxCount = tasks.filter(
+    (t) => (!t.listId || t.listId === 'tasks' || t.listId === 'inbox') && !t.completed
+  ).length
+  const upcomingCount = tasks.filter(
+    (t) => t.dueDate && t.dueDate > todayKey && !t.completed
+  ).length
   const allCount = tasks.filter((t) => !t.completed).length
   const completedCount = tasks.filter((t) => t.completed).length
 
   const SYSTEM_VIEWS = [
     { id: 'my-day', name: 'My Day', icon: Sun, count: myDayCount },
-    { id: 'all', name: 'All', icon: ListTodo, count: allCount },
+    { id: 'inbox', name: 'Inbox', icon: Inbox, count: inboxCount },
+    { id: 'upcoming', name: 'Upcoming', icon: CalendarClock, count: upcomingCount },
+    { id: 'all', name: 'All Tasks', icon: ListTodo, count: allCount },
     { id: 'completed', name: 'Completed', icon: CheckCircle2, count: completedCount },
   ]
 
@@ -141,7 +159,7 @@ export default function TaskListNav({ onSelectView }) {
 
         {/* Custom Lists List */}
         <div className="space-y-1">
-          {lists.map((list) => {
+          {lists.filter((l) => l.id !== 'tasks' && !l.system).map((list) => {
             const active = activeListId === list.id
             const listTasksCount = tasks.filter((t) => t.listId === list.id && !t.completed).length
             const isEditing = editingListId === list.id

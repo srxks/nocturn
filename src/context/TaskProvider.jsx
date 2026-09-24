@@ -93,11 +93,14 @@ export function TaskProvider({ children }) {
     starred = false,
     inMyDayOverride = null,
     source = 'user',
-    reminder = null
+    reminder = null,
+    extraFields = {}
   ) => {
     const isMyDayList = listId === 'my-day'
     const actualListId =
-      isMyDayList || listId === 'all' || listId === 'completed' ? 'tasks' : listId
+      isMyDayList || listId === 'all' || listId === 'completed' || listId === 'upcoming'
+        ? 'tasks'
+        : listId
 
     // Strictly ONLY tasks explicitly created in / added to My Day belong in My Day.
     // Having a due date (today, tomorrow, etc.) does NOT automatically put it in My Day.
@@ -113,15 +116,19 @@ export function TaskProvider({ children }) {
       completed: false,
       listId: actualListId,
       dueDate: dueDate || null,
+      deadline: extraFields.deadline || null,
+      estimatedDuration: Number.isFinite(Number(extraFields.estimatedDuration)) ? Number(extraFields.estimatedDuration) : null,
+      labels: Array.isArray(extraFields.labels) ? extraFields.labels : [],
+      dependencies: Array.isArray(extraFields.dependencies) ? extraFields.dependencies : [],
       myDayDate: myDayDate,
       inMyDay: shouldBeInMyDay,
       source: source || 'user',
       reminder: reminder || null,
-      recurrence: 'none',
+      recurrence: extraFields.recurrence || 'none',
       priority: resolvedPriority,
       starred: Boolean(starred || resolvedPriority === 'high'),
-      notes: '',
-      subtasks: [],
+      notes: extraFields.notes || '',
+      subtasks: Array.isArray(extraFields.subtasks) ? extraFields.subtasks : [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -678,6 +685,255 @@ export function TaskProvider({ children }) {
     }
   }
 
+  const duplicateTask = async (id, options = {}) => {
+    const target = await db.tasks.get(id)
+    if (!target) return null
+
+    const {
+      includeDate = true,
+      includeSubtasks = true,
+      includeRecurrence = true,
+    } = options
+
+    const clonedSubtasks = includeSubtasks && Array.isArray(target.subtasks)
+      ? target.subtasks.map((s) => ({
+          id: crypto.randomUUID(),
+          title: s.title,
+          completed: false,
+        }))
+      : []
+
+    const duplicated = {
+      ...target,
+      id: crypto.randomUUID(),
+      title: `${target.title} (Copy)`,
+      completed: false,
+      completedAt: null,
+      hasGeneratedNext: false,
+      dueDate: includeDate ? target.dueDate : null,
+      myDayDate: includeDate ? target.myDayDate : null,
+      inMyDay: includeDate ? target.inMyDay : false,
+      deadline: includeDate ? target.deadline : null,
+      recurrence: includeRecurrence ? target.recurrence : 'none',
+      subtasks: clonedSubtasks,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    await db.tasks.add(duplicated)
+
+    if (user?.id && !shouldSkipRemote()) {
+      const res = await upsertTaskRemote(duplicated, user.id)
+      if (!res) {
+        const row = mapTaskToRow(duplicated, user.id)
+        if (row) enqueueMutation('upsert', 'tasks', row)
+      }
+    }
+
+    addToast(`Duplicated "${target.title}"`, {
+      type: 'success',
+      duration: 3500,
+    })
+    return duplicated
+  }
+
+  const bulkComplete = async (taskIds, completed = true) => {
+    if (!taskIds || taskIds.length === 0) return 0
+    const now = new Date().toISOString()
+
+    for (const id of taskIds) {
+      if (completed) cancelTaskReminder(id)
+      const target = await db.tasks.get(id)
+      if (!target) continue
+
+      const updated = {
+        ...target,
+        completed,
+        completedAt: completed ? now : null,
+        updatedAt: now,
+      }
+      await db.tasks.update(id, {
+        completed,
+        completedAt: completed ? now : null,
+        updatedAt: now,
+      })
+
+      if (user?.id && !shouldSkipRemote()) {
+        const res = await upsertTaskRemote(updated, user.id)
+        if (!res) {
+          const row = mapTaskToRow(updated, user.id)
+          if (row) enqueueMutation('upsert', 'tasks', row)
+        }
+      }
+    }
+
+    if (completed) playTaskCompleteSound()
+    addToast(`${completed ? 'Completed' : 'Reopened'} ${taskIds.length} tasks`, {
+      type: 'success',
+      duration: 4000,
+      action: {
+        label: 'Undo',
+        onClick: () => bulkComplete(taskIds, !completed),
+      },
+    })
+    return taskIds.length
+  }
+
+  const bulkReschedule = async (taskIds, newDueDate) => {
+    if (!taskIds || taskIds.length === 0) return 0
+    const now = new Date().toISOString()
+    const isToday = newDueDate === todayKey
+
+    for (const id of taskIds) {
+      const target = await db.tasks.get(id)
+      if (!target) continue
+
+      const updated = {
+        ...target,
+        dueDate: newDueDate || null,
+        inMyDay: isToday ? true : target.inMyDay,
+        myDayDate: isToday ? todayKey : target.myDayDate,
+        updatedAt: now,
+      }
+      await db.tasks.update(id, {
+        dueDate: newDueDate || null,
+        inMyDay: isToday ? true : target.inMyDay,
+        myDayDate: isToday ? todayKey : target.myDayDate,
+        updatedAt: now,
+      })
+
+      if (user?.id && !shouldSkipRemote()) {
+        const res = await upsertTaskRemote(updated, user.id)
+        if (!res) {
+          const row = mapTaskToRow(updated, user.id)
+          if (row) enqueueMutation('upsert', 'tasks', row)
+        }
+      }
+    }
+
+    addToast(`Rescheduled ${taskIds.length} tasks`, {
+      type: 'info',
+      duration: 3500,
+    })
+    return taskIds.length
+  }
+
+  const bulkChangePriority = async (taskIds, priority) => {
+    if (!taskIds || taskIds.length === 0) return 0
+    const now = new Date().toISOString()
+    const starred = priority === 'high'
+
+    for (const id of taskIds) {
+      const target = await db.tasks.get(id)
+      if (!target) continue
+
+      const updated = {
+        ...target,
+        priority,
+        starred,
+        updatedAt: now,
+      }
+      await db.tasks.update(id, {
+        priority,
+        starred,
+        updatedAt: now,
+      })
+
+      if (user?.id && !shouldSkipRemote()) {
+        const res = await upsertTaskRemote(updated, user.id)
+        if (!res) {
+          const row = mapTaskToRow(updated, user.id)
+          if (row) enqueueMutation('upsert', 'tasks', row)
+        }
+      }
+    }
+
+    addToast(`Set priority to ${priority} for ${taskIds.length} tasks`, {
+      type: 'info',
+      duration: 3500,
+    })
+    return taskIds.length
+  }
+
+  const bulkMove = async (taskIds, targetListId) => {
+    if (!taskIds || taskIds.length === 0) return 0
+    const now = new Date().toISOString()
+    const validListId =
+      targetListId === 'my-day' || targetListId === 'all' || targetListId === 'completed'
+        ? 'tasks'
+        : targetListId
+
+    for (const id of taskIds) {
+      const target = await db.tasks.get(id)
+      if (!target) continue
+
+      const updated = {
+        ...target,
+        listId: validListId,
+        inMyDay: targetListId === 'my-day' ? true : target.inMyDay,
+        myDayDate: targetListId === 'my-day' ? todayKey : target.myDayDate,
+        updatedAt: now,
+      }
+      await db.tasks.update(id, {
+        listId: validListId,
+        inMyDay: targetListId === 'my-day' ? true : target.inMyDay,
+        myDayDate: targetListId === 'my-day' ? todayKey : target.myDayDate,
+        updatedAt: now,
+      })
+
+      if (user?.id && !shouldSkipRemote()) {
+        const res = await upsertTaskRemote(updated, user.id)
+        if (!res) {
+          const row = mapTaskToRow(updated, user.id)
+          if (row) enqueueMutation('upsert', 'tasks', row)
+        }
+      }
+    }
+
+    addToast(`Moved ${taskIds.length} tasks`, {
+      type: 'info',
+      duration: 3500,
+    })
+    return taskIds.length
+  }
+
+  const bulkApplyLabels = async (taskIds, labelsToAdd) => {
+    if (!taskIds || taskIds.length === 0 || !labelsToAdd || labelsToAdd.length === 0) return 0
+    const now = new Date().toISOString()
+
+    for (const id of taskIds) {
+      const target = await db.tasks.get(id)
+      if (!target) continue
+
+      const existing = Array.isArray(target.labels) ? target.labels : []
+      const merged = Array.from(new Set([...existing, ...labelsToAdd]))
+
+      const updated = {
+        ...target,
+        labels: merged,
+        updatedAt: now,
+      }
+      await db.tasks.update(id, {
+        labels: merged,
+        updatedAt: now,
+      })
+
+      if (user?.id && !shouldSkipRemote()) {
+        const res = await upsertTaskRemote(updated, user.id)
+        if (!res) {
+          const row = mapTaskToRow(updated, user.id)
+          if (row) enqueueMutation('upsert', 'tasks', row)
+        }
+      }
+    }
+
+    addToast(`Applied labels to ${taskIds.length} tasks`, {
+      type: 'info',
+      duration: 3500,
+    })
+    return taskIds.length
+  }
+
   return (
     <TaskContext.Provider
       value={{
@@ -693,6 +949,7 @@ export function TaskProvider({ children }) {
         editTask,
         deleteTask,
         restoreTask,
+        duplicateTask,
         toggleTask,
         toggleStar,
         toggleMyDay,
@@ -705,6 +962,11 @@ export function TaskProvider({ children }) {
         clearCompleted,
         clearList,
         deleteMultipleTasks,
+        bulkComplete,
+        bulkReschedule,
+        bulkChangePriority,
+        bulkMove,
+        bulkApplyLabels,
         completeTaskFromTimer,
       }}
     >

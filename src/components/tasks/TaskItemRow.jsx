@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Star, Calendar, Repeat, ListChecks, Sun, Trash2, Edit3, Play } from 'lucide-react'
+import { Star, Calendar, Repeat, ListChecks, Sun, Trash2, Edit3, Play, Clock, Tag, AlertCircle, Check } from 'lucide-react'
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
 import { Checkbox } from '../ui/Checkbox'
 
@@ -11,6 +11,9 @@ export default function TaskItemRow({
   onSelectTask,
   onDeleteTask,
   isSelected = false,
+  isSelectMode = false,
+  isBulkSelected = false,
+  onToggleBulkSelect = null,
 }) {
   const navigate = useNavigate()
   const deadlineConfig = getTaskDeadlineConfig(task)
@@ -38,6 +41,27 @@ export default function TaskItemRow({
       )}
 
       <div className="flex items-center gap-3 min-w-0 flex-1 pl-0.5">
+        {/* Multi-select Selection Box when in Select Mode */}
+        {isSelectMode && (
+          <div
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleBulkSelect && onToggleBulkSelect(task.id)
+            }}
+            className="shrink-0 flex items-center pr-1"
+          >
+            <div
+              className={`w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer ${
+                isBulkSelected
+                  ? 'bg-nocturn-accent border-nocturn-accent text-black shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.5)]'
+                  : 'border-white/30 hover:border-white/60 bg-white/[0.04]'
+              }`}
+            >
+              {isBulkSelected && <Check className="w-3 h-3 stroke-[3]" />}
+            </div>
+          </div>
+        )}
+
         {/* Checkbox with smooth draw animation */}
         <div onClick={(e) => e.stopPropagation()} className="shrink-0 flex items-center">
           <Checkbox
@@ -106,6 +130,34 @@ export default function TaskItemRow({
                 NO DEADLINE
               </span>
             )}
+
+            {/* Strict Deadline Badge (if set) */}
+            {task.deadline && (
+              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border font-medium bg-rose-500/10 text-rose-300 border-rose-500/25">
+                <AlertCircle className="w-3 h-3 stroke-[2]" />
+                DL: {task.deadline}
+              </span>
+            )}
+
+            {/* Estimated Duration Badge */}
+            {task.estimatedDuration && (
+              <span className="inline-flex items-center gap-1 text-[10px] bg-sky-500/10 text-sky-300 px-1.5 py-0.5 rounded-md border border-sky-500/25 font-mono">
+                <Clock className="w-3 h-3 stroke-[2]" />
+                {task.estimatedDuration}m
+              </span>
+            )}
+
+            {/* Labels / Tags */}
+            {Array.isArray(task.labels) &&
+              task.labels.map((lbl) => (
+                <span
+                  key={lbl}
+                  className="inline-flex items-center gap-0.5 text-[10px] bg-nocturn-accent/10 text-nocturn-accent-bright px-1.5 py-0.5 rounded-md border border-nocturn-accent/20"
+                >
+                  <Tag className="w-2.5 h-2.5 stroke-[2]" />
+                  #{lbl}
+                </span>
+              ))}
 
             {/* Recurrence Badge */}
             {task.recurrence && task.recurrence !== 'none' && (

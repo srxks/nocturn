@@ -11,14 +11,22 @@ export function mapRowToTask(row, subtaskRows = []) {
 
   let inMyDay = false
   let myDayDate = null
+  let deadline = null
+  let estimatedDuration = null
+  let labels = []
+  let dependencies = []
   let notes = row.notes || ''
 
-  if (row.description && typeof row.description === 'string' && row.description.startsWith('{"inMyDay":')) {
+  if (row.description && typeof row.description === 'string' && (row.description.startsWith('{"inMyDay":') || row.description.startsWith('{"nocturnMeta":'))) {
     try {
       const parsed = JSON.parse(row.description)
-      if (parsed && parsed.inMyDay === true) {
-        inMyDay = true
-        myDayDate = parsed.myDayDate || null
+      if (parsed) {
+        if (parsed.inMyDay === true) inMyDay = true
+        if (parsed.myDayDate) myDayDate = parsed.myDayDate
+        if (parsed.deadline) deadline = parsed.deadline
+        if (parsed.estimatedDuration) estimatedDuration = parsed.estimatedDuration
+        if (Array.isArray(parsed.labels)) labels = parsed.labels
+        if (Array.isArray(parsed.dependencies)) dependencies = parsed.dependencies
         if (!notes && parsed.text) notes = parsed.text
       }
     } catch { /* ignore */ }
@@ -44,11 +52,15 @@ export function mapRowToTask(row, subtaskRows = []) {
     userId: row.user_id,
     listId: row.list_id || 'tasks',
     title: row.title || '',
-    notes: notes || (row.description && !row.description.startsWith('{"inMyDay":') ? row.description : ''),
+    notes: notes || (row.description && !row.description.startsWith('{') ? row.description : ''),
     completed: Boolean(row.completed),
     starred: Boolean(row.priority === 'high'),
     priority: row.priority || 'medium',
     dueDate: row.due_date ? row.due_date.split('T')[0] : null,
+    deadline: deadline || null,
+    estimatedDuration: Number.isFinite(Number(estimatedDuration)) ? Number(estimatedDuration) : null,
+    labels: Array.isArray(labels) ? labels : [],
+    dependencies: Array.isArray(dependencies) ? dependencies : [],
     myDayDate: myDayDate,
     inMyDay: inMyDay,
     reminder: reminder,
@@ -120,10 +132,22 @@ export function mapTaskToRow(task, userId) {
   }
 
   let description = cleanNotes
-  if (task.inMyDay) {
+  const hasMeta =
+    task.inMyDay ||
+    task.deadline ||
+    task.estimatedDuration ||
+    (Array.isArray(task.labels) && task.labels.length > 0) ||
+    (Array.isArray(task.dependencies) && task.dependencies.length > 0)
+
+  if (hasMeta) {
     description = JSON.stringify({
-      inMyDay: true,
+      nocturnMeta: true,
+      inMyDay: Boolean(task.inMyDay),
       myDayDate: task.myDayDate || null,
+      deadline: task.deadline || null,
+      estimatedDuration: task.estimatedDuration || null,
+      labels: Array.isArray(task.labels) ? task.labels : [],
+      dependencies: Array.isArray(task.dependencies) ? task.dependencies : [],
       text: cleanNotes,
     })
   }

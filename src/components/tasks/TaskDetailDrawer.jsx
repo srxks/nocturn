@@ -13,6 +13,11 @@ import {
   Plus,
   Trash2,
   Timer,
+  Tag,
+  Clock,
+  Link2,
+  Copy,
+  AlertCircle,
 } from 'lucide-react'
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
 import { requestNotificationPermission } from '../../services/notificationService'
@@ -20,10 +25,12 @@ import { requestNotificationPermission } from '../../services/notificationServic
 export default function TaskDetailDrawer({
   task,
   lists = [],
+  allTasks = [],
   onClose,
   onUpdateTask,
   onToggleComplete,
   onDeleteTask,
+  onDuplicateTask,
   onAddSubtask,
   onToggleSubtask,
   onDeleteSubtask,
@@ -31,6 +38,7 @@ export default function TaskDetailDrawer({
 }) {
   const navigate = useNavigate()
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const [newLabelInput, setNewLabelInput] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [prevTaskId, setPrevTaskId] = useState(task?.id)
   const [localTitle, setLocalTitle] = useState(task?.title || '')
@@ -357,6 +365,173 @@ export default function TaskDetailDrawer({
             </select>
           </div>
 
+          {/* Strict Deadline Selector (Distinct from Scheduled Due Date) */}
+          <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+            <span className="text-nocturn-muted font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400" /> Deadline
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={task.deadline || ''}
+                onChange={(e) => {
+                  const val = e.target.value || null
+                  onUpdateTask(task.id, { deadline: val })
+                }}
+                className="bg-nocturn-surface text-white text-xs px-2.5 py-1.5 rounded-xl border border-nocturn-border outline-none focus:border-rose-400 font-mono cursor-pointer"
+              />
+              {task.deadline && (
+                <button
+                  type="button"
+                  onClick={() => onUpdateTask(task.id, { deadline: null })}
+                  className="p-1 text-nocturn-muted hover:text-rose-400 cursor-pointer"
+                  title="Clear deadline"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Estimated Duration Selector */}
+          <div className="space-y-1.5 text-xs sm:text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-nocturn-muted font-medium flex items-center gap-2">
+                <Clock className="w-4 h-4 text-nocturn-accent" /> Estimated Duration
+              </span>
+              <span className="font-mono text-white text-xs">
+                {task.estimatedDuration ? `${task.estimatedDuration}m` : 'Not set'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {[15, 25, 45, 60, 90].map((mins) => (
+                <button
+                  key={mins}
+                  type="button"
+                  onClick={() => {
+                    const nextVal = task.estimatedDuration === mins ? null : mins
+                    onUpdateTask(task.id, { estimatedDuration: nextVal })
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer ${
+                    task.estimatedDuration === mins
+                      ? 'bg-nocturn-accent text-black font-bold shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.35)]'
+                      : 'bg-nocturn-surface text-nocturn-muted border border-nocturn-border hover:text-white'
+                  }`}
+                >
+                  {mins}m
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Labels / Tags Section */}
+          <div className="space-y-2 text-xs sm:text-sm">
+            <span className="text-nocturn-muted font-medium flex items-center gap-2">
+              <Tag className="w-4 h-4 text-nocturn-accent" /> Labels & Tags
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {Array.isArray(task.labels) &&
+                task.labels.map((lbl) => (
+                  <span
+                    key={lbl}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-nocturn-accent/15 text-nocturn-accent-bright border border-nocturn-accent/30"
+                  >
+                    #{lbl}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updatedLabels = task.labels.filter((l) => l !== lbl)
+                        onUpdateTask(task.id, { labels: updatedLabels })
+                      }}
+                      className="hover:text-white cursor-pointer ml-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              <div className="inline-flex items-center gap-1">
+                <input
+                  type="text"
+                  value={newLabelInput}
+                  onChange={(e) => setNewLabelInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      const cleaned = newLabelInput.trim().replace(/^#/, '').toLowerCase()
+                      if (cleaned) {
+                        const existing = Array.isArray(task.labels) ? task.labels : []
+                        if (!existing.includes(cleaned)) {
+                          onUpdateTask(task.id, { labels: [...existing, cleaned] })
+                        }
+                        setNewLabelInput('')
+                      }
+                    }
+                  }}
+                  placeholder="+ Add #tag..."
+                  className="bg-nocturn-surface text-white text-xs px-2 py-1 rounded-lg border border-nocturn-border outline-none focus:border-nocturn-accent w-24"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Task Dependencies (Blocked By) */}
+          {allTasks.length > 1 && (
+            <div className="space-y-1.5 text-xs sm:text-sm">
+              <span className="text-nocturn-muted font-medium flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-amber-400" /> Blocked By (Dependencies)
+              </span>
+              <select
+                value=""
+                onChange={(e) => {
+                  const depId = e.target.value
+                  if (depId) {
+                    const existing = Array.isArray(task.dependencies) ? task.dependencies : []
+                    if (!existing.includes(depId)) {
+                      onUpdateTask(task.id, { dependencies: [...existing, depId] })
+                    }
+                  }
+                }}
+                className="w-full bg-nocturn-surface text-white text-xs px-2.5 py-1.5 rounded-xl border border-nocturn-border outline-none focus:border-nocturn-accent cursor-pointer"
+              >
+                <option value="">Select a blocking task...</option>
+                {allTasks
+                  .filter((t) => t.id !== task.id)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.title} {t.completed ? '(Completed)' : ''}
+                    </option>
+                  ))}
+              </select>
+              {Array.isArray(task.dependencies) && task.dependencies.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  {task.dependencies.map((depId) => {
+                    const depTask = allTasks.find((t) => t.id === depId)
+                    return (
+                      <div
+                        key={depId}
+                        className="flex items-center justify-between text-xs px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.05]"
+                      >
+                        <span className={`truncate ${depTask?.completed ? 'line-through text-nocturn-muted' : 'text-amber-300 font-medium'}`}>
+                          {depTask ? depTask.title : 'Dependency Task'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = task.dependencies.filter((id) => id !== depId)
+                            onUpdateTask(task.id, { dependencies: updated })
+                          }}
+                          className="text-nocturn-muted hover:text-rose-400 cursor-pointer p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Priority Selector */}
           <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
             <span className="text-nocturn-muted font-medium flex items-center gap-2">
@@ -384,7 +559,7 @@ export default function TaskDetailDrawer({
         {/* Free-text Notes Area */}
         <div className="space-y-1.5">
           <label htmlFor="task-notes" className="text-xs font-semibold text-white block">
-            Notes
+            Notes & Details
           </label>
           <textarea
             id="task-notes"
@@ -392,34 +567,50 @@ export default function TaskDetailDrawer({
             value={localNotes}
             onChange={(e) => handleNotesChange(e.target.value)}
             onBlur={handleNotesBlur}
-            placeholder="Add additional notes or detail..."
+            placeholder="Add additional notes, research links, or checklist items..."
             className="w-full bg-nocturn-surface text-white text-xs p-3 rounded-xl border border-nocturn-border outline-none focus:border-nocturn-accent resize-none placeholder:text-nocturn-muted/50"
           />
         </div>
       </div>
 
       {/* Drawer Footer Actions */}
-      <div className="flex-shrink-0 p-4 pb-12 sm:pb-5 border-t border-nocturn-border bg-nocturn-card flex items-center justify-between gap-3 relative z-10 pointer-events-auto">
+      <div className="flex-shrink-0 p-4 pb-12 sm:pb-5 border-t border-nocturn-border bg-nocturn-card flex items-center justify-between gap-2 relative z-10 pointer-events-auto">
         {/* Start Focus Timer Button */}
         <button
           type="button"
           onClick={handleFocus}
-          className="nocturn-btn-primary py-2.5 px-4 text-xs sm:text-sm font-semibold inline-flex items-center gap-2 shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.35)] cursor-pointer relative z-20 pointer-events-auto"
+          className="nocturn-btn-primary py-2 px-3 sm:px-4 text-xs font-semibold inline-flex items-center gap-1.5 shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.35)] cursor-pointer relative z-20 pointer-events-auto"
         >
           <Timer className="w-4 h-4 fill-black stroke-black" />
           Focus Task
         </button>
 
-        {/* Delete Task Button */}
-        <button
-          type="button"
-          onClick={() => setShowDeleteConfirm(true)}
-          aria-label="Delete task"
-          className="py-2.5 px-3.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/30 transition-all font-semibold text-xs sm:text-sm inline-flex items-center gap-2 cursor-pointer relative z-20 pointer-events-auto"
-        >
-          <Trash2 className="w-4 h-4 stroke-[2]" />
-          <span>Delete Task</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Duplicate Task Button */}
+          {onDuplicateTask && (
+            <button
+              type="button"
+              onClick={() => onDuplicateTask(task.id)}
+              aria-label="Duplicate task"
+              className="py-2 px-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-nocturn-muted hover:text-white border border-nocturn-border transition-all font-semibold text-xs inline-flex items-center gap-1.5 cursor-pointer"
+              title="Duplicate this task"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>Duplicate</span>
+            </button>
+          )}
+
+          {/* Delete Task Button */}
+          <button
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            aria-label="Delete task"
+            className="py-2 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/30 transition-all font-semibold text-xs inline-flex items-center gap-1.5 cursor-pointer relative z-20 pointer-events-auto"
+          >
+            <Trash2 className="w-3.5 h-3.5 stroke-[2]" />
+            <span>Delete</span>
+          </button>
+        </div>
       </div>
 
       {/* Delete Confirmation Modal */}
