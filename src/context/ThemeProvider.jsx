@@ -104,6 +104,17 @@ export function ThemeProvider({ children }) {
     root.style.setProperty('--color-today', c.today || '#3B82F6')
     root.style.setProperty('--color-tomorrow', c.tomorrow || '#EAB308')
     root.style.setProperty('--color-future', c.future || c.accent || '#00E676')
+
+    // Quiet Luxury Design Tokens
+    root.style.setProperty('--canvas', c.background || '#07070a')
+    root.style.setProperty('--card', c.surface || '#11131a')
+    root.style.setProperty('--surface', c.elevated || '#161924')
+    root.style.setProperty('--accent', c.accent || '#6366F1')
+    root.style.setProperty('--theme-accent', c.accent || '#6366F1')
+    root.style.setProperty('--glow', `rgba(${accentRgb}, 0.35)`)
+    root.style.setProperty('--text-primary', c.text || '#F5F6FA')
+    root.style.setProperty('--text-secondary', c.textSecondary || '#9CA3B0')
+    root.style.setProperty('--elev-focus', `0 0 0 1px ${c.accent}, 0 0 32px rgba(${accentRgb}, 0.35)`)
   }, [activeTheme])
 
   // 1. Apply Theme — changes theme immediately locally, then persists to Supabase

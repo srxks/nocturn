@@ -13,7 +13,6 @@ import {
   Settings,
   User,
   X,
-  ChevronRight,
 } from 'lucide-react'
 
 const PRIMARY_MOBILE_ITEMS = [
@@ -24,7 +23,13 @@ const PRIMARY_MOBILE_ITEMS = [
     icon: Sun,
     isActive: (pathname, search = '') =>
       pathname.startsWith('/tasks') &&
-      (search.includes('view=myday') || (!search.includes('view=all') && !search.includes('view=completed') && !search.includes('view=list') && !search.includes('list='))),
+      (search.includes('view=myday') ||
+        (!search.includes('view=all') &&
+          !search.includes('view=completed') &&
+          !search.includes('view=upcoming') &&
+          !search.includes('view=inbox') &&
+          !search.includes('view=list') &&
+          !search.includes('list='))),
   },
   {
     id: 'tasks',
@@ -33,7 +38,12 @@ const PRIMARY_MOBILE_ITEMS = [
     icon: CheckSquare,
     isActive: (pathname, search = '') =>
       pathname.startsWith('/tasks') &&
-      (search.includes('view=all') || search.includes('view=completed') || search.includes('view=list') || search.includes('list=')),
+      (search.includes('view=all') ||
+        search.includes('view=upcoming') ||
+        search.includes('view=inbox') ||
+        search.includes('view=completed') ||
+        search.includes('view=list') ||
+        search.includes('list=')),
   },
   {
     id: 'plan',
@@ -63,7 +73,7 @@ const SECONDARY_MOBILE_ITEMS = [
   {
     id: 'statistics',
     name: 'Statistics',
-    description: 'Focus hours, trends & completed tasks',
+    description: 'Focus hours, trends & consistency heatmap',
     path: '/statistics',
     icon: BarChart3,
     isActive: (pathname) => pathname.startsWith('/statistics') || pathname.startsWith('/stats'),
@@ -113,12 +123,12 @@ export default function BottomNav() {
 
   return (
     <>
-      {/* Bottom Nav Bar */}
+      {/* Bottom Nav Bar (64px, Glass, Spring Lift) */}
       <nav
         aria-label="Mobile Navigation"
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 p-2 sm:p-3 flex justify-center pointer-events-none pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]"
       >
-        <div className="w-full max-w-md bg-nocturn-card/95 backdrop-blur-2xl border border-nocturn-border shadow-[0_12px_40px_rgba(0,0,0,0.85)] px-2 py-1.5 rounded-2xl flex items-center justify-around pointer-events-auto select-none">
+        <div className="w-full max-w-md h-16 bg-[#11131a]/85 backdrop-blur-2xl border border-white/[0.08] shadow-[0_16px_40px_rgba(0,0,0,0.85)] px-2 py-1 rounded-2xl flex items-center justify-around pointer-events-auto select-none relative">
           {/* Primary Nav Items */}
           {PRIMARY_MOBILE_ITEMS.map((item) => {
             const Icon = item.icon
@@ -129,24 +139,30 @@ export default function BottomNav() {
                 key={item.id}
                 to={item.path}
                 aria-current={active ? 'page' : undefined}
-                className={`relative flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl transition-all duration-150 ${
-                  active
-                    ? 'text-white font-medium'
-                    : 'text-nocturn-muted hover:text-white active:scale-95'
-                }`}
+                className="relative flex-1 min-w-0 flex flex-col items-center justify-center py-1 px-1 rounded-xl cursor-pointer"
               >
+                {/* Active Indicator Moving Pill */}
                 {active && (
-                  <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.7)]" />
+                  <motion.div
+                    layoutId="mobileNavIndicator"
+                    className="absolute inset-0 bg-nocturn-accent/15 rounded-xl border border-nocturn-accent/25 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.25)]"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
                 )}
-                <div
-                  className={`p-1.5 rounded-xl transition-colors ${
-                    active ? 'bg-nocturn-accent/15 text-nocturn-accent-bright' : 'text-nocturn-muted'
+
+                {/* Icon with Spring Lift on Active */}
+                <motion.div
+                  animate={{ y: active ? -2 : 0 }}
+                  transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                  className={`relative z-10 transition-colors ${
+                    active ? 'text-nocturn-accent' : 'text-nocturn-muted'
                   }`}
                 >
                   <Icon className="w-5 h-5 stroke-[2]" />
-                </div>
+                </motion.div>
+
                 <span
-                  className={`text-[10px] truncate tracking-tight ${
+                  className={`relative z-10 text-[10.5px] truncate tracking-tight transition-colors ${
                     active ? 'text-white font-semibold' : 'text-nocturn-muted'
                   }`}
                 >
@@ -162,21 +178,28 @@ export default function BottomNav() {
             onClick={() => setIsMoreOpen((prev) => !prev)}
             aria-expanded={isMoreOpen}
             aria-label="More navigation options"
-            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-xl transition-all duration-150 cursor-pointer ${
-              isSecondaryActive || isMoreOpen
-                ? 'text-nocturn-accent-bright font-medium'
-                : 'text-nocturn-muted hover:text-white active:scale-95'
-            }`}
+            className="relative flex-1 min-w-0 flex flex-col items-center justify-center py-1 px-1 rounded-xl cursor-pointer"
           >
-            <div
-              className={`p-1 rounded-lg transition-colors ${
-                isSecondaryActive || isMoreOpen ? 'bg-nocturn-accent/15 text-nocturn-accent-bright' : ''
+            {(isSecondaryActive || isMoreOpen) && (
+              <motion.div
+                layoutId="mobileNavIndicator"
+                className="absolute inset-0 bg-nocturn-accent/15 rounded-xl border border-nocturn-accent/25 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.25)]"
+                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              />
+            )}
+
+            <motion.div
+              animate={{ y: isSecondaryActive || isMoreOpen ? -2 : 0 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+              className={`relative z-10 transition-colors ${
+                isSecondaryActive || isMoreOpen ? 'text-nocturn-accent' : 'text-nocturn-muted'
               }`}
             >
               <MoreHorizontal className="w-5 h-5 stroke-[2]" />
-            </div>
+            </motion.div>
+
             <span
-              className={`text-[10px] truncate tracking-tight ${
+              className={`relative z-10 text-[10.5px] truncate tracking-tight ${
                 isSecondaryActive || isMoreOpen ? 'text-white font-semibold' : 'text-nocturn-muted'
               }`}
             >
@@ -197,38 +220,34 @@ export default function BottomNav() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18 }}
               onClick={() => setIsMoreOpen(false)}
-              className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+              className="fixed inset-0 bg-black/70 backdrop-blur-md"
             />
 
-            {/* Sheet */}
+            {/* Bottom Sheet Card */}
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-              className="relative w-full max-w-lg bg-[#0e0f14] border-t border-white/10 rounded-t-[32px] p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-[0_-20px_60px_rgba(0,0,0,0.9)] z-10 space-y-4"
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+              className="relative w-full max-w-lg bg-[#11131a] border-t border-white/[0.08] rounded-t-3xl p-5 pb-8 shadow-2xl z-10 max-h-[80vh] overflow-y-auto"
             >
-              {/* Drag Pill Handle */}
-              <div className="w-12 h-1 bg-white/20 rounded-full mx-auto" />
+              {/* Sheet Drag Handle */}
+              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
 
-              {/* Sheet Header */}
-              <div className="flex items-center justify-between pt-1">
-                <div>
-                  <h2 className="text-base font-semibold text-white tracking-tight">More Features</h2>
-                  <p className="text-xs text-nocturn-muted">Calendar, analytics, vocab & preferences</p>
-                </div>
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/[0.06]">
+                <span className="text-xs uppercase font-bold tracking-wider text-nocturn-dim">
+                  Workspace Views
+                </span>
                 <button
                   type="button"
                   onClick={() => setIsMoreOpen(false)}
-                  className="p-1.5 text-nocturn-muted hover:text-white rounded-lg bg-white/[0.04] border border-white/[0.06] transition-colors cursor-pointer"
-                  aria-label="Close menu"
+                  className="p-1 rounded-lg text-nocturn-dim hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Links List */}
-              <div className="divide-y divide-white/[0.06] pt-1">
+              <div className="grid grid-cols-1 gap-1.5">
                 {SECONDARY_MOBILE_ITEMS.map((item) => {
                   const Icon = item.icon
                   const active = item.isActive(location.pathname, location.search)
@@ -238,33 +257,29 @@ export default function BottomNav() {
                       key={item.id}
                       to={item.path}
                       onClick={() => setIsMoreOpen(false)}
-                      className={`flex items-center justify-between gap-3.5 py-3 px-2 rounded-xl transition-all ${
+                      className={`flex items-center gap-3.5 p-3 rounded-2xl transition-all ${
                         active
-                          ? 'bg-nocturn-accent/15 text-white'
-                          : 'hover:bg-white/[0.04] text-nocturn-muted hover:text-white'
+                          ? 'bg-nocturn-accent/15 border border-nocturn-accent/30 text-white shadow-sm'
+                          : 'bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] text-nocturn-muted hover:text-white'
                       }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
-                            active
-                              ? 'bg-nocturn-accent text-white border-nocturn-accent'
-                              : 'bg-white/[0.04] text-nocturn-accent border-white/[0.08]'
-                          }`}
-                        >
-                          <Icon className="w-5 h-5 stroke-[2]" />
-                        </div>
-                        <div className="min-w-0">
-                          <span className={`text-sm font-semibold block truncate ${active ? 'text-white' : 'text-white/90'}`}>
-                            {item.name}
-                          </span>
-                          <span className="text-xs text-nocturn-muted block truncate">
-                            {item.description}
-                          </span>
-                        </div>
+                      <div
+                        className={`p-2 rounded-xl shrink-0 ${
+                          active
+                            ? 'bg-nocturn-accent/25 text-nocturn-accent'
+                            : 'bg-white/[0.05] text-nocturn-muted'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 stroke-[2]" />
                       </div>
-
-                      <ChevronRight className={`w-4 h-4 shrink-0 ${active ? 'text-nocturn-accent' : 'text-nocturn-muted/40'}`} />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-sm font-semibold block text-white">
+                          {item.name}
+                        </span>
+                        <span className="text-xs text-nocturn-dim block truncate">
+                          {item.description}
+                        </span>
+                      </div>
                     </Link>
                   )
                 })}

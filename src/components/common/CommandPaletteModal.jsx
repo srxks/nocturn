@@ -459,27 +459,33 @@ function CommandPaletteDialog({ onClose, onOpenShortcutsHelp }) {
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 sm:px-6 select-none">
-        {/* Backdrop */}
+        {/* Backdrop: rgba(0,0,0,0.55) + blur */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 bg-black/60 backdrop-blur-md"
         />
 
-        {/* Palette Container */}
+        {/* Palette Container: 640px wide, radius 20, glass */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.97, y: -10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.97, y: -10 }}
-          transition={{ duration: 0.16, ease: 'easeOut' }}
-          className={`relative w-full max-w-2xl bg-nocturn-card border border-nocturn-border shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden z-10 flex flex-col max-h-[80vh] ${
-            isAngular ? 'rounded-none angular-chamfer font-mono' : 'rounded-3xl'
+          initial={{ opacity: 0, scale: 0.98, y: 8, filter: 'blur(8px)' }}
+          animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+          exit={{ opacity: 0, scale: 0.98, y: 8, filter: 'blur(8px)' }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className={`relative w-full max-w-[640px] border border-white/[0.1] shadow-2xl overflow-hidden z-10 flex flex-col max-h-[82vh] ${
+            isAngular ? 'rounded-none font-mono' : 'rounded-[20px]'
           }`}
+          style={{
+            background: 'rgba(17, 19, 26, 0.88)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: 'var(--elev-2)',
+          }}
         >
-          {/* Search Header */}
-          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-nocturn-border/80 bg-nocturn-surface/70">
+          {/* Search Header: 56px height */}
+          <div className="flex items-center gap-3 px-5 h-14 border-b border-white/[0.08] bg-white/[0.02]">
             <Search className="w-5 h-5 text-nocturn-accent shrink-0" />
             <input
               ref={inputRef}
@@ -557,17 +563,16 @@ function CommandPaletteDialog({ onClose, onOpenShortcutsHelp }) {
                     data-index={index}
                     onClick={() => executeItem(item)}
                     onMouseEnter={() => setRawSelectedIndex(index)}
-                    className={`flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl cursor-pointer transition-all duration-150 ${
-                      isAngular ? 'rounded-none' : 'rounded-2xl'
-                    } ${
-                      isSelected
-                        ? isAngular
-                          ? 'bg-nocturn-accent/15 border border-nocturn-accent/40 text-white translate-x-0.5'
-                          : 'bg-nocturn-accent/15 border border-nocturn-accent/30 text-white translate-x-0.5 shadow-sm'
-                        : 'text-nocturn-text hover:bg-white/5 border border-transparent'
-                    }`}
+                    className="relative flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl cursor-pointer transition-all duration-150"
                   >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {isSelected && (
+                      <motion.div
+                        layoutId="paletteHighlight"
+                        className="absolute inset-0 bg-white/[0.06] border border-white/[0.08] rounded-xl shadow-sm"
+                        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                      />
+                    )}
+                    <div className="relative z-10 flex items-center gap-3 min-w-0 flex-1">
                       <div
                         className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                           item.type === 'task'

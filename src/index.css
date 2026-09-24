@@ -1,23 +1,33 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-display: 'Inter Tight', 'Geist', -apple-system, sans-serif;
+  --font-sans: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
-  --color-nocturn-bg: var(--color-nocturn-bg, #0B0D11);
-  --color-nocturn-bg-secondary: var(--color-nocturn-bg-secondary, #101318);
-  --color-nocturn-card: var(--color-nocturn-card, #13171F);
-  --color-nocturn-surface: var(--color-nocturn-surface, #181D26);
-  --color-nocturn-surface-hover: var(--color-nocturn-surface-hover, #1E2430);
-  --color-nocturn-surface-active: var(--color-nocturn-surface-active, #242B3A);
-  --color-nocturn-elevated: var(--color-nocturn-elevated, #1F2532);
-  --color-nocturn-timer: #0B0D11;
+  --color-canvas: var(--canvas, #07070a);
+  --color-card: var(--card, #11131a);
+  --color-surface: var(--surface, #161924);
+  --color-border-subtle: var(--border-subtle, rgba(255, 255, 255, 0.06));
+  --color-border-strong: var(--border-strong, rgba(255, 255, 255, 0.12));
+  --color-text-primary: var(--text-primary, #F5F6FA);
+  --color-text-secondary: var(--text-secondary, #9CA3B0);
+  --color-text-muted: var(--text-muted, #5B6172);
+
+  --color-nocturn-bg: var(--color-nocturn-bg, #07070a);
+  --color-nocturn-bg-secondary: var(--color-nocturn-bg-secondary, #0c0e14);
+  --color-nocturn-card: var(--color-nocturn-card, #11131a);
+  --color-nocturn-surface: var(--color-nocturn-surface, #161924);
+  --color-nocturn-surface-hover: var(--color-nocturn-surface-hover, #1b1f2e);
+  --color-nocturn-surface-active: var(--color-nocturn-surface-active, #22273a);
+  --color-nocturn-elevated: var(--color-nocturn-elevated, #1c212f);
+  --color-nocturn-timer: #07070a;
   --color-nocturn-accent: var(--color-nocturn-accent, #6366F1);
   --color-nocturn-accent-soft: var(--color-nocturn-accent-soft, rgba(99, 102, 241, 0.12));
   --color-nocturn-accent-bright: var(--color-nocturn-accent-bright, #818CF8);
-  --color-nocturn-text: var(--color-nocturn-text, #F8FAFC);
-  --color-nocturn-muted: var(--color-nocturn-muted, #94A3B8);
-  --color-nocturn-dim: var(--color-nocturn-dim, #64748B);
+  --color-nocturn-text: var(--color-nocturn-text, #F5F6FA);
+  --color-nocturn-muted: var(--color-nocturn-muted, #9CA3B0);
+  --color-nocturn-dim: var(--color-nocturn-dim, #5B6172);
   --color-nocturn-border: var(--color-nocturn-border, rgba(255, 255, 255, 0.08));
   --color-nocturn-border-subtle: var(--color-nocturn-border-subtle, rgba(255, 255, 255, 0.04));
 
@@ -31,9 +41,10 @@
   --radius-lg: 1rem;
   --radius-xl: 1.25rem;
   --radius-2xl: 1.5rem;
-
-  --radius-card: 1rem;
-  --radius-card-lg: 1.25rem;
+  --radius-card: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-modal: 1.5rem;
+  --radius-pill: 9999px;
 
   --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.25);
   --shadow-card: 0 8px 24px -6px rgba(0, 0, 0, 0.45);
@@ -43,6 +54,24 @@
 :root {
   color-scheme: dark;
   --color-nocturn-accent-rgb: 99, 102, 241;
+
+  /* Global Quiet Luxury Design Tokens */
+  --canvas: #07070a;
+  --card: #11131a;
+  --surface: #161924;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text-primary: #F5F6FA;
+  --text-secondary: #9CA3B0;
+  --text-muted: #5B6172;
+  --theme-accent: var(--color-nocturn-accent, #6366F1);
+  --accent: var(--theme-accent);
+  --glow: color-mix(in oklab, var(--accent) 40%, transparent);
+
+  /* Elevation Layers */
+  --elev-1: 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.4);
+  --elev-2: 0 1px 0 rgba(255, 255, 255, 0.06), 0 20px 48px rgba(0, 0, 0, 0.55);
+  --elev-focus: 0 0 0 1px var(--accent), 0 0 32px var(--glow);
 }
 
 html {
@@ -104,12 +133,72 @@ body {
   background: rgba(148, 163, 184, 0.35);
 }
 
+/* Typography Ramp (Quiet Luxury) */
+.font-display { font-family: var(--font-display); }
+.font-sans { font-family: var(--font-sans); }
+.font-mono { font-family: var(--font-mono); font-feature-settings: 'tnum' 1; }
+
+.text-h1 {
+  font-family: var(--font-display);
+  font-size: 1.75rem; /* 28px */
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.text-h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem; /* 20px */
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.text-h3 {
+  font-family: var(--font-display);
+  font-size: 1rem; /* 16px */
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.text-body {
+  font-family: var(--font-sans);
+  font-size: 0.875rem; /* 14px */
+  font-weight: 450;
+  line-height: 1.5;
+}
+
+.text-caption {
+  font-family: var(--font-sans);
+  font-size: 0.75rem; /* 12px */
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Tactile Glass Panels */
+.glass-panel {
+  background: rgba(17, 19, 26, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--elev-1);
+}
+
+.glass-panel-elevated {
+  background: rgba(22, 25, 36, 0.82);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--elev-2);
+}
+
 /* Base Surfaces & Utility Styles */
 .nocturn-card {
   background-color: var(--color-nocturn-card);
-  border-radius: 1rem;
-  border: 1px solid var(--color-nocturn-border);
-  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.45);
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--elev-1);
 }
 
 .nocturn-card-elevated {
