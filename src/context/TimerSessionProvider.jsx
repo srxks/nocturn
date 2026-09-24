@@ -15,6 +15,8 @@ import { markPlanBlockCompleted } from '../services/plannerPersistenceService'
 import { notifyTimerFiveMinuteWarning, notifyTimerEnded } from '../services/notificationService'
 import { mapTaskToRow } from '../lib/tasks'
 import { enqueueMutation } from '../services/syncQueue'
+import { playTimerCompleteSound } from '../services/soundService'
+import SessionCompletionModal from '../components/timer/SessionCompletionModal'
 
 export function TimerSessionProvider({ children }) {
   const navigate = useNavigate()
@@ -47,6 +49,9 @@ export function TimerSessionProvider({ children }) {
       return null
     }
   })
+
+  // Post-session accomplishment modal data
+  const [completionModalData, setCompletionModalData] = useState(null)
 
   // Canonical timing anchor: virtual start timestamp in ms where elapsed = 0
   const [canonicalStartTime, setCanonicalStartTime] = useState(null)
@@ -475,58 +480,24 @@ export function TimerSessionProvider({ children }) {
           completed: true,
         })
 
-        // 2. Automatically mark associated Task completed in Dexie and queue Supabase sync
-        if (currentTaskId) {
-          try {
-            const taskObj = await db.tasks.get(currentTaskId)
-            if (taskObj && !taskObj.completed) {
-              const updatedTask = {
-                ...taskObj,
-                completed: true,
-                completedAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              }
-              await db.tasks.update(currentTaskId, {
-                completed: true,
-                completedAt: updatedTask.completedAt,
-                updatedAt: updatedTask.updatedAt,
-              })
-              const row = mapTaskToRow(updatedTask, taskObj.userId)
-              if (row) enqueueMutation('upsert', 'tasks', row)
-            }
-          } catch (tErr) {
-            console.warn('[TimerSessionProvider] Auto-complete task error:', tErr)
-          }
-        }
+        // 2. Play celebratory completion sound
+        playTimerCompleteSound()
 
-        // 3. Automatically mark associated Plan My Day block completed in Dexie
-        if (currentPlanBlockId) {
-          try {
-            await markPlanBlockCompleted(currentPlanBlockId)
-            setJustCompletedBlockId(currentPlanBlockId)
-            try {
-              sessionStorage.setItem('nocturn_just_completed_block', currentPlanBlockId)
-            } catch { /* ignore */ }
-          } catch (pErr) {
-            console.warn('[TimerSessionProvider] Auto-complete plan block error:', pErr)
-          }
-        }
-
-        // 4. Clear active session in Dexie
+        // 3. Clear active session in Dexie
         await clearActiveSession()
         updateActiveSession(null)
 
-        // 5. Fire native OS notification
+        // 4. Fire native OS notification
         notifyTimerEnded(currentTask, sessionId)
 
-        // 6. Show tasteful toast
+        // 5. Show tasteful toast
         const taskTitleDisplay = currentTask ? currentTask : 'Focus Session'
         addToast(`Session ended: ${taskTitleDisplay} — ${focusMins} min completed`, {
           type: 'success',
           duration: 5000,
         })
 
-        // 7. Reset timer to clean IDLE state (NEVER auto-restart or loop!)
+        // 6. Reset timer to clean IDLE state (NEVER auto-restart or loop!)
         const nextResetSecs = getModeDurationSeconds('focus')
         setMode('focus')
         setTotalSeconds(nextResetSecs)
@@ -553,14 +524,15 @@ export function TimerSessionProvider({ children }) {
           })
         }
 
-        // 8. Auto-navigate to Plan My Day
-        try {
-          navigate('/plan')
-        } catch {
-          if (typeof window !== 'undefined') {
-            window.location.href = '/plan'
-          }
-        }
+        // 7. Prompt accomplishment notes & user post-session actions (NO abrupt auto-navigation!)
+        setCompletionModalData({
+          sessionId,
+          taskTitle: currentTask,
+          taskId: currentTaskId,
+          durationMins: focusMins,
+          isLongBreak: currentSess % totalCycles === 0,
+          planBlockId: currentPlanBlockId,
+        })
       } else {
         // Break session completed: do NOT silently start next focus session!
         await clearActiveSession()
@@ -615,6 +587,69 @@ export function TimerSessionProvider({ children }) {
     addToast,
     navigate,
   ])
+
+  // Handle user post-session completion modal actions & notes
+  const handleCompleteSessionModal = async ({ sessionId, note, markTaskDone, nextAction }) => {
+    if (note && sessionId) {
+      try {
+        await db.pomodoroSessions.update(sessionId, { notes: note })
+      } catch (err) {
+        console.warn('[TimerSessionProvider] update session note error:', err)
+      }
+    }
+
+    const currentTaskId = completionModalData?.taskId
+    if (markTaskDone && currentTaskId) {
+      try {
+        const taskObj = await db.tasks.get(currentTaskId)
+        if (taskObj && !taskObj.completed) {
+          const updatedTask = {
+            ...taskObj,
+            completed: true,
+            completedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+          await db.tasks.update(currentTaskId, {
+            completed: true,
+            completedAt: updatedTask.completedAt,
+            updatedAt: updatedTask.updatedAt,
+          })
+          const row = mapTaskToRow(updatedTask, taskObj.userId)
+          if (row) enqueueMutation('upsert', 'tasks', row)
+        }
+      } catch (tErr) {
+        console.warn('[TimerSessionProvider] complete task error:', tErr)
+      }
+    }
+
+    const planBlockId = completionModalData?.planBlockId
+    if (planBlockId) {
+      try {
+        await markPlanBlockCompleted(planBlockId)
+        setJustCompletedBlockId(planBlockId)
+        try {
+          sessionStorage.setItem('nocturn_just_completed_block', planBlockId)
+        } catch { /* ignore */ }
+      } catch (pErr) {
+        console.warn('[TimerSessionProvider] plan block error:', pErr)
+      }
+    }
+
+    const isLongBreak = completionModalData?.isLongBreak
+    setCompletionModalData(null)
+
+    if (nextAction === 'break') {
+      startTimer(undefined, undefined, isLongBreak ? 'longBreak' : 'shortBreak')
+    } else if (nextAction === 'next-focus') {
+      startTimer(undefined, undefined, 'focus')
+    } else if (nextAction === 'plan') {
+      try {
+        navigate('/plan')
+      } catch {
+        if (typeof window !== 'undefined') window.location.href = '/plan'
+      }
+    }
+  }
 
   // 4. Timestamp-based Countdown Effect (Ticks locally every 1s in memory, ZERO continuous DB calls)
   useEffect(() => {
@@ -1310,6 +1345,11 @@ export function TimerSessionProvider({ children }) {
       }}
     >
       {children}
+      <SessionCompletionModal
+        isOpen={Boolean(completionModalData)}
+        sessionData={completionModalData}
+        onCompleteSession={handleCompleteSessionModal}
+      />
     </TimerSessionContext.Provider>
   )
 }

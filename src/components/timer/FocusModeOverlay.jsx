@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Minimize2, Play, Pause, Square, SkipForward, Clock, Zap } from 'lucide-react'
 import FlowingLines from '../common/FlowingLines'
 import TimerRing from './TimerRing'
+import AmbientSoundWidget from './AmbientSoundWidget'
 
 export default function FocusModeOverlay({
   isOpen,
@@ -65,14 +66,17 @@ export default function FocusModeOverlay({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-xs font-medium text-white transition-all cursor-pointer shadow-sm"
-          >
-            <Minimize2 className="w-3.5 h-3.5 text-nocturn-muted" />
-            <span>Exit Focus Mode (Esc)</span>
-          </button>
+          <div className="flex items-center gap-2.5">
+            <AmbientSoundWidget compact />
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-xs font-medium text-white transition-all cursor-pointer shadow-sm"
+            >
+              <Minimize2 className="w-3.5 h-3.5 text-nocturn-muted" />
+              <span>Exit (Esc)</span>
+            </button>
+          </div>
         </div>
 
         {/* Center: Large Timer & Emphasized Task */}

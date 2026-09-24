@@ -1,20 +1,40 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Settings, Clock, Edit3, CheckCircle2, Target, Maximize2 } from 'lucide-react'
+import {
+  Settings,
+  Clock,
+  Edit3,
+  CheckCircle2,
+  Target,
+  Maximize2,
+  Check,
+  Sparkles,
+  ChevronDown,
+} from 'lucide-react'
 import TimerRing from '../components/timer/TimerRing'
 import TimerControls from '../components/timer/TimerControls'
 import SessionDots from '../components/timer/SessionDots'
 import FocusModeOverlay from '../components/timer/FocusModeOverlay'
+import AmbientSoundWidget from '../components/timer/AmbientSoundWidget'
 import { useTimerSettings } from '../context/useTimerSettings'
 import { useTimerSession } from '../context/useTimerSession'
+import { useTasks } from '../context/useTasks'
 import {
   playTimerStartSound,
   playTimerPauseSound,
   playTimerResumeSound,
 } from '../services/soundService'
 
+const TIMER_PRESETS = [
+  { id: 'pomodoro', name: 'Pomodoro', duration: 25, breakDuration: 5 },
+  { id: '52-17', name: '52 / 17', duration: 52, breakDuration: 17 },
+  { id: 'ultradian', name: '90m Ultradian', duration: 90, breakDuration: 20 },
+  { id: 'quick', name: '15m Sprint', duration: 15, breakDuration: 3 },
+]
+
 export default function Timer() {
   const { settings } = useTimerSettings()
+  const { tasks } = useTasks()
   const location = useLocation()
 
   const {
@@ -36,6 +56,7 @@ export default function Timer() {
 
   const [isEditingTask, setIsEditingTask] = useState(false)
   const [taskInputVal, setTaskInputVal] = useState('')
+  const [selectedPreset, setSelectedPreset] = useState('pomodoro')
   const [isFocusModeOpen, setIsFocusModeOpen] = useState(() => Boolean(location.state?.focusMode))
   const [prevFocusModeProp, setPrevFocusModeProp] = useState(location.state?.focusMode)
 
@@ -45,6 +66,12 @@ export default function Timer() {
       setIsFocusModeOpen(true)
     }
   }
+
+  // Active uncompleted tasks available for quick assignment
+  const activeTaskList = useMemo(
+    () => tasks.filter((t) => !t.completed).slice(0, 6),
+    [tasks]
+  )
 
   // Sync taskName when location state passes a new taskName
   useEffect(() => {
@@ -64,6 +91,18 @@ export default function Timer() {
     setIsEditingTask(false)
   }
 
+  const handlePickTask = (t) => {
+    setTaskName(t.title)
+    setIsEditingTask(false)
+  }
+
+  const handleSelectPreset = (preset) => {
+    setSelectedPreset(preset.id)
+    if (!isRunning && !isPaused) {
+      startTimer(taskName, undefined, 'focus', preset.duration)
+    }
+  }
+
   const handleTogglePlayPause = () => {
     if (!isRunning && !isPaused) {
       playTimerStartSound()
@@ -81,14 +120,14 @@ export default function Timer() {
   const isCompleted = remainingSeconds === 0 && !isRunning && !isPaused
 
   return (
-    <div className="w-full max-w-md lg:max-w-xl mx-auto flex flex-col items-center justify-center space-y-6 sm:space-y-7 py-4">
-      {/* Top Header with Timer Settings gear button */}
+    <div className="w-full max-w-md lg:max-w-xl mx-auto flex flex-col items-center justify-center space-y-6 sm:space-y-7 py-2 sm:py-4">
+      {/* Top Header with Timer Settings gear button & Zen mode */}
       <header className="relative w-full text-center flex items-center justify-between px-2">
         <button
           type="button"
           onClick={() => setIsFocusModeOpen(true)}
-          title="Enter Fullscreen Focus Mode"
-          aria-label="Enter Fullscreen Focus Mode"
+          title="Enter Fullscreen Zen Mode"
+          aria-label="Enter Fullscreen Zen Mode"
           className="p-2 rounded-xl text-nocturn-muted hover:text-nocturn-accent hover:bg-white/[0.04] transition-colors cursor-pointer"
         >
           <Maximize2 className="w-4 h-4" />
@@ -110,6 +149,29 @@ export default function Timer() {
           <Settings className="w-5 h-5 stroke-[2]" />
         </Link>
       </header>
+
+      {/* Preset Rhythm Selector (only when timer is not running) */}
+      {!isRunning && !isPaused && (
+        <div className="flex items-center gap-1.5 p-1 bg-nocturn-card border border-nocturn-border/80 rounded-2xl overflow-x-auto max-w-full no-scrollbar shadow-sm">
+          {TIMER_PRESETS.map((preset) => {
+            const isSelected = selectedPreset === preset.id
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => handleSelectPreset(preset)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  isSelected
+                    ? 'bg-nocturn-accent/15 text-nocturn-accent-bright font-semibold border border-nocturn-accent/30 shadow-sm'
+                    : 'text-nocturn-muted hover:text-white hover:bg-white/[0.04] border border-transparent'
+                }`}
+              >
+                {preset.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* When completed: large tasteful completion state */}
       {isCompleted ? (
@@ -169,32 +231,58 @@ export default function Timer() {
             />
           </div>
 
-          {/* Prominent Task Name Section */}
+          {/* Prominent Task Name Section with Quick Task Assignment */}
           <div className="w-full max-w-sm text-center space-y-2">
             {isEditingTask ? (
-              <form onSubmit={handleSaveTaskName} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  autoFocus
-                  value={taskInputVal}
-                  onChange={(e) => setTaskInputVal(e.target.value)}
-                  placeholder="Task or subject name..."
-                  className="flex-1 bg-nocturn-surface border border-nocturn-accent text-white text-sm px-3.5 py-1.5 rounded-xl outline-none"
-                />
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 rounded-xl bg-nocturn-accent text-white text-xs font-semibold cursor-pointer"
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingTask(false)}
-                  className="px-2.5 py-1.5 rounded-xl text-nocturn-muted hover:text-white text-xs cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </form>
+              <div className="space-y-3 bg-nocturn-card border border-nocturn-border rounded-2xl p-3.5 shadow-lg text-left">
+                <form onSubmit={handleSaveTaskName} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={taskInputVal}
+                    onChange={(e) => setTaskInputVal(e.target.value)}
+                    placeholder="Task or subject name..."
+                    className="flex-1 bg-nocturn-surface border border-nocturn-accent text-white text-sm px-3.5 py-1.5 rounded-xl outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 rounded-xl bg-nocturn-accent text-white text-xs font-semibold cursor-pointer"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingTask(false)}
+                    className="px-2.5 py-1.5 rounded-xl text-nocturn-muted hover:text-white text-xs cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </form>
+
+                {/* Quick Task Selection Chips */}
+                {activeTaskList.length > 0 && (
+                  <div className="space-y-1.5 pt-1 border-t border-nocturn-border/60">
+                    <span className="text-[11px] font-bold text-nocturn-muted uppercase tracking-wider block">
+                      Choose from your tasks:
+                    </span>
+                    <div className="space-y-1 max-h-36 overflow-y-auto no-scrollbar">
+                      {activeTaskList.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => handlePickTask(t)}
+                          className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-nocturn-muted hover:text-white hover:bg-white/[0.05] transition-colors text-left truncate cursor-pointer"
+                        >
+                          <span className="truncate">{t.title}</span>
+                          {t.priority === 'urgent' || t.priority === 'high' ? (
+                            <span className="text-[10px] font-mono text-rose-400">High</span>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="space-y-1.5">
                 <div
@@ -256,6 +344,11 @@ export default function Timer() {
             onSkip={skipTimer}
             onTerminate={terminateTimer}
           />
+
+          {/* Ambient Focus Soundscapes Section */}
+          <div className="pt-2 w-full flex justify-center">
+            <AmbientSoundWidget />
+          </div>
         </>
       )}
 

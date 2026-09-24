@@ -9,6 +9,7 @@ import ShortcutsHelpModal from '../common/ShortcutsHelpModal'
 import NotificationBell from '../common/NotificationBell'
 import SyncStatusIndicator from '../common/SyncStatusIndicator'
 import RouteErrorBoundary from '../common/RouteErrorBoundary'
+import PersistentMiniTimer from '../timer/PersistentMiniTimer'
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts'
 
 export default function AppShell() {
@@ -70,6 +71,9 @@ export default function AppShell() {
 
       {/* Mobile Bottom Navigation */}
       <BottomNav />
+
+      {/* Persistent Floating Mini-Timer Widget (outside of /timer) */}
+      <PersistentMiniTimer />
 
       {/* Global Command Palette & Unified Search Modal */}
       <CommandPaletteModal
