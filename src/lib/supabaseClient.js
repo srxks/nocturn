@@ -85,6 +85,13 @@ async function resilientFetch(input, init) {
         await new Promise((r) => setTimeout(r, delay))
         continue
       }
+      if (isNetworkError) {
+        console.warn(
+          '[Nocturn Supabase Network Alert] Could not reach Supabase. ' +
+          'If you see net::ERR_QUIC_PROTOCOL_ERROR or Failed to fetch, your ISP (e.g. ACT Fibernet) may be intercepting DNS for *.supabase.co. ' +
+          'To fix: In Chrome, open chrome://settings/security -> Enable "Use secure DNS" -> Choose "Cloudflare (1.1.1.1)".'
+        )
+      }
       throw err
     }
   }
@@ -145,10 +152,13 @@ export async function testSupabaseConnection() {
       message: 'Successfully connected to Supabase backend API',
     }
   } catch (err) {
+    const isFetchFail = (err?.message || '').toLowerCase().includes('fetch')
     return {
       configured: true,
       connected: false,
-      message: `Network error connecting to Supabase: ${err.message}`,
+      message: isFetchFail
+        ? 'Network error: Failed to reach Supabase. Check ISP DNS / Enable Secure DNS (Cloudflare 1.1.1.1) in browser settings.'
+        : `Network error connecting to Supabase: ${err.message}`,
     }
   }
 }
