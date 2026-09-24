@@ -1,3 +1,4 @@
+import { motion, AnimatePresence } from 'framer-motion'
 import CalendarDay from './CalendarDay'
 import { formatDateKey, getEventsForDate } from '../../services/calendarService'
 
@@ -11,6 +12,7 @@ export default function CalendarGrid({
 }) {
   const year = currentMonthDate.getFullYear()
   const month = currentMonthDate.getMonth()
+  const monthKey = `${year}-${month}`
 
   const todayKey = formatDateKey(new Date())
   const selectedKey = formatDateKey(selectedDate)
@@ -65,26 +67,35 @@ export default function CalendarGrid({
       </div>
 
       {/* 7-Column Days Grid */}
-      <div className="grid grid-cols-7 gap-1 sm:gap-2">
-        {gridCells.map((cell) => {
-          const dateKey = formatDateKey(cell.dateObj)
-          const isToday = dateKey === todayKey
-          const isSelected = dateKey === selectedKey
-          const dayEvents = getEventsForDate(dateKey, tasks)
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={monthKey}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+          className="grid grid-cols-7 gap-1 sm:gap-2"
+        >
+          {gridCells.map((cell) => {
+            const dateKey = formatDateKey(cell.dateObj)
+            const isToday = dateKey === todayKey
+            const isSelected = dateKey === selectedKey
+            const dayEvents = getEventsForDate(dateKey, tasks)
 
-          return (
-            <CalendarDay
-              key={dateKey}
-              dateObj={cell.dateObj}
-              isCurrentMonth={cell.isCurrentMonth}
-              isToday={isToday}
-              isSelected={isSelected}
-              events={dayEvents}
-              onClick={() => onSelectDate(cell.dateObj)}
-            />
-          )
-        })}
-      </div>
+            return (
+              <CalendarDay
+                key={dateKey}
+                dateObj={cell.dateObj}
+                isCurrentMonth={cell.isCurrentMonth}
+                isToday={isToday}
+                isSelected={isSelected}
+                events={dayEvents}
+                onClick={() => onSelectDate(cell.dateObj)}
+              />
+            )
+          })}
+        </motion.div>
+      </AnimatePresence>
     </div>
   )
 }

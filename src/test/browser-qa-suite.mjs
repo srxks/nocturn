@@ -488,7 +488,12 @@ async function runBrowserQA() {
 
     const bellBtn = await page.evaluateHandle(() => {
       const btns = Array.from(document.querySelectorAll('button'))
-      return btns.find((b) => (b.getAttribute('aria-label') || '').toLowerCase().includes('notification') || b.querySelector('svg.lucide-bell'))
+      return btns.find(
+        (b) =>
+          ((b.getAttribute('aria-label') || '').toLowerCase().includes('notification') ||
+            b.querySelector('svg.lucide-bell')) &&
+          (b.offsetParent !== null || b.getBoundingClientRect().width > 0)
+      )
     })
 
     if (bellBtn && bellBtn.asElement()) {

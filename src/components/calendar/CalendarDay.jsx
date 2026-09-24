@@ -24,18 +24,18 @@ export default function CalendarDay({
     <motion.button
       type="button"
       onClick={onClick}
-      whileHover={{ scale: 1.02 }}
+      whileHover={{ y: -2, scale: 1.01 }}
       whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.12 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
       aria-label={`${dateLabel}${isToday ? ', Today' : ''}${isSelected ? ', Selected' : ''}, ${events.length} events`}
-      className={`min-h-[70px] sm:min-h-[90px] p-1.5 sm:p-2 rounded-xl border flex flex-col justify-between text-left transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent ${
+      className={`min-h-[74px] sm:min-h-[94px] p-2 sm:p-2.5 rounded-2xl border flex flex-col justify-between text-left transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent ${
         !isCurrentMonth
-          ? 'bg-nocturn-bg/40 border-nocturn-border/30 opacity-40 hover:opacity-75'
+          ? 'bg-white/[0.01] border-white/[0.03] opacity-35 hover:opacity-60'
           : isSelected
-            ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.25)] ring-1 ring-nocturn-accent'
+            ? 'bg-nocturn-accent/[0.08] border-nocturn-accent shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.2)] ring-1 ring-nocturn-accent/40'
             : isToday
-              ? 'bg-nocturn-card border-nocturn-accent/60 shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.15)]'
-              : 'bg-nocturn-card/80 border-nocturn-border hover:border-nocturn-accent/30 hover:bg-nocturn-card'
+              ? 'bg-white/[0.04] border-nocturn-accent/60 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.15)]'
+              : 'bg-white/[0.02] hover:bg-white/[0.04] border-white/[0.06] hover:border-white/[0.14]'
       }`}
     >
       {/* Top Cell Bar: Date Number + Today Pill */}
