@@ -70,55 +70,70 @@ export default function Auth() {
   }
 
   return (
-    <div className="min-h-screen bg-nocturn-bg text-nocturn-text flex flex-col justify-center items-center p-4 sm:p-6 selection:bg-nocturn-accent selection:text-black">
+    <div className="min-h-screen bg-[#07070a] text-nocturn-text flex flex-col justify-center items-center p-4 sm:p-6 selection:bg-nocturn-accent selection:text-black relative overflow-hidden">
+      {/* Ambient background glow blob */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-nocturn-accent/[0.07] rounded-full blur-[120px] pointer-events-none" />
+
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-        className="w-full max-w-md bg-nocturn-card border border-nocturn-border rounded-3xl p-6 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.9)] space-y-6"
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+        className="w-full max-w-md bg-white/[0.02] backdrop-blur-2xl border border-white/[0.08] rounded-3xl p-7 sm:p-9 shadow-[0_30px_70px_rgba(0,0,0,0.85)] space-y-6 relative z-10"
       >
         {/* Branding Header */}
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent mx-auto shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.3)]">
+        <div className="text-center space-y-2.5">
+          <div className="w-12 h-12 rounded-2xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent mx-auto shadow-[0_0_25px_rgba(var(--color-nocturn-accent-rgb),0.3)]">
             <Zap className="w-6 h-6 stroke-[2.5]" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight font-display">
             Nocturn
           </h1>
           <p className="text-xs sm:text-sm text-nocturn-muted">
-            {isSignUp ? 'Create your Nocturn account' : 'Sign in to sync your workspace'}
+            {isSignUp ? 'Create your Nocturn workspace' : 'Sign in to sync your workspace'}
           </p>
         </div>
 
         {/* Tab Toggle: Sign In / Sign Up */}
-        <div className="flex bg-white/5 border border-nocturn-border rounded-2xl p-1">
+        <div className="flex bg-white/[0.03] border border-white/[0.06] rounded-2xl p-1 relative">
           <button
+            type="button"
             onClick={() => {
               setIsSignUp(false)
               setErrorMsg(null)
               setSuccessMsg(null)
             }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
-              !isSignUp
-                ? 'bg-nocturn-accent text-black shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.3)]'
-                : 'text-nocturn-muted hover:text-white'
+            className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-colors relative z-10 cursor-pointer ${
+              !isSignUp ? 'text-black font-bold' : 'text-nocturn-muted hover:text-white'
             }`}
           >
-            Sign In
+            {!isSignUp && (
+              <motion.div
+                layoutId="authTabPill"
+                transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                className="absolute inset-0 bg-nocturn-accent rounded-xl shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)]"
+              />
+            )}
+            <span className="relative z-10">Sign In</span>
           </button>
           <button
+            type="button"
             onClick={() => {
               setIsSignUp(true)
               setErrorMsg(null)
               setSuccessMsg(null)
             }}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
-              isSignUp
-                ? 'bg-nocturn-accent text-black shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.3)]'
-                : 'text-nocturn-muted hover:text-white'
+            className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-colors relative z-10 cursor-pointer ${
+              isSignUp ? 'text-black font-bold' : 'text-nocturn-muted hover:text-white'
             }`}
           >
-            Sign Up
+            {isSignUp && (
+              <motion.div
+                layoutId="authTabPill"
+                transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                className="absolute inset-0 bg-nocturn-accent rounded-xl shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.3)]"
+              />
+            )}
+            <span className="relative z-10">Sign Up</span>
           </button>
         </div>
 
@@ -140,7 +155,7 @@ export default function Auth() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {isSignUp && (
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="text-xs font-semibold text-nocturn-muted">Display Name</label>
               <div className="relative">
                 <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-nocturn-muted" />
@@ -150,13 +165,13 @@ export default function Auth() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="e.g. Alex Morgan"
-                  className="w-full pl-10 pr-4 py-3 bg-white/[0.02] border border-nocturn-border/80 rounded-2xl text-sm text-white placeholder:text-nocturn-muted focus:outline-none focus:border-nocturn-accent transition-colors"
+                  className="w-full pl-10 pr-4 py-3 bg-white/[0.02] border border-white/[0.08] focus:border-nocturn-accent/80 focus:bg-white/[0.04] rounded-2xl text-sm text-white placeholder:text-nocturn-muted focus:outline-none transition-all"
                 />
               </div>
             </div>
           )}
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="text-xs font-semibold text-nocturn-muted">Email Address</label>
             <div className="relative">
               <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-nocturn-muted" />
@@ -166,12 +181,12 @@ export default function Auth() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="user@example.com"
-                className="w-full pl-10 pr-4 py-3 bg-white/[0.02] border border-nocturn-border/80 rounded-2xl text-sm text-white placeholder:text-nocturn-muted focus:outline-none focus:border-nocturn-accent transition-colors"
+                className="w-full pl-10 pr-4 py-3 bg-white/[0.02] border border-white/[0.08] focus:border-nocturn-accent/80 focus:bg-white/[0.04] rounded-2xl text-sm text-white placeholder:text-nocturn-muted focus:outline-none transition-all"
               />
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="text-xs font-semibold text-nocturn-muted">Password</label>
             <div className="relative">
               <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-nocturn-muted" />
@@ -181,15 +196,17 @@ export default function Auth() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-3 bg-white/[0.02] border border-nocturn-border/80 rounded-2xl text-sm text-white placeholder:text-nocturn-muted focus:outline-none focus:border-nocturn-accent transition-colors"
+                className="w-full pl-10 pr-4 py-3 bg-white/[0.02] border border-white/[0.08] focus:border-nocturn-accent/80 focus:bg-white/[0.04] rounded-2xl text-sm text-white placeholder:text-nocturn-muted focus:outline-none transition-all"
               />
             </div>
           </div>
 
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 px-6 rounded-2xl bg-nocturn-accent text-black font-bold text-sm hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.4)] transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full py-3.5 px-6 rounded-2xl bg-nocturn-accent text-black font-bold text-sm hover:bg-nocturn-accent-bright shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.35)] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
           >
             {loading ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -199,22 +216,25 @@ export default function Auth() {
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
-          </button>
+          </motion.button>
         </form>
 
         {/* Divider */}
         <div className="relative flex items-center justify-center">
-          <div className="w-full border-t border-nocturn-border/60" />
-          <span className="absolute bg-nocturn-card px-3 text-[11px] font-medium text-nocturn-muted">
-            OR
+          <div className="w-full border-t border-white/[0.08]" />
+          <span className="absolute bg-[#0f1118] px-3 text-[11px] font-semibold text-nocturn-muted tracking-wider uppercase">
+            or
           </span>
         </div>
 
         {/* Google OAuth Button */}
-        <button
+        <motion.button
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.98 }}
+          type="button"
           onClick={handleGoogleSignIn}
           disabled={loading}
-          className="w-full py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-nocturn-border text-white text-xs font-semibold transition-colors flex items-center justify-center gap-3 disabled:opacity-50"
+          className="w-full py-3 px-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.08] text-white text-xs font-semibold transition-all flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer shadow-sm"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
@@ -235,16 +255,17 @@ export default function Auth() {
             />
           </svg>
           <span>Continue with Google</span>
-        </button>
+        </motion.button>
 
         {/* Guest Mode Link */}
-        <div className="text-center pt-2">
+        <div className="text-center pt-1">
           <button
+            type="button"
             onClick={() => {
               continueAsGuest()
               navigate(fromPath, { replace: true })
             }}
-            className="text-xs text-nocturn-muted hover:text-white transition-colors"
+            className="text-xs text-nocturn-muted hover:text-white transition-colors cursor-pointer"
           >
             Continue as Guest (Local Offline Mode) →
           </button>

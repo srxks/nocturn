@@ -206,14 +206,17 @@ export default function Onboarding() {
                 {FOCUS_GOALS.map((goal) => {
                   const isSelected = focusGoal === goal.id
                   return (
-                    <button
+                    <motion.button
                       key={goal.id}
                       type="button"
+                      whileHover={{ y: -2, scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                       onClick={() => setFocusGoal(goal.id)}
-                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+                      className={`p-4 rounded-2xl border text-left transition-colors cursor-pointer ${
                         isSelected
                           ? 'bg-nocturn-accent/15 border-nocturn-accent text-white shadow-sm ring-1 ring-nocturn-accent/30'
-                          : 'bg-white/[0.02] border-white/[0.08] hover:border-white/20 text-nocturn-muted'
+                          : 'bg-white/[0.02] border-white/[0.06] hover:border-white/[0.14] text-nocturn-muted'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -221,7 +224,7 @@ export default function Onboarding() {
                           {goal.label}
                         </span>
                         {goal.recommended && (
-                          <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-nocturn-accent/20 text-nocturn-accent">
+                          <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-nocturn-accent/20 text-nocturn-accent">
                             Ideal
                           </span>
                         )}
@@ -229,7 +232,7 @@ export default function Onboarding() {
                       <span className="text-xs text-nocturn-muted block mt-1">
                         {goal.subtitle}
                       </span>
-                    </button>
+                    </motion.button>
                   )
                 })}
               </div>
@@ -351,14 +354,16 @@ export default function Onboarding() {
         </div>
 
         {/* Compact Pill Button */}
-        <button
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.96 }}
           type="button"
           onClick={handleNext}
-          className="px-6 py-2.5 rounded-full bg-[#181a20] hover:bg-white text-white hover:text-black border border-white/15 text-sm font-semibold transition-all duration-150 flex items-center gap-2.5 cursor-pointer shadow-sm active:scale-95 group"
+          className="px-6 py-2.5 rounded-full bg-white/[0.04] hover:bg-white text-white hover:text-black border border-white/15 text-sm font-semibold transition-all duration-150 flex items-center gap-2.5 cursor-pointer shadow-sm group"
         >
           <span>{step === totalSteps - 1 ? 'Enter Nocturn' : 'Next'}</span>
           <span className="text-sm tracking-tight text-white/70 group-hover:text-black transition-colors">»</span>
-        </button>
+        </motion.button>
       </footer>
     </div>
   )
