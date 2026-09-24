@@ -11,6 +11,7 @@ import {
   BarChart3,
   BookOpen,
   Settings,
+  User,
   X,
   ChevronRight,
 } from 'lucide-react'
@@ -60,12 +61,12 @@ const SECONDARY_MOBILE_ITEMS = [
     isActive: (pathname) => pathname.startsWith('/calendar'),
   },
   {
-    id: 'profile',
+    id: 'statistics',
     name: 'Statistics',
     description: 'Focus hours, trends & completed tasks',
-    path: '/profile',
+    path: '/statistics',
     icon: BarChart3,
-    isActive: (pathname) => pathname.startsWith('/profile'),
+    isActive: (pathname) => pathname.startsWith('/statistics') || pathname.startsWith('/stats'),
   },
   {
     id: 'vocab',
@@ -78,10 +79,18 @@ const SECONDARY_MOBILE_ITEMS = [
   {
     id: 'settings',
     name: 'Settings',
-    description: 'Appearance, sound, sync & account',
+    description: 'Appearance, sound, sync & themes',
     path: '/settings',
     icon: Settings,
     isActive: (pathname) => pathname.startsWith('/settings'),
+  },
+  {
+    id: 'profile',
+    name: 'Profile',
+    description: 'Account details & user preferences',
+    path: '/profile',
+    icon: User,
+    isActive: (pathname) => pathname.startsWith('/profile'),
   },
 ]
 

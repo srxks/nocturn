@@ -13,6 +13,7 @@ import Vocab from './pages/Vocab'
 import VocabLearn from './pages/VocabLearn'
 import VocabReview from './pages/VocabReview'
 import VocabList from './pages/VocabList'
+import Statistics from './pages/Statistics'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import { useAuth } from './context/useAuth'
 
@@ -53,19 +54,23 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
+        <Route path="/today" element={<Navigate to="/tasks?view=myday" replace />} />
+        <Route path="/inbox" element={<Navigate to="/tasks?view=inbox" replace />} />
+        <Route path="/upcoming" element={<Navigate to="/tasks?view=upcoming" replace />} />
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/timer" element={<Timer />} />
         <Route path="/timer-settings" element={<TimerSettings />} />
         <Route path="/plan" element={<PlanMyDay />} />
         <Route path="/plan-my-day" element={<Navigate to="/plan" replace />} />
+        <Route path="/statistics" element={<Statistics />} />
+        <Route path="/stats" element={<Navigate to="/statistics" replace />} />
         <Route path="/vocab" element={<Vocab />} />
         <Route path="/vocab/learn" element={<VocabLearn />} />
         <Route path="/vocab/review" element={<VocabReview />} />
         <Route path="/vocab/list" element={<VocabList />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/stats" element={<Profile />} />
       </Route>
 
       {/* Catch-all route */}

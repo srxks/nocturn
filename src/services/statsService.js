@@ -210,3 +210,169 @@ export function calculateProductivityStats(
     periodLabel,
   }
 }
+
+/**
+ * Computes daily activity heatmap for the last N days (default 60).
+ * Returns array of { dateKey, dayOfWeek, dayOfMonth, monthLabel, minutes, count, level: 0..4 }.
+ */
+export function calculateDailyHeatmap(sessions = [], tasks = [], days = 60) {
+  const safeSessions = Array.isArray(sessions) ? sessions : []
+  const safeTasks = Array.isArray(tasks) ? tasks : []
+  const now = new Date()
+  const heatmap = []
+
+  // Create lookup of minutes per dateKey
+  const minsByDate = new Map()
+  for (const s of safeSessions) {
+    const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
+    if (!isFocus) continue
+    const dateStr = s.completedAt || s.ended_at || s.createdAt || s.created_at || s.startedAt
+    if (!dateStr) continue
+    const key = formatDateKey(new Date(dateStr))
+    const m = getSessionDurationMinutes(s)
+    minsByDate.set(key, (minsByDate.get(key) || 0) + m)
+  }
+
+  // Also count completed tasks per dateKey
+  const tasksByDate = new Map()
+  for (const t of safeTasks) {
+    if (!t.completed) continue
+    const dateStr = t.completedAt || t.updatedAt
+    if (!dateStr) continue
+    const key = formatDateKey(new Date(dateStr))
+    tasksByDate.set(key, (tasksByDate.get(key) || 0) + 1)
+  }
+
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(now.getDate() - i)
+    const key = formatDateKey(d)
+    const minutes = Math.round((minsByDate.get(key) || 0) * 10) / 10
+    const taskCount = tasksByDate.get(key) || 0
+
+    // Intensity level: 0 = none, 1 = 1-25m, 2 = 25-50m, 3 = 50-100m, 4 = 100m+
+    let level = 0
+    if (minutes > 100 || (minutes > 60 && taskCount >= 3)) level = 4
+    else if (minutes >= 50 || taskCount >= 4) level = 3
+    else if (minutes >= 25 || taskCount >= 2) level = 2
+    else if (minutes > 0 || taskCount >= 1) level = 1
+
+    heatmap.push({
+      dateKey: key,
+      date: d,
+      dayOfWeek: d.toLocaleDateString('en-US', { weekday: 'short' }),
+      dayOfMonth: d.getDate(),
+      monthLabel: d.toLocaleDateString('en-US', { month: 'short' }),
+      minutes,
+      taskCount,
+      level,
+    })
+  }
+
+  return heatmap
+}
+
+/**
+ * Calculates focus distribution breakdown grouped by task list.
+ */
+export function calculateFocusByList(sessions = [], tasks = [], lists = []) {
+  const safeSessions = Array.isArray(sessions) ? sessions : []
+  const safeTasks = Array.isArray(tasks) ? tasks : []
+  const safeLists = Array.isArray(lists) ? lists : []
+
+  // Create taskId -> listId lookup
+  const taskListLookup = new Map()
+  for (const t of safeTasks) {
+    if (t?.id) {
+      taskListLookup.set(t.id, t.listId || 'tasks')
+    }
+  }
+
+  // Create listId -> listName lookup
+  const listNameLookup = new Map()
+  listNameLookup.set('tasks', 'General Tasks')
+  listNameLookup.set('my-day', 'My Day')
+  for (const l of safeLists) {
+    if (l?.id) {
+      listNameLookup.set(l.id, l.name || 'Custom List')
+    }
+  }
+
+  const minsByList = new Map()
+  let grandTotalMins = 0
+
+  for (const s of safeSessions) {
+    const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
+    if (!isFocus) continue
+    const mins = getSessionDurationMinutes(s)
+    if (mins <= 0) continue
+
+    const listId = (s.taskId && taskListLookup.get(s.taskId)) || 'tasks'
+    minsByList.set(listId, (minsByList.get(listId) || 0) + mins)
+    grandTotalMins += mins
+  }
+
+  const result = []
+  for (const [listId, mins] of minsByList.entries()) {
+    const name = listNameLookup.get(listId) || 'Tasks'
+    const pct = grandTotalMins > 0 ? Math.round((mins / grandTotalMins) * 100) : 0
+    result.push({
+      listId,
+      name,
+      minutes: Math.round(mins),
+      hours: (mins / 60).toFixed(1),
+      percentage: pct,
+    })
+  }
+
+  return result.sort((a, b) => b.minutes - a.minutes)
+}
+
+/**
+ * Calculates focus distribution breakdown grouped by specific task.
+ */
+export function calculateFocusByTask(sessions = [], tasks = []) {
+  const safeSessions = Array.isArray(sessions) ? sessions : []
+  const safeTasks = Array.isArray(tasks) ? tasks : []
+
+  const taskTitleLookup = new Map()
+  for (const t of safeTasks) {
+    if (t?.id) {
+      taskTitleLookup.set(t.id, t.title || 'Untitled Task')
+    }
+  }
+
+  const minsByTask = new Map()
+  const sessionsByTask = new Map()
+  let grandTotalMins = 0
+
+  for (const s of safeSessions) {
+    const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
+    if (!isFocus) continue
+    const mins = getSessionDurationMinutes(s)
+    if (mins <= 0) continue
+
+    const key = s.taskId || s.taskName || s.taskTitle || 'Free Focus'
+    const title = s.taskId ? (taskTitleLookup.get(s.taskId) || s.taskName || 'Completed Task') : (s.taskName || 'Free Focus')
+
+    minsByTask.set(title, (minsByTask.get(title) || 0) + mins)
+    sessionsByTask.set(title, (sessionsByTask.get(title) || 0) + 1)
+    grandTotalMins += mins
+  }
+
+  const result = []
+  for (const [title, mins] of minsByTask.entries()) {
+    const count = sessionsByTask.get(title) || 1
+    const pct = grandTotalMins > 0 ? Math.round((mins / grandTotalMins) * 100) : 0
+    result.push({
+      title,
+      minutes: Math.round(mins),
+      hours: (mins / 60).toFixed(1),
+      count,
+      percentage: pct,
+    })
+  }
+
+  return result.sort((a, b) => b.minutes - a.minutes).slice(0, 10)
+}
+
