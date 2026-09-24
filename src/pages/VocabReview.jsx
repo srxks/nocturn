@@ -337,8 +337,10 @@ export default function VocabReview() {
               }
 
               return (
-                <button
+                <motion.button
                   key={idx}
+                  whileHover={!isAnswered ? { scale: 1.01, y: -1 } : {}}
+                  whileTap={!isAnswered ? { scale: 0.99 } : {}}
                   onClick={() => handleSelectOption(option)}
                   disabled={isAnswered}
                   className={`w-full p-4 sm:p-4.5 rounded-xl border text-left font-medium transition-all duration-150 flex items-start gap-3.5 cursor-pointer disabled:cursor-default ${optionStyle}`}
@@ -366,7 +368,7 @@ export default function VocabReview() {
                       {option.text}
                     </p>
                   </div>
-                </button>
+                </motion.button>
               )
             })}
           </div>
