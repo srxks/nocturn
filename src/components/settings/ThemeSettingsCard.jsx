@@ -95,15 +95,15 @@ export default function ThemeSettingsCard() {
   }
 
   return (
-    <div className="nocturn-card p-5 sm:p-6 border border-nocturn-border space-y-6">
+    <div className="p-5 sm:p-6 rounded-2xl bg-white/[0.02] backdrop-blur-md border border-white/[0.06] space-y-6 shadow-sm">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-nocturn-border pb-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent shrink-0">
             <Palette className="w-5 h-5 stroke-[2.2]" />
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-white tracking-wide">
+            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight font-display">
               Customize Theme
             </h2>
             <p className="text-xs text-nocturn-muted">
@@ -113,18 +113,20 @@ export default function ThemeSettingsCard() {
         </div>
 
         {/* Reset to Nocturn CTA */}
-        <button
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
           type="button"
           onClick={() => setShowResetConfirm(true)}
-          className="nocturn-btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0"
+          className="py-1.5 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] text-xs font-semibold text-white flex items-center gap-2 cursor-pointer shrink-0 transition-all shadow-sm"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Reset to Nocturn</span>
-        </button>
+        </motion.button>
       </div>
 
       {/* Current Active Theme Banner */}
-      <div className="p-4 rounded-2xl bg-nocturn-surface border border-nocturn-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-xs font-semibold text-nocturn-muted">Active Theme:</span>
           <span className="text-sm font-bold text-white truncate flex items-center gap-2">
@@ -168,17 +170,18 @@ export default function ThemeSettingsCard() {
               <motion.button
                 key={preset.id}
                 type="button"
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
+                whileHover={{ y: -2, scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                 onClick={() => applyTheme(preset)}
-                className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between gap-3 transition-all cursor-pointer ${
+                className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between gap-3 transition-colors cursor-pointer ${
                   isActive
-                    ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_16px_rgba(var(--color-nocturn-accent-rgb),0.2)] ring-1 ring-nocturn-accent'
-                    : 'bg-nocturn-surface/50 border-nocturn-border/80 hover:border-nocturn-accent/35'
+                    ? 'bg-nocturn-accent/[0.06] border-nocturn-accent shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.2)] ring-1 ring-nocturn-accent/40'
+                    : 'bg-white/[0.02] hover:bg-white/[0.04] border-white/[0.06] hover:border-white/[0.14]'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 w-full">
-                  <span className="text-sm font-bold text-white truncate">
+                  <span className="text-sm font-semibold text-white tracking-tight truncate">
                     {preset.name}
                   </span>
                   {isActive && (
@@ -189,11 +192,11 @@ export default function ThemeSettingsCard() {
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-lg border border-white/20" style={{ backgroundColor: preset.colors.background }} title="Background" />
-                  <span className="w-5 h-5 rounded-lg border border-white/20" style={{ backgroundColor: preset.colors.surface }} title="Surface" />
-                  <span className="w-5 h-5 rounded-lg border border-white/20" style={{ backgroundColor: preset.colors.elevated }} title="Elevated" />
-                  <span className="w-5 h-5 rounded-lg border border-white/20" style={{ backgroundColor: preset.colors.accent }} title="Accent" />
-                  <span className="w-5 h-5 rounded-lg border border-white/20 ml-auto" style={{ backgroundColor: preset.colors.text }} title="Text" />
+                  <span className="w-5 h-5 rounded-lg border border-white/10 ring-1 ring-black/20" style={{ backgroundColor: preset.colors.background }} title="Background" />
+                  <span className="w-5 h-5 rounded-lg border border-white/10 ring-1 ring-black/20" style={{ backgroundColor: preset.colors.surface }} title="Surface" />
+                  <span className="w-5 h-5 rounded-lg border border-white/10 ring-1 ring-black/20" style={{ backgroundColor: preset.colors.elevated }} title="Elevated" />
+                  <span className="w-5 h-5 rounded-lg border border-white/10 ring-1 ring-black/20" style={{ backgroundColor: preset.colors.accent }} title="Accent" />
+                  <span className="w-5 h-5 rounded-lg border border-white/10 ring-1 ring-black/20 ml-auto" style={{ backgroundColor: preset.colors.text }} title="Text" />
                 </div>
               </motion.button>
             )
@@ -232,8 +235,8 @@ export default function ThemeSettingsCard() {
                     transition={{ duration: 0.15 }}
                     className={`p-3.5 rounded-2xl border flex flex-col justify-between gap-3 transition-all ${
                       isActive
-                        ? 'bg-nocturn-surface border-nocturn-accent shadow-[0_0_16px_rgba(var(--color-nocturn-accent-rgb),0.2)]'
-                        : 'bg-nocturn-surface/50 border-nocturn-border/80'
+                        ? 'bg-nocturn-accent/[0.06] border-nocturn-accent shadow-[0_0_20px_rgba(var(--color-nocturn-accent-rgb),0.2)] ring-1 ring-nocturn-accent/40'
+                        : 'bg-white/[0.02] border-white/[0.06] hover:border-white/[0.12]'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">

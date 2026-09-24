@@ -8,18 +8,18 @@ export function Tabs({
   size = 'md',
 }) {
   const sizeClasses = {
-    sm: 'p-0.5 text-xs rounded-lg',
-    md: 'p-1 text-xs sm:text-sm rounded-xl',
+    sm: 'p-1 text-xs rounded-2xl',
+    md: 'p-1 text-xs sm:text-sm rounded-2xl',
   }
 
   const tabPadding = {
-    sm: 'px-2.5 py-1 rounded-md',
-    md: 'px-3 py-1.5 rounded-lg',
+    sm: 'px-3 py-1.5 rounded-xl',
+    md: 'px-3.5 py-1.5 rounded-xl',
   }
 
   return (
     <div
-      className={`inline-flex items-center bg-white/[0.04] border border-white/[0.06] ${
+      className={`inline-flex items-center bg-white/[0.02] backdrop-blur-md border border-white/[0.06] ${
         sizeClasses[size] || sizeClasses.md
       } ${className}`}
       role="tablist"
@@ -43,7 +43,7 @@ export function Tabs({
               <motion.div
                 layoutId="activeTabPill"
                 transition={{ type: 'spring', stiffness: 450, damping: 32 }}
-                className="absolute inset-0 bg-white/[0.1] rounded-lg border border-white/[0.12] shadow-sm pointer-events-none"
+                className="absolute inset-0 bg-white/[0.08] rounded-xl border border-white/[0.12] shadow-sm pointer-events-none"
               />
             )}
 

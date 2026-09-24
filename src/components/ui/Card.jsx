@@ -2,13 +2,13 @@ import { forwardRef } from 'react'
 
 const VARIANTS = {
   default:
-    'bg-nocturn-card border border-nocturn-border shadow-[0_8px_24px_-6px_rgba(0,0,0,0.45)]',
+    'bg-white/[0.02] backdrop-blur-md border border-white/[0.06] shadow-sm',
   elevated:
-    'bg-nocturn-surface border border-nocturn-border shadow-[0_16px_36px_-8px_rgba(0,0,0,0.55)]',
+    'bg-white/[0.04] backdrop-blur-md border border-white/[0.08] shadow-md',
   ghost:
-    'bg-white/[0.02] border border-white/[0.05]',
+    'bg-white/[0.01] border border-white/[0.04]',
   interactive:
-    'bg-nocturn-card border border-nocturn-border hover:border-white/15 hover:bg-nocturn-surface/70 transition-all duration-150 cursor-pointer shadow-[0_8px_24px_-6px_rgba(0,0,0,0.45)]',
+    'bg-white/[0.02] hover:bg-white/[0.04] backdrop-blur-md border border-white/[0.06] hover:border-white/[0.12] transition-colors duration-150 cursor-pointer shadow-sm',
 }
 
 const PADDINGS = {
