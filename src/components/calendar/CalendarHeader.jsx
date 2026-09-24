@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react'
 
 export default function CalendarHeader({

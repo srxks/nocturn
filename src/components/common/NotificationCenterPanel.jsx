@@ -136,7 +136,7 @@ export default function NotificationCenterPanel({ isOpen, onClose }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.97 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="fixed inset-x-3 top-14 sm:inset-x-auto sm:absolute sm:top-full sm:mt-2 sm:right-0 lg:right-auto lg:left-0 w-auto sm:w-84 md:w-92 max-w-[calc(100vw-1.5rem)] bg-nocturn-card/95 border border-nocturn-border rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] backdrop-blur-2xl z-50 overflow-hidden flex flex-col max-h-[75vh] sm:max-h-[460px]"
+            className="fixed inset-x-3 top-14 sm:inset-x-auto sm:absolute sm:top-full sm:mt-2 sm:right-0 sm:left-auto w-auto sm:w-84 md:w-92 max-w-[calc(100vw-1.5rem)] bg-white/[0.03] border border-white/[0.08] rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] backdrop-blur-2xl z-50 overflow-hidden flex flex-col max-h-[75vh] sm:max-h-[460px]"
           >
             {/* Header */}
             <div className="px-4 py-3 border-b border-nocturn-border/80 flex items-center justify-between">
