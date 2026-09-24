@@ -139,12 +139,15 @@ export default function TaskDetailDrawer({
       className={
         isDesktopInline
           ? 'w-full bg-[#11131a] border border-white/[0.08] rounded-2xl shadow-xl flex flex-col justify-between overflow-hidden max-h-[calc(100vh-6rem)]'
-          : 'fixed inset-y-0 right-0 z-[75] w-full sm:w-[420px] bg-[#11131a]/95 backdrop-blur-2xl border-l border-white/[0.08] sm:rounded-l-[20px] shadow-2xl flex flex-col justify-between overflow-hidden'
+          : 'fixed z-[75] bg-[#11131a] shadow-2xl flex flex-col justify-between overflow-hidden inset-y-0 right-0 w-full sm:w-[420px] md:w-[480px] border-l border-white/[0.08] sm:rounded-l-[20px] max-md:inset-x-0 max-md:top-auto max-md:bottom-0 max-md:w-full max-md:max-h-[92vh] max-md:rounded-t-[24px] max-md:border-t max-md:border-l-0 max-md:pb-[calc(env(safe-area-inset-bottom)+16px)]'
       }
       style={{
         boxShadow: 'var(--elev-2)',
       }}
     >
+      {/* Mobile Top Drag Handle Bar */}
+      <div className="w-12 h-1 bg-white/20 rounded-full mx-auto my-2 md:hidden shrink-0" />
+
       {/* Drawer Header */}
       <div className="p-4 sm:p-5 border-b border-nocturn-border flex items-center justify-between gap-3 bg-nocturn-card">
         <div className="flex items-center gap-3 flex-1 min-w-0">

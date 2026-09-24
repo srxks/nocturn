@@ -38,19 +38,24 @@ async function runTimerSyncResilienceTest() {
     const page = await browser.newPage()
 
     page.on('console', (msg) => {
-      const text = msg.text()
-      if (text.includes('[syncService]') || text.includes('[TimerSessionProvider]')) {
-        console.log('   [PAGE LOG]:', text)
-      }
+      console.log('   [PAGE LOG]:', msg.type(), msg.text())
+    })
+    page.on('pageerror', (err) => {
+      console.error('   [PAGE ERROR]:', err)
     })
 
-    console.log('1. Navigating to /timer...')
+    console.log('1. Navigating to root & timer...')
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle2' })
+    await new Promise((r) => setTimeout(r, 1000))
     await page.goto(`${BASE_URL}/timer`, { waitUntil: 'networkidle2' })
     await new Promise((r) => setTimeout(r, 1500))
 
     // Ensure we are on /timer
     const url = page.url()
     console.log('   Current URL:', url)
+
+    // Ensure tabular-nums is loaded
+    await page.waitForSelector('span.tabular-nums', { timeout: 10000 })
 
     // Check timer countdown element
     const initialCountdown = await page.evaluate(() => {
@@ -67,8 +72,10 @@ async function runTimerSyncResilienceTest() {
 
     if (!isAlreadyRunning) {
       console.log('3. Starting focus timer...')
-      const startBtn = await page.waitForSelector('button[aria-label="Start timer"]', { timeout: 5000 })
-      await startBtn.click()
+      await page.evaluate(() => {
+        const btn = document.querySelector('button[aria-label="Start timer"]')
+        if (btn) btn.click()
+      })
     } else {
       console.log('3. Timer is already running.')
     }

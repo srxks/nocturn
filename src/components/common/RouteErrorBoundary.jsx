@@ -4,7 +4,7 @@ import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
 export class RouteErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
-    this.state = { hasError: false, error: null }
+    this.state = { hasError: false, error: null, retryCount: 0 }
   }
 
   static getDerivedStateFromError(error) {
@@ -16,11 +16,19 @@ export class RouteErrorBoundary extends React.Component {
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null })
+    if (this.state.retryCount >= 3) {
+      this.handleGoHome()
+      return
+    }
+    this.setState((prev) => ({
+      hasError: false,
+      error: null,
+      retryCount: prev.retryCount + 1,
+    }))
   }
 
   handleGoHome = () => {
-    this.setState({ hasError: false, error: null })
+    this.setState({ hasError: false, error: null, retryCount: 0 })
     if (typeof window !== 'undefined') {
       window.location.href = '/tasks'
     }

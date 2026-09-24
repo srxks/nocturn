@@ -441,16 +441,31 @@ export function startRealtime(userId) {
         clearTimeout(_reconnectTimer)
         _reconnectTimer = null
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nocturn:sync-status', { detail: { paused: false } }))
+      }
     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-      console.warn('[realtime] Channel status:', status, '— scheduling reconnect with backoff...')
+      if (_reconnectAttempts >= 5) {
+        console.warn('[realtime] Max reconnect attempts (5) reached. Sync paused until re-online or manual retry.')
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('nocturn:sync-status', { detail: { paused: true } }))
+        }
+        return
+      }
+
       if (!_reconnectTimer && _currentUserId) {
-        // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
-        const backoffMs = Math.min(5000 * Math.pow(2, _reconnectAttempts), 60000)
         _reconnectAttempts++
+        const backoffMs = Math.min(30000, Math.pow(2, _reconnectAttempts) * 500)
         _reconnectTimer = setTimeout(() => {
           _reconnectTimer = null
           if (typeof navigator !== 'undefined' && !navigator.onLine) return
           if (isNetworkInCooldown()) return
+          if (_channel && supabase) {
+            try {
+              supabase.removeChannel(_channel)
+            } catch {}
+            _channel = null
+          }
           if (_currentUserId) {
             startRealtime(_currentUserId)
           }

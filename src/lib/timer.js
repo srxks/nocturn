@@ -29,6 +29,7 @@ export const DEFAULT_TIMER_SETTINGS = {
   sessions: 4,
   autoStartBreaks: false,
   autoStartPomo: false,
+  showSessionSummary: false,
   timerState: null,
 }
 
@@ -49,6 +50,7 @@ export function sanitizeTimerSettings(raw) {
     sessions: Number.isFinite(sessions) && sessions > 0 ? sessions : DEFAULT_TIMER_SETTINGS.sessions,
     autoStartBreaks: Boolean(raw.autoStartBreaks),
     autoStartPomo: Boolean(raw.autoStartPomo),
+    showSessionSummary: Boolean(raw.showSessionSummary),
     timerState: raw.timerState || null,
   }
 }

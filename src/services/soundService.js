@@ -183,6 +183,103 @@ export function playTimerCompleteSound() {
 }
 
 /**
+ * Soft two-tone chime (1046Hz + 1568Hz) synthesized via Web Audio
+ */
+export function playBell() {
+  if (!isTimerSoundsEnabled()) return
+  const ctx = getAudioContext()
+  if (!ctx) return
+
+  try {
+    const now = ctx.currentTime
+    const freqs = [1046, 1568]
+    freqs.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, now + i * 0.06)
+
+      gain.gain.setValueAtTime(0, now + i * 0.06)
+      gain.gain.linearRampToValueAtTime(0.15, now + i * 0.06 + 0.01)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.06 + 0.85)
+
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+
+      osc.start(now + i * 0.06)
+      osc.stop(now + i * 0.06 + 0.9)
+    })
+  } catch {
+    // Audio optional
+  }
+}
+
+/**
+ * Warm marimba-style ping (800Hz) when a break session ends
+ */
+export function playBreakEndSound() {
+  if (!isTimerSoundsEnabled()) return
+  const ctx = getAudioContext()
+  if (!ctx) return
+
+  try {
+    const now = ctx.currentTime
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(800, now)
+
+    gain.gain.setValueAtTime(0, now)
+    gain.gain.linearRampToValueAtTime(0.16, now + 0.01)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5)
+
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+
+    osc.start(now)
+    osc.stop(now + 0.52)
+  } catch {
+    // Audio optional
+  }
+}
+
+/**
+ * Soft ascending two-note (600Hz -> 900Hz) when a focus session starts
+ */
+export function playPomodoroStartSound() {
+  if (!isTimerSoundsEnabled()) return
+  const ctx = getAudioContext()
+  if (!ctx) return
+
+  try {
+    const now = ctx.currentTime
+    const notes = [600, 900]
+
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      const start = now + idx * 0.08
+
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, start)
+
+      gain.gain.setValueAtTime(0.12, start)
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.3)
+
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+
+      osc.start(start)
+      osc.stop(start + 0.32)
+    })
+  } catch {
+    // Audio optional
+  }
+}
+
+/**
  * Play an ultra-subtle tactile tick for key UI interactions
  */
 export function playClickSound() {

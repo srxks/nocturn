@@ -52,6 +52,7 @@ export default function Timer() {
     resetTimer,
     skipTimer,
     terminateTimer,
+    applyPreset,
     blockTimeRange,
   } = useTimerSession()
 
@@ -117,19 +118,12 @@ export default function Timer() {
     } catch {
       // localStorage may fail in private mode
     }
-    if (!isRunning && !isPaused) {
-      startTimer(taskName, undefined, 'focus', preset.duration)
+    if (applyPreset) {
+      applyPreset(preset)
     }
   }
 
   const handleTogglePlayPause = () => {
-    if (!isRunning && !isPaused) {
-      playTimerStartSound()
-    } else if (isRunning) {
-      playTimerPauseSound()
-    } else {
-      playTimerResumeSound()
-    }
     togglePlayPause()
   }
 
@@ -192,52 +186,8 @@ export default function Timer() {
         </Link>
       </header>
 
-      {/* When completed: large tasteful completion state */}
-      {isCompleted ? (
-        <div className="w-full max-w-xl mx-auto p-8 rounded-3xl bg-nocturn-card border border-nocturn-border flex flex-col items-center justify-center text-center space-y-4 shadow-lg">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-1">
-            <CheckCircle2 className="w-9 h-9 stroke-[2.2]" />
-          </div>
-          <div className="space-y-1">
-            <span className="text-xs font-bold tracking-widest uppercase text-emerald-400">
-              Session Ended
-            </span>
-            <h2 className="text-2xl font-bold text-white tracking-tight">
-              {taskName.trim() || 'Focus Session'}
-            </h2>
-            <p className="text-sm text-nocturn-muted">
-              {Math.round(totalSeconds / 60)} minutes focused
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                const isLong = currentSession % (settings.sessions || 4) === 0
-                startTimer(undefined, undefined, isLong ? 'longBreak' : 'shortBreak')
-              }}
-              className="px-4 py-2 rounded-xl bg-nocturn-accent hover:bg-nocturn-accent-bright text-white text-xs font-semibold tracking-wide transition-all shadow-md active:scale-95 cursor-pointer"
-            >
-              {currentSession % (settings.sessions || 4) === 0 ? 'Start Long Break' : 'Take Short Break'}
-            </button>
-            <Link
-              to="/plan"
-              className="px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.1] text-white text-xs font-semibold tracking-wide transition-all active:scale-95 cursor-pointer"
-            >
-              View Plan
-            </Link>
-            <button
-              type="button"
-              onClick={resetTimer}
-              className="px-3.5 py-2 rounded-xl text-nocturn-muted hover:text-white text-xs font-medium transition-colors cursor-pointer"
-            >
-              Back to Timer
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
+      {/* Main Timer Display */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
           {/* Left Main Column: Ring, Controls, Rhythm Presets */}
           <div className="flex flex-col items-center justify-center space-y-6 sm:space-y-7 w-full max-w-md lg:max-w-none mx-auto">
             {/* Preset Rhythm Selector (only when timer is not running) */}
@@ -475,7 +425,6 @@ export default function Timer() {
             </div>
           </div>
         </div>
-      )}
 
       {/* Distraction-Free Focus Mode Overlay */}
       <FocusModeOverlay

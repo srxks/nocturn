@@ -14,6 +14,28 @@ import {
 } from 'lucide-react'
 import { useTheme } from '../../context/useTheme'
 
+function toHexColor(val, fallback = '#6366F1') {
+  if (!val || typeof val !== 'string') return fallback
+  const clean = val.trim()
+  if (/^#([0-9a-f]{6})$/i.test(clean)) return clean
+  if (/^#([0-9a-f]{3})$/i.test(clean)) {
+    return `#${clean[1]}${clean[1]}${clean[2]}${clean[2]}${clean[3]}${clean[3]}`
+  }
+  if (/^#([0-9a-f]{8})$/i.test(clean)) {
+    return clean.slice(0, 7)
+  }
+  if (clean.startsWith('rgba') || clean.startsWith('rgb')) {
+    const match = clean.match(/\d+/g)
+    if (match && match.length >= 3) {
+      const r = Number(match[0]).toString(16).padStart(2, '0')
+      const g = Number(match[1]).toString(16).padStart(2, '0')
+      const b = Number(match[2]).toString(16).padStart(2, '0')
+      return `#${r}${g}${b}`
+    }
+  }
+  return fallback
+}
+
 export default function ThemeSettingsCard() {
   const {
     activeTheme,
@@ -200,6 +222,22 @@ export default function ThemeSettingsCard() {
             )
           })}
         </div>
+
+        {/* Live Theme Preview Strip */}
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.02] border border-white/[0.06] space-y-2">
+          <span className="text-[11px] font-semibold text-nocturn-muted uppercase tracking-wider block">
+            Live Preview Strip
+          </span>
+          <div className="p-3 rounded-xl bg-nocturn-surface border border-nocturn-border flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <span className="w-3 h-3 rounded-full bg-nocturn-accent shadow-[0_0_10px_var(--accent)]" />
+              <span className="text-xs font-semibold text-white font-sans">Sample Productivity Card</span>
+            </div>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-nocturn-accent/15 text-nocturn-accent border border-nocturn-accent/30">
+              Active Palette
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Saved Custom Themes Section */}
@@ -337,7 +375,7 @@ export default function ThemeSettingsCard() {
                 <div className="flex items-center gap-2 shrink-0">
                   <input
                     type="color"
-                    value={customColors[key] || '#000000'}
+                    value={toHexColor(customColors[key])}
                     onChange={(e) => handleColorChange(key, e.target.value)}
                     className="w-7 h-7 rounded-lg border-0 bg-transparent cursor-pointer"
                   />

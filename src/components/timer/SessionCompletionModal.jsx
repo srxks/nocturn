@@ -1,20 +1,38 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles,
   Coffee,
   Play,
   Calendar,
-  Check,
+  X,
 } from 'lucide-react'
+import { modalCenter, backdrop } from '../../motion/presets'
+import { useTimerSettings } from '../../context/useTimerSettings'
 
 export default function SessionCompletionModal({
   isOpen,
   sessionData,
   onCompleteSession,
+  onClose,
 }) {
+  const { updateSettings } = useTimerSettings()
   const [note, setNote] = useState('')
   const [markTaskDone, setMarkTaskDone] = useState(true)
+  const [dontShowAgain, setDontShowAgain] = useState(false)
+
+  // Handle Escape key to dismiss
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (onClose) onClose()
+        else if (onCompleteSession) onCompleteSession({ nextAction: 'stay' })
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose, onCompleteSession])
 
   if (!isOpen || !sessionData) return null
 
@@ -26,6 +44,9 @@ export default function SessionCompletionModal({
   } = sessionData
 
   const handleAction = (nextAction) => {
+    if (dontShowAgain) {
+      updateSettings({ showSessionSummary: false }).catch(console.warn)
+    }
     onCompleteSession({
       sessionId,
       note: note.trim(),
@@ -34,22 +55,39 @@ export default function SessionCompletionModal({
     })
   }
 
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      if (onClose) onClose()
+      else handleAction('stay')
+    }
+  }
+
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+      <div
+        onClick={handleBackdropClick}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md cursor-pointer"
+      >
         <motion.div
-          initial={{ opacity: 0, scale: 0.94, y: 12 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.94, y: 12 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-          className="w-full max-w-[440px] bg-[#11131a]/95 backdrop-blur-2xl border border-white/[0.1] rounded-[24px] p-6 sm:p-7 shadow-2xl space-y-6 text-left relative overflow-hidden"
+          {...modalCenter}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-[440px] bg-[#11131a]/95 backdrop-blur-2xl border border-white/[0.1] rounded-[24px] p-6 sm:p-7 shadow-2xl space-y-6 text-left relative overflow-hidden cursor-default"
           style={{
             boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 0 32px var(--glow), var(--elev-2)',
           }}
         >
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={() => handleAction('stay')}
+            aria-label="Close modal"
+            className="absolute top-5 right-5 p-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] text-nocturn-muted hover:text-white transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
           {/* Header celebration flourish */}
           <div className="flex items-start gap-4">
-            {/* Popping circle with animated SVG pathLength checkmark */}
             <motion.div
               initial={{ scale: 0.6, rotate: -20 }}
               animate={{ scale: 1, rotate: 0 }}
@@ -66,10 +104,10 @@ export default function SessionCompletionModal({
               </svg>
             </motion.div>
 
-            <div className="space-y-1">
+            <div className="space-y-1 pr-6">
               <div className="flex items-center gap-1.5 text-xs font-bold text-nocturn-accent tracking-wider uppercase font-mono">
                 <Sparkles className="w-3.5 h-3.5 text-nocturn-accent" />
-                <span>Session Finished</span>
+                <span>Focus Completed</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-display">
                 {taskTitle || 'Focus Session'}
@@ -83,7 +121,7 @@ export default function SessionCompletionModal({
           {/* Accomplishment Prompt with Character Counter */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-white flex items-center justify-between">
-              <span>What did you accomplish?</span>
+              <span>What did you accomplish? (Optional)</span>
               <span className="text-[10px] font-mono text-nocturn-dim">
                 {note.length}/250
               </span>
@@ -99,27 +137,41 @@ export default function SessionCompletionModal({
             />
           </div>
 
-          {/* Mark Task Complete Toggle (if task attached) */}
-          {taskTitle && (
-            <label className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] cursor-pointer hover:bg-white/[0.05] transition-colors">
+          {/* Options: Mark task complete + Don't ask again toggle */}
+          <div className="space-y-2">
+            {taskTitle && (
+              <label className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] cursor-pointer hover:bg-white/[0.05] transition-colors">
+                <input
+                  type="checkbox"
+                  checked={markTaskDone}
+                  onChange={(e) => setMarkTaskDone(e.target.checked)}
+                  className="w-4 h-4 rounded border-white/30 text-nocturn-accent accent-nocturn-accent cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <span className="text-xs font-medium text-white block">
+                    Mark task as completed
+                  </span>
+                  <span className="text-[11px] text-nocturn-muted block">
+                    Check this off from your task list and daily plan
+                  </span>
+                </div>
+              </label>
+            )}
+
+            <label className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04] cursor-pointer hover:bg-white/[0.04] transition-colors">
               <input
                 type="checkbox"
-                checked={markTaskDone}
-                onChange={(e) => setMarkTaskDone(e.target.checked)}
-                className="w-4 h-4 rounded border-white/30 text-nocturn-accent accent-nocturn-accent cursor-pointer"
+                checked={dontShowAgain}
+                onChange={(e) => setDontShowAgain(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-white/20 text-nocturn-accent accent-nocturn-accent cursor-pointer"
               />
-              <div className="space-y-0.5">
-                <span className="text-xs font-medium text-white block">
-                  Mark task as completed
-                </span>
-                <span className="text-[11px] text-nocturn-muted block">
-                  Check this off from your task list and daily plan
-                </span>
-              </div>
+              <span className="text-xs text-nocturn-muted">
+                Don't show this summary modal after focus sessions
+              </span>
             </label>
-          )}
+          </div>
 
-          {/* Action Decision Options with Distinct Hover Lift */}
+          {/* Action Decision Options */}
           <div className="space-y-2 pt-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-nocturn-dim block">
               Next Step
@@ -165,7 +217,7 @@ export default function SessionCompletionModal({
                 onClick={() => handleAction('stay')}
                 className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-transparent hover:bg-white/[0.04] text-nocturn-muted hover:text-white text-xs font-medium transition-colors cursor-pointer"
               >
-                <span>Log & Close</span>
+                <span>Save & Close</span>
               </motion.button>
             </div>
           </div>

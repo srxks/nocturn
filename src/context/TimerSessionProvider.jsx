@@ -4,665 +4,573 @@ import { useTimerSettings } from './useTimerSettings'
 import { TimerSessionContext } from './TimerSessionContext'
 import { useToast } from './useToast'
 import {
-  getActiveSession,
   recordActiveSession,
   clearActiveSession,
   recordPomodoroSession,
+  getActiveSession,
 } from '../services/timerService'
-import { getServerNowMs } from '../lib/timer'
 import { db } from '../db/db'
 import { markPlanBlockCompleted } from '../services/plannerPersistenceService'
-import { notifyTimerFiveMinuteWarning, notifyTimerEnded } from '../services/notificationService'
+import { notifyTimerFiveMinuteWarning, notifyTimerEnded, hasNotificationPermission } from '../services/notificationService'
 import { mapTaskToRow } from '../lib/tasks'
 import { enqueueMutation } from '../services/syncQueue'
-import { playTimerCompleteSound } from '../services/soundService'
+import {
+  playTimerStartSound,
+  playTimerPauseSound,
+  playTimerResumeSound,
+  playBell,
+  playBreakEndSound,
+  playPomodoroStartSound,
+  isTimerSoundsEnabled,
+} from '../services/soundService'
 import SessionCompletionModal from '../components/timer/SessionCompletionModal'
+import { setFaviconActive } from '../utils/faviconUtils'
 
 export function TimerSessionProvider({ children }) {
   const navigate = useNavigate()
   const { addToast } = useToast()
   const { settings, updateTimerState, updateSettings } = useTimerSettings()
 
-  const [mode, setMode] = useState('focus') // 'focus' | 'shortBreak' | 'longBreak'
-  const [isRunning, setIsRunning] = useState(false)
-  const [isPaused, setIsPaused] = useState(false)
-  const [currentSession, setCurrentSession] = useState(1)
+  // ── EXPLICIT TIMER STATE MACHINE ──
+  // phase: 'focus' | 'shortBreak' | 'longBreak'
+  const [mode, setMode] = useState('focus')
+  // status: 'idle' | 'running' | 'paused' | 'complete'
+  const [status, setStatus] = useState('idle')
+  // endAt: absolute epoch timestamp in ms when running
+  const [endAt, setEndAt] = useState(null)
+
+  const [completedFocusCount, setCompletedFocusCount] = useState(0)
   const [taskName, setTaskName] = useState('')
-
-  const isRunningRef = useRef(isRunning)
-  const isPausedRef = useRef(isPaused)
-  const lastActionAtRef = useRef(0)
-
-  useEffect(() => {
-    isRunningRef.current = isRunning
-    isPausedRef.current = isPaused
-  }, [isRunning, isPaused])
-
-  // Track if 5-minute warning was already notified for current session
-  const hasWarned5mRef = useRef(false)
-
-  // Plan My Day block highlight after completion
-  const [justCompletedBlockId, setJustCompletedBlockId] = useState(() => {
-    try {
-      return sessionStorage.getItem('nocturn_just_completed_block') || null
-    } catch {
-      return null
-    }
-  })
-
-  // Post-session accomplishment modal data
+  const [taskId, setTaskId] = useState(null)
+  const [planBlockId, setPlanBlockId] = useState(null)
   const [completionModalData, setCompletionModalData] = useState(null)
 
-  // Canonical timing anchor: virtual start timestamp in ms where elapsed = 0
-  const [canonicalStartTime, setCanonicalStartTime] = useState(null)
-  const [elapsedSeconds, setElapsedSeconds] = useState(0)
-
-  // Track latest actionId to detect and adopt remote realtime updates
-  const lastActionIdRef = useRef(null)
+  const statusRef = useRef(status)
+  const endAtRef = useRef(endAt)
   const isAdvancingRef = useRef(false)
-
-  // Active session object state & references for local Dexie caching
-  const [activeSession, setActiveSession] = useState(null)
+  const hasWarned5mRef = useRef(false)
   const activeSessionRef = useRef(null)
+
+  useEffect(() => {
+    statusRef.current = status
+    endAtRef.current = endAt
+  }, [status, endAt])
+
+  const isRunning = status === 'running'
+  const isPaused = status === 'paused'
 
   const updateActiveSession = (session) => {
     activeSessionRef.current = session
-    setActiveSession(session)
   }
 
-  // Safe helper to calculate total duration seconds for a mode from settings
+  // Duration Helper from Settings
   const getModeDurationSeconds = useCallback(
-    (currentMode) => {
-      const focusMins = Number(settings?.focusDuration)
-      const shortMins = Number(settings?.shortBreakDuration)
-      const longMins = Number(settings?.longBreakDuration)
+    (targetMode) => {
+      const focusMins = Number(settings?.focusDuration) || 25
+      const shortMins = Number(settings?.shortBreakDuration) || 5
+      const longMins = Number(settings?.longBreakDuration) || 15
 
-      const safeFocus = Number.isFinite(focusMins) && focusMins > 0 ? focusMins : 25
-      const safeShort = Number.isFinite(shortMins) && shortMins > 0 ? shortMins : 5
-      const safeLong = Number.isFinite(longMins) && longMins > 0 ? longMins : 15
-
-      if (currentMode === 'focus') return Math.round(safeFocus * 60)
-      if (currentMode === 'shortBreak') return Math.round(safeShort * 60)
-      return Math.round(safeLong * 60)
+      if (targetMode === 'focus') return Math.round(focusMins * 60)
+      if (targetMode === 'shortBreak') return Math.round(shortMins * 60)
+      return Math.round(longMins * 60)
     },
     [settings]
   )
 
-  const targetDurationForMode = getModeDurationSeconds(mode)
-  const [prevMode, setPrevMode] = useState(mode)
-  const [prevTargetDuration, setPrevTargetDuration] = useState(targetDurationForMode)
+  const targetDuration = getModeDurationSeconds(mode)
+  const [totalSeconds, setTotalSeconds] = useState(targetDuration)
+  const [remainingSeconds, setRemainingSeconds] = useState(targetDuration)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
-  const [remainingSeconds, setRemainingSeconds] = useState(() => targetDurationForMode)
-  const [totalSeconds, setTotalSeconds] = useState(() => targetDurationForMode)
-
-  // Render-phase state adjustment when mode changes or settings change
-  if (mode !== prevMode) {
-    setPrevMode(mode)
-    setPrevTargetDuration(targetDurationForMode)
-    if (!isRunning && !isPaused && !activeSession) {
-      setTotalSeconds(targetDurationForMode)
-      setRemainingSeconds(targetDurationForMode)
-    }
-  } else if (targetDurationForMode !== prevTargetDuration) {
-    setPrevTargetDuration(targetDurationForMode)
-    if (!isRunning && !isPaused && !activeSession) {
-      setTotalSeconds(targetDurationForMode)
-      setRemainingSeconds(targetDurationForMode)
-    }
-    // In-flight running or paused sessions MUST preserve their active duration and countdown.
-    // Background cloud sync of default settings must never reset or recalculate active sessions!
-  }
-
-  // Synchronize duration adjustments while running or paused across instances
-  const prevRunningTotalRef = useRef(totalSeconds)
+  // Keep duration synchronized while idle
   useEffect(() => {
-    if (prevRunningTotalRef.current !== totalSeconds) {
-      prevRunningTotalRef.current = totalSeconds
-      if ((isRunning || isPaused) && updateTimerState) {
-        const actionId = crypto.randomUUID()
-        const actionNow = Date.now()
-        lastActionIdRef.current = actionId
-        lastActionAtRef.current = actionNow
-        updateTimerState({
-          actionId,
-          totalSeconds,
-          configuredDuration: totalSeconds,
-          remainingSecondsWhenPaused: isPaused ? remainingSeconds : undefined,
-          lastActionAt: new Date(actionNow).toISOString(),
-        }).catch(() => {})
-      }
+    if (status === 'idle') {
+      const dur = getModeDurationSeconds(mode)
+      setTotalSeconds(dur)
+      setRemainingSeconds(dur)
+      setElapsedSeconds(0)
     }
-  }, [totalSeconds, isRunning, isPaused, remainingSeconds, updateTimerState])
+  }, [mode, settings?.focusDuration, settings?.shortBreakDuration, settings?.longBreakDuration, status, getModeDurationSeconds])
 
+  // ── ADVANCE PHASE TRANSITION LOGIC ──
+  const advancePhase = useCallback(
+    async ({ isNaturalCompletion = false } = {}) => {
+      if (isAdvancingRef.current) return
+      isAdvancingRef.current = true
 
+      try {
+        const nowMs = Date.now()
+        const currentMode = mode
+        const currentCount = completedFocusCount
+        const currentTask = taskName
+        const currentTaskId = taskId
+        const currentTotal = totalSeconds
+        const currentRemaining = remainingSeconds
+        const currentElapsed = Math.max(0, currentTotal - currentRemaining)
 
-  // 1. Initial Mount: Restore active session from cloud timerState or Dexie persistence
-  useEffect(() => {
-    let isMounted = true
+        if (currentMode === 'focus') {
+          let newCount = currentCount
 
-    async function restoreSession() {
-      // If timer is already running or paused in memory, never overwrite with storage
-      if (isRunningRef.current || isPausedRef.current) return
+          if (isNaturalCompletion) {
+            const focusMins = Math.round(currentTotal / 60) || 25
+            const sessionStartedAt =
+              activeSessionRef.current?.startedAt ||
+              new Date(nowMs - currentTotal * 1000).toISOString()
+            const sessionId = `focus-${sessionStartedAt}`
 
-      // Prioritize cloud timerState if available
-      const cloudTimerState = settings?.timerState
-      if (cloudTimerState && cloudTimerState.actionId) {
-        lastActionIdRef.current = cloudTimerState.actionId
-        if (cloudTimerState.lastActionAt) {
-          lastActionAtRef.current = new Date(cloudTimerState.lastActionAt).getTime()
-        }
-        const cloudMode = cloudTimerState.mode || 'focus'
-        const cloudTotal =
-          Number(cloudTimerState.configuredDuration) ||
-          Number(cloudTimerState.totalSeconds) ||
-          getModeDurationSeconds(cloudMode)
-
-        setMode(cloudMode)
-        setTotalSeconds(cloudTotal)
-        setCurrentSession(Number(cloudTimerState.currentSession) || 1)
-        if (cloudTimerState.taskName) setTaskName(cloudTimerState.taskName)
-
-        if (cloudTimerState.status === 'running') {
-          const nowMs = getServerNowMs()
-          let canonStart = cloudTimerState.canonicalStartTime
-          if (!canonStart && cloudTimerState.expectedEndAt) {
-            const endMs = new Date(cloudTimerState.expectedEndAt).getTime()
-            if (!isNaN(endMs)) {
-              canonStart = endMs - cloudTotal * 1000
-            }
-          }
-          if (!canonStart) {
-            canonStart = nowMs - (Number(cloudTimerState.elapsedSeconds) || 0) * 1000
-          }
-
-          const elapsed = Math.max(0, Math.floor((nowMs - canonStart) / 1000))
-          const remaining = Math.max(0, cloudTotal - elapsed)
-
-          if (remaining > 0) {
-            const restoredSession = {
-              sessionId: `session-${cloudTimerState.actionId}`,
-              taskName: cloudTimerState.taskName || '',
-              sessionType: cloudMode === 'shortBreak' ? 'short_break' : cloudMode === 'longBreak' ? 'long_break' : 'focus',
-              configuredDuration: Math.round(cloudTotal / 60) || 25,
-              startedAt: new Date(canonStart).toISOString(),
-              expectedEndAt: new Date(canonStart + cloudTotal * 1000).toISOString(),
-              status: 'active',
-              currentSession: Number(cloudTimerState.currentSession) || 1,
-            }
-            updateActiveSession(restoredSession)
-            recordActiveSession(restoredSession).catch(() => {})
-
-            setCanonicalStartTime(canonStart)
-            setElapsedSeconds(elapsed)
-            setRemainingSeconds(remaining)
-            setIsRunning(true)
-            setIsPaused(false)
-            return
-          }
-        } else if (cloudTimerState.status === 'paused') {
-          const elapsed = Number(cloudTimerState.elapsedSeconds) || 0
-          const remaining =
-            cloudTimerState.remainingSecondsWhenPaused !== undefined &&
-            cloudTimerState.remainingSecondsWhenPaused !== null
-              ? Number(cloudTimerState.remainingSecondsWhenPaused)
-              : Math.max(0, cloudTotal - elapsed)
-
-          const restoredSession = {
-            sessionId: `session-${cloudTimerState.actionId}`,
-            taskName: cloudTimerState.taskName || '',
-            sessionType: cloudMode === 'shortBreak' ? 'short_break' : cloudMode === 'longBreak' ? 'long_break' : 'focus',
-            configuredDuration: Math.round(cloudTotal / 60) || 25,
-            remainingSecondsWhenPaused: remaining,
-            elapsedSeconds: elapsed,
-            status: 'paused',
-            currentSession: Number(cloudTimerState.currentSession) || 1,
-          }
-          updateActiveSession(restoredSession)
-          recordActiveSession(restoredSession).catch(() => {})
-
-          setCanonicalStartTime(null)
-          setElapsedSeconds(elapsed)
-          setRemainingSeconds(remaining)
-          setIsRunning(false)
-          setIsPaused(true)
-          return
-        }
-      }
-
-      // Fall back to local Dexie active session
-      const persisted = await getActiveSession()
-      if (!isMounted || !persisted) return
-      if (isRunningRef.current || isPausedRef.current) return
-
-      const modeKey =
-        persisted.sessionType === 'short_break'
-          ? 'shortBreak'
-          : persisted.sessionType === 'long_break'
-          ? 'longBreak'
-          : 'focus'
-
-      const configuredMins = Number(persisted.configuredDuration)
-      const safeConfiguredMins =
-        Number.isFinite(configuredMins) && configuredMins > 0 ? configuredMins : 25
-      const configuredTotal = safeConfiguredMins * 60
-
-      setMode(modeKey)
-      setTotalSeconds(configuredTotal)
-      setCurrentSession(Number(persisted.currentSession) || 1)
-      if (persisted.taskName) setTaskName(persisted.taskName)
-
-      updateActiveSession(persisted)
-
-      if (persisted.status === 'paused') {
-        const remaining =
-          Number.isFinite(Number(persisted.remainingSecondsWhenPaused)) &&
-          persisted.remainingSecondsWhenPaused >= 0
-            ? Number(persisted.remainingSecondsWhenPaused)
-            : configuredTotal
-        const elapsed = Math.max(0, configuredTotal - remaining)
-        setCanonicalStartTime(null)
-        setElapsedSeconds(elapsed)
-        setRemainingSeconds(remaining)
-        setIsRunning(false)
-        setIsPaused(true)
-      } else if (persisted.status === 'active' && persisted.expectedEndAt) {
-        const endMs = new Date(persisted.expectedEndAt).getTime()
-        const nowMs = getServerNowMs()
-        const diffSeconds = !isNaN(endMs) ? Math.max(0, Math.round((endMs - nowMs) / 1000)) : 0
-
-        if (diffSeconds > 0) {
-          const canonStart = endMs - configuredTotal * 1000
-          const elapsed = Math.max(0, configuredTotal - diffSeconds)
-          setCanonicalStartTime(canonStart)
-          setElapsedSeconds(elapsed)
-          setRemainingSeconds(diffSeconds)
-          setIsRunning(true)
-          setIsPaused(false)
-        } else {
-          // Session completed while tab was closed
-          if (modeKey === 'focus') {
+            // 1. Record completed focus session in Dexie
             await recordPomodoroSession({
-              taskId: persisted.taskId,
-              duration: safeConfiguredMins,
+              taskId: currentTaskId,
+              duration: focusMins,
+              durationSeconds: currentTotal,
               sessionType: 'focus',
+              startedAt: sessionStartedAt,
+              taskTitle: currentTask,
+              sessionId,
+              completed: true,
             })
+
+            newCount = currentCount + 1
+            setCompletedFocusCount(newCount)
+
+            // 2. Play warm bell sound
+            if (isTimerSoundsEnabled()) {
+              playBell()
+            }
+
+            // 3. Native OS Notification
+            if (hasNotificationPermission()) {
+              notifyTimerEnded(currentTask || 'Focus Session', sessionId)
+            }
+
+            // 4. Toast feedback
+            addToast(`Focus session complete! (${focusMins} min logged)`, {
+              type: 'success',
+              duration: 4000,
+            })
+          } else {
+            // Manual skip - record partial focus session if >= 60s
+            if (currentElapsed >= 60) {
+              const focusMins = Math.round((currentElapsed / 60) * 10) / 10
+              const sessionStartedAt =
+                activeSessionRef.current?.startedAt ||
+                new Date(nowMs - currentElapsed * 1000).toISOString()
+              await recordPomodoroSession({
+                taskId: currentTaskId,
+                duration: focusMins,
+                durationSeconds: currentElapsed,
+                sessionType: 'focus',
+                startedAt: sessionStartedAt,
+                taskTitle: currentTask,
+                sessionId: `focus-${sessionStartedAt}`,
+                completed: false,
+              }).catch(console.warn)
+
+              newCount = currentCount + 1
+              setCompletedFocusCount(newCount)
+            }
           }
+
+          // Determine next break phase
+          const longBreakInterval = Number(settings?.sessions) || 4
+          const isLongBreak = newCount > 0 && newCount % longBreakInterval === 0
+          const nextMode = isLongBreak ? 'longBreak' : 'shortBreak'
+          const breakSecs = getModeDurationSeconds(nextMode)
+          const autoStartBreaks = Boolean(settings?.autoStartBreaks)
+
           await clearActiveSession()
           updateActiveSession(null)
-          setIsRunning(false)
-          setIsPaused(false)
-          const resetDuration = getModeDurationSeconds(modeKey)
-          setRemainingSeconds(resetDuration)
-          setTotalSeconds(resetDuration)
-          setCanonicalStartTime(null)
+
+          setMode(nextMode)
+          setTotalSeconds(breakSecs)
+          setRemainingSeconds(breakSecs)
           setElapsedSeconds(0)
-        }
-      }
-    }
+          hasWarned5mRef.current = false
 
-    restoreSession()
+          if (autoStartBreaks) {
+            const nextEndAt = nowMs + breakSecs * 1000
+            setStatus('running')
+            setEndAt(nextEndAt)
 
-    return () => {
-      isMounted = false
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+            const sessionObj = {
+              sessionId: `session-${nowMs}`,
+              taskName: currentTask,
+              sessionType: isLongBreak ? 'long_break' : 'short_break',
+              configuredDuration: Math.round(breakSecs / 60),
+              startedAt: new Date(nowMs).toISOString(),
+              expectedEndAt: new Date(nextEndAt).toISOString(),
+              status: 'active',
+              currentSession: newCount + 1,
+            }
+            await recordActiveSession(sessionObj)
+            updateActiveSession(sessionObj)
 
-  // 2. React to Remote Realtime changes in settings.timerState
-  useEffect(() => {
-    let isCurrent = true
-    const remoteState = settings?.timerState
-    if (!remoteState?.actionId || remoteState.actionId === lastActionIdRef.current) {
-      return
-    }
+            if (updateTimerState) {
+              await updateTimerState({
+                actionId: crypto.randomUUID(),
+                status: 'running',
+                mode: nextMode,
+                currentSession: newCount + 1,
+                endAt: nextEndAt,
+                totalSeconds: breakSecs,
+                lastActionAt: new Date(nowMs).toISOString(),
+              })
+            }
+          } else {
+            setStatus('idle')
+            setEndAt(null)
 
-    const isCurrentlyActive = isRunningRef.current || isPausedRef.current || Boolean(activeSessionRef.current)
-    const remoteTime = remoteState.lastActionAt ? new Date(remoteState.lastActionAt).getTime() : 0
-    const localTime = lastActionAtRef.current || 0
+            if (updateTimerState) {
+              await updateTimerState({
+                actionId: crypto.randomUUID(),
+                status: 'idle',
+                mode: nextMode,
+                currentSession: newCount + 1,
+                endAt: null,
+                totalSeconds: breakSecs,
+                lastActionAt: new Date(nowMs).toISOString(),
+              })
+            }
+          }
 
-    // Safety guard: if local client is actively running or paused, reject any incoming
-    // remote timerState that is not strictly newer than the local user's action timestamp.
-    // This stops background sync (or stale remote rows) from clobbering an in-flight timer!
-    if (isCurrentlyActive && remoteTime <= localTime) {
-      return
-    }
+          // Summary Modal check (ONLY on focus completion & if setting enabled)
+          if (isNaturalCompletion && Boolean(settings?.showSessionSummary)) {
+            setCompletionModalData({
+              sessionId: `focus-${Date.now()}`,
+              taskTitle: currentTask,
+              taskId: currentTaskId,
+              durationMins: Math.round(currentTotal / 60),
+              isLongBreak,
+              planBlockId,
+            })
+          } else {
+            setCompletionModalData(null)
+          }
 
-    // Do NOT allow a remote idle/stopped state to kill an active session unless remote is strictly newer
-    if (isCurrentlyActive && (remoteState.status === 'idle' || !remoteState.status) && remoteTime <= localTime) {
-      return
-    }
+        } else {
+          // BREAK (short or long) ENDS
+          if (isNaturalCompletion) {
+            if (isTimerSoundsEnabled()) {
+              playBreakEndSound()
+            }
+            if (hasNotificationPermission()) {
+              notifyTimerEnded('Break Over — Time to Focus')
+            }
+            addToast('Break completed. Ready to focus!', { type: 'info', duration: 4000 })
+          }
 
-    queueMicrotask(() => {
-      if (!isCurrent) return
-      if (!remoteState?.actionId || remoteState.actionId === lastActionIdRef.current) return
-      if (isCurrentlyActive && remoteTime <= (lastActionAtRef.current || 0)) return
+          const focusSecs = getModeDurationSeconds('focus')
+          const autoStartFocus = Boolean(settings?.autoStartPomo)
 
-      lastActionIdRef.current = remoteState.actionId
-      lastActionAtRef.current = remoteTime || Date.now()
+          await clearActiveSession()
+          updateActiveSession(null)
 
-      const targetMode = remoteState.mode || 'focus'
-      const targetConfigured =
-        Number(remoteState.configuredDuration) ||
-        Number(remoteState.totalSeconds) ||
-        getModeDurationSeconds(targetMode)
-      const targetSession = Number(remoteState.currentSession) || 1
+          setMode('focus')
+          setTotalSeconds(focusSecs)
+          setRemainingSeconds(focusSecs)
+          setElapsedSeconds(0)
+          hasWarned5mRef.current = false
+          setCompletionModalData(null) // NEVER show modal after break!
 
-      setMode(targetMode)
-      setTotalSeconds(targetConfigured)
-      setCurrentSession(targetSession)
-      if (remoteState.taskName !== undefined) setTaskName(remoteState.taskName)
+          if (autoStartFocus) {
+            const nextEndAt = nowMs + focusSecs * 1000
+            setStatus('running')
+            setEndAt(nextEndAt)
 
-      if (remoteState.status === 'running') {
-        const nowMs = getServerNowMs()
-        let canonStart = remoteState.canonicalStartTime
-        if (!canonStart && remoteState.expectedEndAt) {
-          const endMs = new Date(remoteState.expectedEndAt).getTime()
-          if (!isNaN(endMs)) {
-            canonStart = endMs - targetConfigured * 1000
+            const sessionObj = {
+              sessionId: `session-${nowMs}`,
+              taskName: currentTask,
+              sessionType: 'focus',
+              configuredDuration: Math.round(focusSecs / 60),
+              startedAt: new Date(nowMs).toISOString(),
+              expectedEndAt: new Date(nextEndAt).toISOString(),
+              status: 'active',
+              currentSession: currentCount + 1,
+            }
+            await recordActiveSession(sessionObj)
+            updateActiveSession(sessionObj)
+
+            if (updateTimerState) {
+              await updateTimerState({
+                actionId: crypto.randomUUID(),
+                status: 'running',
+                mode: 'focus',
+                currentSession: currentCount + 1,
+                endAt: nextEndAt,
+                totalSeconds: focusSecs,
+                lastActionAt: new Date(nowMs).toISOString(),
+              })
+            }
+          } else {
+            setStatus('idle')
+            setEndAt(null)
+
+            if (updateTimerState) {
+              await updateTimerState({
+                actionId: crypto.randomUUID(),
+                status: 'idle',
+                mode: 'focus',
+                currentSession: currentCount + 1,
+                endAt: null,
+                totalSeconds: focusSecs,
+                lastActionAt: new Date(nowMs).toISOString(),
+              })
+            }
           }
         }
-        if (!canonStart) {
-          canonStart = nowMs - (Number(remoteState.elapsedSeconds) || 0) * 1000
-        }
-
-        const elapsed = Math.max(0, Math.floor((nowMs - canonStart) / 1000))
-        const remaining = Math.max(0, targetConfigured - elapsed)
-
-        setCanonicalStartTime(canonStart)
-        setElapsedSeconds(elapsed)
-        setRemainingSeconds(remaining)
-        setIsRunning(remaining > 0)
-        setIsPaused(false)
-
-        const activeObj = {
-          sessionId: `session-${remoteState.actionId}`,
-          taskName: remoteState.taskName || '',
-          sessionType: targetMode === 'shortBreak' ? 'short_break' : targetMode === 'longBreak' ? 'long_break' : 'focus',
-          configuredDuration: Math.round(targetConfigured / 60) || 25,
-          startedAt: new Date(canonStart).toISOString(),
-          expectedEndAt: new Date(canonStart + targetConfigured * 1000).toISOString(),
-          status: 'active',
-          currentSession: targetSession,
-        }
-        updateActiveSession(activeObj)
-        recordActiveSession(activeObj).catch(() => {})
-      } else if (remoteState.status === 'paused') {
-        const elapsed = Number(remoteState.elapsedSeconds) || 0
-        const remaining =
-          remoteState.remainingSecondsWhenPaused !== undefined &&
-          remoteState.remainingSecondsWhenPaused !== null
-            ? Number(remoteState.remainingSecondsWhenPaused)
-            : Math.max(0, targetConfigured - elapsed)
-
-        setCanonicalStartTime(null)
-        setElapsedSeconds(elapsed)
-        setRemainingSeconds(remaining)
-        setIsRunning(false)
-        setIsPaused(true)
-
-        const activeObj = {
-          sessionId: `session-${remoteState.actionId}`,
-          taskName: remoteState.taskName || '',
-          sessionType: targetMode === 'shortBreak' ? 'short_break' : targetMode === 'longBreak' ? 'long_break' : 'focus',
-          configuredDuration: Math.round(targetConfigured / 60) || 25,
-          remainingSecondsWhenPaused: remaining,
-          elapsedSeconds: elapsed,
-          status: 'paused',
-          currentSession: targetSession,
-        }
-        updateActiveSession(activeObj)
-        recordActiveSession(activeObj).catch(() => {})
-      } else {
-        // 'idle' / stopped
-        setCanonicalStartTime(null)
-        setElapsedSeconds(0)
-        setRemainingSeconds(targetConfigured)
-        setIsRunning(false)
-        setIsPaused(false)
-        clearActiveSession().catch(() => {})
-        updateActiveSession(null)
+      } finally {
+        setTimeout(() => {
+          isAdvancingRef.current = false
+        }, 400)
       }
-    })
+    },
+    [
+      mode,
+      completedFocusCount,
+      taskName,
+      taskId,
+      totalSeconds,
+      remainingSeconds,
+      planBlockId,
+      settings,
+      getModeDurationSeconds,
+      updateTimerState,
+      addToast,
+    ]
+  )
 
-    return () => {
-      isCurrent = false
-    }
-  }, [settings?.timerState, getModeDurationSeconds])
+  // ── START TIMER ──
+  const startTimer = async (
+    overrideTaskName,
+    overrideTaskId,
+    overrideMode,
+    overrideDurationMinutes
+  ) => {
+    const targetMode = overrideMode || mode
+    const targetMins =
+      overrideDurationMinutes ||
+      (targetMode === 'focus'
+        ? settings?.focusDuration
+        : targetMode === 'shortBreak'
+        ? settings?.shortBreakDuration
+        : settings?.longBreakDuration) ||
+      25
 
-  // 3. Natural Session Completion (00:00 reached) with optimistic deduplication
-  const handleSessionCompletion = useCallback(async () => {
-    if (isAdvancingRef.current) return
-    isAdvancingRef.current = true
+    const durationSecs = Math.round(targetMins * 60)
+    const nowMs = Date.now()
+    const targetEndAt = nowMs + durationSecs * 1000
 
-    try {
-      // Optimistic check: if remote state already advanced, do not advance again
-      const currentCloudState = settings?.timerState
-      if (
-        currentCloudState &&
-        currentCloudState.actionId &&
-        currentCloudState.actionId !== lastActionIdRef.current
-      ) {
-        return
-      }
+    if (overrideTaskName !== undefined) setTaskName(overrideTaskName)
+    if (overrideTaskId !== undefined) setTaskId(overrideTaskId)
 
-      setIsRunning(false)
-      setIsPaused(false)
-      setCanonicalStartTime(null)
+    setMode(targetMode)
+    setTotalSeconds(durationSecs)
+    setRemainingSeconds(durationSecs)
+    setElapsedSeconds(0)
+    setEndAt(targetEndAt)
+    setStatus('running')
+    hasWarned5mRef.current = false
 
-      const actionId = crypto.randomUUID()
-      const actionNow = Date.now()
-      lastActionIdRef.current = actionId
-      lastActionAtRef.current = actionNow
-
-      const currentTotal = totalSeconds
-      const currentMode = mode
-      const currentSess = currentSession
-      const currentTask = taskName
-      const currentTaskId = activeSessionRef.current?.taskId || null
-      const currentPlanBlockId = activeSessionRef.current?.planBlockId || null
-      const totalCycles = Number(settings?.sessions) || 4
-
-      if (currentMode === 'focus') {
-        const focusMins = Math.round(currentTotal / 60) || 25
-        const sessionStartedAt =
-          activeSessionRef.current?.startedAt ||
-          new Date(getServerNowMs() - currentTotal * 1000).toISOString()
-        const sessionId = `focus-${sessionStartedAt}`
-
-        // 1. Record completed focus session in Dexie with completed: true & actual duration
-        await recordPomodoroSession({
-          taskId: currentTaskId,
-          duration: focusMins,
-          durationSeconds: currentTotal,
-          sessionType: 'focus',
-          startedAt: sessionStartedAt,
-          taskTitle: currentTask,
-          sessionId,
-          completed: true,
-        })
-
-        // 2. Play celebratory completion sound
-        playTimerCompleteSound()
-
-        // 3. Clear active session in Dexie
-        await clearActiveSession()
-        updateActiveSession(null)
-
-        // 4. Fire native OS notification
-        notifyTimerEnded(currentTask, sessionId)
-
-        // 5. Show tasteful toast
-        const taskTitleDisplay = currentTask ? currentTask : 'Focus Session'
-        addToast(`Session ended: ${taskTitleDisplay} — ${focusMins} min completed`, {
-          type: 'success',
-          duration: 5000,
-        })
-
-        // 6. Reset timer to clean IDLE state (NEVER auto-restart or loop!)
-        const nextResetSecs = getModeDurationSeconds('focus')
-        setMode('focus')
-        setTotalSeconds(nextResetSecs)
-        setRemainingSeconds(nextResetSecs)
-        setElapsedSeconds(0)
-
-        if (updateTimerState) {
-          await updateTimerState({
-            actionId,
-            status: 'idle',
-            mode: 'focus',
-            currentSession: currentSess,
-            totalSessions: totalCycles,
-            canonicalStartTime: null,
-            elapsedSeconds: 0,
-            configuredDuration: nextResetSecs,
-            totalSeconds: nextResetSecs,
-            remainingSecondsWhenPaused: nextResetSecs,
-            taskName: '',
-            taskId: null,
-            planBlockId: null,
-            startedAt: null,
-            lastActionAt: new Date(actionNow).toISOString(),
-          })
-        }
-
-        // 7. Prompt accomplishment notes & user post-session actions (NO abrupt auto-navigation!)
-        setCompletionModalData({
-          sessionId,
-          taskTitle: currentTask,
-          taskId: currentTaskId,
-          durationMins: focusMins,
-          isLongBreak: currentSess % totalCycles === 0,
-          planBlockId: currentPlanBlockId,
-        })
-      } else {
-        // Break session completed: do NOT silently start next focus session!
-        await clearActiveSession()
-        updateActiveSession(null)
-
-        notifyTimerEnded('Break', `break-${Date.now()}`)
-        addToast('Break ended. Ready for your next focus session when you are.', {
-          type: 'info',
-          duration: 4000,
-        })
-
-        const focusSecs = getModeDurationSeconds('focus')
-        setMode('focus')
-        setTotalSeconds(focusSecs)
-        setRemainingSeconds(focusSecs)
-        setCanonicalStartTime(null)
-        setElapsedSeconds(0)
-
-        if (updateTimerState) {
-          await updateTimerState({
-            actionId,
-            status: 'idle',
-            mode: 'focus',
-            currentSession: currentSess < totalCycles ? currentSess + 1 : 1,
-            totalSessions: totalCycles,
-            canonicalStartTime: null,
-            elapsedSeconds: 0,
-            configuredDuration: focusSecs,
-            totalSeconds: focusSecs,
-            remainingSecondsWhenPaused: focusSecs,
-            taskName: '',
-            taskId: null,
-            planBlockId: null,
-            startedAt: null,
-            lastActionAt: new Date(actionNow).toISOString(),
-          })
-        }
-      }
-    } finally {
-      setTimeout(() => {
-        isAdvancingRef.current = false
-      }, 500)
-    }
-  }, [
-    settings,
-    mode,
-    currentSession,
-    totalSeconds,
-    taskName,
-    getModeDurationSeconds,
-    updateTimerState,
-    addToast,
-    navigate,
-  ])
-
-  // Handle user post-session completion modal actions & notes
-  const handleCompleteSessionModal = async ({ sessionId, note, markTaskDone, nextAction }) => {
-    if (note && sessionId) {
-      try {
-        await db.pomodoroSessions.update(sessionId, { notes: note })
-      } catch (err) {
-        console.warn('[TimerSessionProvider] update session note error:', err)
-      }
+    if (targetMode === 'focus') {
+      playPomodoroStartSound()
+    } else {
+      playTimerStartSound()
     }
 
-    const currentTaskId = completionModalData?.taskId
-    if (markTaskDone && currentTaskId) {
-      try {
-        const taskObj = await db.tasks.get(currentTaskId)
-        if (taskObj && !taskObj.completed) {
-          const updatedTask = {
-            ...taskObj,
-            completed: true,
-            completedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }
-          await db.tasks.update(currentTaskId, {
-            completed: true,
-            completedAt: updatedTask.completedAt,
-            updatedAt: updatedTask.updatedAt,
-          })
-          const row = mapTaskToRow(updatedTask, taskObj.userId)
-          if (row) enqueueMutation('upsert', 'tasks', row)
-        }
-      } catch (tErr) {
-        console.warn('[TimerSessionProvider] complete task error:', tErr)
-      }
+    const sessionObj = {
+      sessionId: `session-${nowMs}`,
+      taskId: overrideTaskId !== undefined ? overrideTaskId : taskId,
+      taskName: overrideTaskName !== undefined ? overrideTaskName : taskName,
+      sessionType:
+        targetMode === 'shortBreak'
+          ? 'short_break'
+          : targetMode === 'longBreak'
+          ? 'long_break'
+          : 'focus',
+      configuredDuration: targetMins,
+      startedAt: new Date(nowMs).toISOString(),
+      expectedEndAt: new Date(targetEndAt).toISOString(),
+      status: 'active',
+      currentSession: completedFocusCount + 1,
     }
+    updateActiveSession(sessionObj)
+    await recordActiveSession(sessionObj)
 
-    const planBlockId = completionModalData?.planBlockId
-    if (planBlockId) {
-      try {
-        await markPlanBlockCompleted(planBlockId)
-        setJustCompletedBlockId(planBlockId)
-        try {
-          sessionStorage.setItem('nocturn_just_completed_block', planBlockId)
-        } catch { /* ignore */ }
-      } catch (pErr) {
-        console.warn('[TimerSessionProvider] plan block error:', pErr)
-      }
-    }
-
-    const isLongBreak = completionModalData?.isLongBreak
-    setCompletionModalData(null)
-
-    if (nextAction === 'break') {
-      startTimer(undefined, undefined, isLongBreak ? 'longBreak' : 'shortBreak')
-    } else if (nextAction === 'next-focus') {
-      startTimer(undefined, undefined, 'focus')
-    } else if (nextAction === 'plan') {
-      try {
-        navigate('/plan')
-      } catch {
-        if (typeof window !== 'undefined') window.location.href = '/plan'
-      }
+    if (updateTimerState) {
+      await updateTimerState({
+        actionId: crypto.randomUUID(),
+        status: 'running',
+        mode: targetMode,
+        endAt: targetEndAt,
+        totalSeconds: durationSecs,
+        taskName: overrideTaskName !== undefined ? overrideTaskName : taskName,
+        taskId: overrideTaskId !== undefined ? overrideTaskId : taskId,
+        lastActionAt: new Date(nowMs).toISOString(),
+      })
     }
   }
 
-  // 4. Timestamp-based Countdown Effect (Ticks locally every 1s in memory, ZERO continuous DB calls)
+  // ── PAUSE TIMER ──
+  const pauseTimer = async () => {
+    if (status !== 'running') return
+    const nowMs = Date.now()
+    const safeRemaining = endAt ? Math.max(0, Math.round((endAt - nowMs) / 1000)) : remainingSeconds
+
+    setStatus('paused')
+    setEndAt(null)
+    setRemainingSeconds(safeRemaining)
+    playTimerPauseSound()
+
+    const sessionObj = {
+      ...(activeSessionRef.current || {}),
+      status: 'paused',
+      remainingSecondsWhenPaused: safeRemaining,
+    }
+    updateActiveSession(sessionObj)
+    await recordActiveSession(sessionObj)
+
+    if (updateTimerState) {
+      await updateTimerState({
+        actionId: crypto.randomUUID(),
+        status: 'paused',
+        mode,
+        endAt: null,
+        remainingSecondsWhenPaused: safeRemaining,
+        totalSeconds,
+        lastActionAt: new Date(nowMs).toISOString(),
+      })
+    }
+  }
+
+  // ── RESUME TIMER ──
+  const resumeTimer = async () => {
+    if (status !== 'paused') return
+    const nowMs = Date.now()
+    const targetEndAt = nowMs + remainingSeconds * 1000
+
+    setStatus('running')
+    setEndAt(targetEndAt)
+    playTimerResumeSound()
+
+    const sessionObj = {
+      ...(activeSessionRef.current || {}),
+      status: 'active',
+      expectedEndAt: new Date(targetEndAt).toISOString(),
+    }
+    updateActiveSession(sessionObj)
+    await recordActiveSession(sessionObj)
+
+    if (updateTimerState) {
+      await updateTimerState({
+        actionId: crypto.randomUUID(),
+        status: 'running',
+        mode,
+        endAt: targetEndAt,
+        totalSeconds,
+        lastActionAt: new Date(nowMs).toISOString(),
+      })
+    }
+  }
+
+  // ── TOGGLE PLAY / PAUSE ──
+  const togglePlayPause = () => {
+    if (status === 'running') {
+      pauseTimer()
+    } else if (status === 'paused') {
+      resumeTimer()
+    } else {
+      startTimer()
+    }
+  }
+
+  // ── RESET TIMER ──
+  const resetTimer = async () => {
+    const resetDur = getModeDurationSeconds(mode)
+    setStatus('idle')
+    setEndAt(null)
+    setTotalSeconds(resetDur)
+    setRemainingSeconds(resetDur)
+    setElapsedSeconds(0)
+    hasWarned5mRef.current = false
+
+    await clearActiveSession()
+    updateActiveSession(null)
+
+    if (updateTimerState) {
+      await updateTimerState({
+        actionId: crypto.randomUUID(),
+        status: 'idle',
+        mode,
+        endAt: null,
+        totalSeconds: resetDur,
+        lastActionAt: new Date().toISOString(),
+      })
+    }
+  }
+
+  // ── SKIP TIMER ──
+  const skipTimer = async () => {
+    await advancePhase({ isNaturalCompletion: false })
+  }
+
+  // ── APPLY PRESET (Sets durations & idle status, NEVER auto-starts!) ──
+  const applyPreset = async (preset) => {
+    if (status === 'running') {
+      addToast('Timer stopped to apply preset', { type: 'info', duration: 3000 })
+    }
+
+    const focus = preset.duration || preset.focus || 25
+    const short = preset.breakDuration || preset.short || 5
+    const long = preset.longDuration || preset.long || 15
+    const sess = preset.sessions || 4
+
+    await updateSettings({
+      focusDuration: focus,
+      shortBreakDuration: short,
+      longBreakDuration: long,
+      sessions: sess,
+    })
+
+    const durSecs = focus * 60
+    setMode('focus')
+    setStatus('idle')
+    setEndAt(null)
+    setCompletedFocusCount(0)
+    setTotalSeconds(durSecs)
+    setRemainingSeconds(durSecs)
+    setElapsedSeconds(0)
+    hasWarned5mRef.current = false
+
+    await clearActiveSession()
+    updateActiveSession(null)
+
+    if (updateTimerState) {
+      await updateTimerState({
+        actionId: crypto.randomUUID(),
+        status: 'idle',
+        mode: 'focus',
+        endAt: null,
+        totalSeconds: durSecs,
+        lastActionAt: new Date().toISOString(),
+      })
+    }
+
+    addToast(`Applied ${preset.name || preset.label || 'preset'} (${focus}/${short}/${long} min)`, {
+      type: 'success',
+      duration: 3000,
+    })
+  }
+
+  // ── SINGLE TICKER LOOP (250ms anti-drift) ──
   useEffect(() => {
     let interval = null
 
-    if (isRunning && canonicalStartTime) {
+    if (status === 'running' && endAt) {
       interval = setInterval(() => {
-        const nowMs = getServerNowMs()
-        const elapsed = Math.max(0, Math.floor((nowMs - canonicalStartTime) / 1000))
-        const remaining = Math.max(0, totalSeconds - elapsed)
-
+        const nowMs = Date.now()
+        const remaining = Math.max(0, Math.round((endAt - nowMs) / 1000))
         setRemainingSeconds(remaining)
-        setElapsedSeconds(elapsed)
+        setElapsedSeconds(Math.max(0, totalSeconds - remaining))
 
         // 5-minute warning notification
         if (remaining <= 300 && remaining > 0 && !hasWarned5mRef.current && mode === 'focus') {
@@ -671,19 +579,111 @@ export function TimerSessionProvider({ children }) {
         }
 
         if (remaining <= 0) {
-          handleSessionCompletion()
+          advancePhase({ isNaturalCompletion: true })
         }
-      }, 1000)
+      }, 250)
     }
 
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [isRunning, canonicalStartTime, totalSeconds, mode, taskName, handleSessionCompletion])
+  }, [status, endAt, totalSeconds, mode, taskName, advancePhase])
 
-  // Reflect live timer countdown in browser document title
+  // ── TAB VISIBILITY RE-SYNC ──
   useEffect(() => {
     if (typeof document === 'undefined') return
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && statusRef.current === 'running' && endAtRef.current) {
+        const nowMs = Date.now()
+        const remaining = Math.max(0, Math.round((endAtRef.current - nowMs) / 1000))
+        setRemainingSeconds(remaining)
+        setElapsedSeconds(Math.max(0, totalSeconds - remaining))
+        if (remaining <= 0) {
+          advancePhase({ isNaturalCompletion: true })
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [totalSeconds, advancePhase])
+
+  // ── RESTORE ACTIVE SESSION ON MOUNT ──
+  useEffect(() => {
+    let isMounted = true
+
+    async function restoreSession() {
+      if (statusRef.current === 'running' || statusRef.current === 'paused') return
+
+      const cloudState = settings?.timerState
+      if (cloudState && cloudState.endAt && cloudState.status === 'running') {
+        const nowMs = Date.now()
+        const remaining = Math.max(0, Math.round((cloudState.endAt - nowMs) / 1000))
+        const total = cloudState.totalSeconds || getModeDurationSeconds(cloudState.mode || 'focus')
+
+        setMode(cloudState.mode || 'focus')
+        setTotalSeconds(total)
+
+        if (remaining > 0) {
+          setStatus('running')
+          setEndAt(cloudState.endAt)
+          setRemainingSeconds(remaining)
+          setElapsedSeconds(Math.max(0, total - remaining))
+          return
+        } else {
+          advancePhase({ isNaturalCompletion: true })
+          return
+        }
+      }
+
+      const persisted = await getActiveSession()
+      if (!isMounted || !persisted) return
+
+      const modeKey =
+        persisted.sessionType === 'short_break'
+          ? 'shortBreak'
+          : persisted.sessionType === 'long_break'
+          ? 'longBreak'
+          : 'focus'
+      const configuredTotal = (persisted.configuredDuration || 25) * 60
+
+      setMode(modeKey)
+      setTotalSeconds(configuredTotal)
+
+      if (persisted.status === 'paused') {
+        const remaining = persisted.remainingSecondsWhenPaused ?? configuredTotal
+        setStatus('paused')
+        setEndAt(null)
+        setRemainingSeconds(remaining)
+        setElapsedSeconds(Math.max(0, configuredTotal - remaining))
+      } else if (persisted.status === 'active' && persisted.expectedEndAt) {
+        const endMs = new Date(persisted.expectedEndAt).getTime()
+        const nowMs = Date.now()
+        const remaining = Math.max(0, Math.round((endMs - nowMs) / 1000))
+
+        if (remaining > 0) {
+          setStatus('running')
+          setEndAt(endMs)
+          setRemainingSeconds(remaining)
+          setElapsedSeconds(Math.max(0, configuredTotal - remaining))
+        } else {
+          advancePhase({ isNaturalCompletion: true })
+        }
+      }
+    }
+
+    restoreSession()
+    return () => {
+      isMounted = false
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Document Title & Favicon sync
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+
+    setFaviconActive(isRunning)
 
     if (isRunning) {
       const mins = Math.floor(remainingSeconds / 60)
@@ -702,655 +702,92 @@ export function TimerSessionProvider({ children }) {
 
     return () => {
       document.title = 'Nocturn — Calm Focus & Planning'
+      setFaviconActive(false)
     }
   }, [isRunning, isPaused, remainingSeconds, taskName, mode])
 
-  // 5. Start Session Action
-  const startTimer = async (
-    overrideTaskName,
-    overrideTaskId,
-    overrideMode,
-    overrideDurationMinutes,
-    overrideCurrentSession,
-    overrideTotalSessions
-  ) => {
-    // If a session was already active, terminate previous cleanly
-    const currentElapsed = canonicalStartTime
-      ? Math.max(0, Math.floor((getServerNowMs() - canonicalStartTime) / 1000))
-      : elapsedSeconds
-
-    if (mode === 'focus' && currentElapsed >= 60) {
-      const prevStartedAt =
-        activeSessionRef.current?.startedAt ||
-        new Date(getServerNowMs() - currentElapsed * 1000).toISOString()
-      recordPomodoroSession({
-        taskId: activeSessionRef.current?.taskId || null,
-        duration: Math.round((currentElapsed / 60) * 10) / 10,
-        durationSeconds: currentElapsed,
-        sessionType: 'focus',
-        startedAt: prevStartedAt,
-        taskTitle: taskName || '',
-        sessionId: `focus-${prevStartedAt}`,
-        completed: false,
-      }).catch(console.warn)
-    }
-
-    await clearActiveSession()
-
-    const targetMode = overrideMode || mode
-    const targetDurationMinutes =
-      Number(overrideDurationMinutes) || getModeDurationSeconds(targetMode) / 60
-    const targetTaskName = overrideTaskName !== undefined ? overrideTaskName : taskName
-    const targetTaskId =
-      overrideTaskId !== undefined ? overrideTaskId : activeSessionRef.current?.taskId || null
-    const targetCurrentSession =
-      Number(overrideCurrentSession) > 0 ? Number(overrideCurrentSession) : currentSession
-    const targetTotalSessions =
-      Number(overrideTotalSessions) > 0 ? Number(overrideTotalSessions) : Number(settings?.sessions) || 4
-
-    const nowMs = getServerNowMs()
-    const durationSeconds = Math.round(targetDurationMinutes * 60)
-    const endMs = nowMs + durationSeconds * 1000
-
-    const actionId = crypto.randomUUID()
-    const actionNow = Date.now()
-    lastActionIdRef.current = actionId
-    lastActionAtRef.current = actionNow
-
-    const sessionType =
-      targetMode === 'shortBreak'
-        ? 'short_break'
-        : targetMode === 'longBreak'
-        ? 'long_break'
-        : 'focus'
-
-    const sessionObj = {
-      sessionId: `session-${Date.now()}`,
-      taskId: targetTaskId,
-      taskName: targetTaskName,
-      sessionType,
-      configuredDuration: targetDurationMinutes,
-      startedAt: new Date(nowMs).toISOString(),
-      expectedEndAt: new Date(endMs).toISOString(),
-      pausedAt: null,
-      remainingSecondsWhenPaused: null,
-      elapsedSeconds: 0,
-      canonicalStartTime: nowMs,
-      status: 'active',
-      currentSession: targetCurrentSession,
-    }
-
-    updateActiveSession(sessionObj)
-    await recordActiveSession(sessionObj)
-
-    setMode(targetMode)
-    setTaskName(targetTaskName)
-    setCurrentSession(targetCurrentSession)
-    setTotalSeconds(durationSeconds)
-    setRemainingSeconds(durationSeconds)
-    setCanonicalStartTime(nowMs)
-    setElapsedSeconds(0)
-    setIsRunning(true)
-    setIsPaused(false)
-
-    if (updateTimerState) {
-      await updateTimerState({
-        actionId,
-        status: 'running',
-        mode: targetMode,
-        currentSession: targetCurrentSession,
-        totalSessions: targetTotalSessions,
-        canonicalStartTime: nowMs,
-        elapsedSeconds: 0,
-        configuredDuration: durationSeconds,
-        totalSeconds: durationSeconds,
-        remainingSecondsWhenPaused: null,
-        taskName: targetTaskName,
-        taskId: targetTaskId,
-        startedAt: new Date(nowMs).toISOString(),
-        lastActionAt: new Date(actionNow).toISOString(),
-      })
-    }
-  }
-
-  // 5b. Plan My Day -> Start Session with custom block duration, adjacent break, and cycle tracking
-  const startPlanSession = async ({
-    durationMinutes,
-    breakDurationMinutes,
-    sessionIndex = 1,
-    totalSessions = 4,
-    taskName: planTaskName = '',
-    taskId = null,
-    mode: planMode = 'focus',
-    planBlockId = null,
-    planId = null,
-    blockTimeRange = null,
-  }) => {
-    hasWarned5mRef.current = false
-    const nowMs = getServerNowMs()
-    const currentElapsed = canonicalStartTime
-      ? Math.max(0, Math.floor((nowMs - canonicalStartTime) / 1000))
-      : elapsedSeconds
-
-    // Terminate any previous focus session cleanly if >= 60s
-    if (mode === 'focus' && currentElapsed >= 60) {
-      const prevStartedAt =
-        activeSessionRef.current?.startedAt ||
-        new Date(nowMs - currentElapsed * 1000).toISOString()
-      recordPomodoroSession({
-        taskId: activeSessionRef.current?.taskId || null,
-        duration: Math.round((currentElapsed / 60) * 10) / 10,
-        durationSeconds: currentElapsed,
-        sessionType: 'focus',
-        startedAt: prevStartedAt,
-        taskTitle: taskName || '',
-        sessionId: `focus-${prevStartedAt}`,
-        completed: false,
-      }).catch(console.warn)
-    }
-
-    await clearActiveSession()
-
-    const targetMode = planMode || 'focus'
-    const targetDurationMinutes =
-      Number(durationMinutes) > 0 ? Number(durationMinutes) : getModeDurationSeconds(targetMode) / 60
-    const targetBreakDuration =
-      Number(breakDurationMinutes) > 0 ? Number(breakDurationMinutes) : Number(settings?.shortBreakDuration) || 5
-    const targetSession = Number(sessionIndex) > 0 ? Number(sessionIndex) : 1
-    const targetTotal =
-      Number(totalSessions) > 0 ? Number(totalSessions) : Number(settings?.sessions) || 4
-
-    const durationSeconds = Math.round(targetDurationMinutes * 60)
-    const endMs = nowMs + durationSeconds * 1000
-
-    const actionId = crypto.randomUUID()
-    const actionNow = Date.now()
-    lastActionIdRef.current = actionId
-    lastActionAtRef.current = actionNow
-
-    const sessionType =
-      targetMode === 'shortBreak'
-        ? 'short_break'
-        : targetMode === 'longBreak'
-        ? 'long_break'
-        : 'focus'
-
-    const sessionObj = {
-      sessionId: `session-${Date.now()}`,
-      taskId: taskId || null,
-      taskName: planTaskName || '',
-      sessionType,
-      configuredDuration: targetDurationMinutes,
-      startedAt: new Date(nowMs).toISOString(),
-      expectedEndAt: new Date(endMs).toISOString(),
-      pausedAt: null,
-      remainingSecondsWhenPaused: null,
-      elapsedSeconds: 0,
-      canonicalStartTime: nowMs,
-      status: 'active',
-      currentSession: targetSession,
-      planBlockId: planBlockId || null,
-      planId: planId || null,
-      blockTimeRange: blockTimeRange || null,
-    }
-
-    updateActiveSession(sessionObj)
-    await recordActiveSession(sessionObj)
-
-    setMode(targetMode)
-    setTaskName(planTaskName || '')
-    setCurrentSession(targetSession)
-    setTotalSeconds(durationSeconds)
-    setRemainingSeconds(durationSeconds)
-    setCanonicalStartTime(nowMs)
-    setElapsedSeconds(0)
-    setIsRunning(true)
-    setIsPaused(false)
-
-    const newTimerState = {
-      actionId,
-      status: 'running',
-      mode: targetMode,
-      currentSession: targetSession,
-      totalSessions: targetTotal,
-      canonicalStartTime: nowMs,
-      elapsedSeconds: 0,
-      configuredDuration: durationSeconds,
-      totalSeconds: durationSeconds,
-      remainingSecondsWhenPaused: null,
-      taskName: planTaskName || '',
-      taskId: taskId || null,
-      planBlockId: planBlockId || null,
-      planId: planId || null,
-      blockTimeRange: blockTimeRange || null,
-      startedAt: new Date(nowMs).toISOString(),
-      lastActionAt: new Date(actionNow).toISOString(),
-    }
-
-    if (updateSettings) {
-      await updateSettings({
-        focusDuration: targetMode === 'focus' ? targetDurationMinutes : Number(settings?.focusDuration) || 25,
-        shortBreakDuration: targetBreakDuration,
-        sessions: targetTotal,
-        timerState: newTimerState,
-      })
-    } else if (updateTimerState) {
-      await updateTimerState(newTimerState)
-    }
-  }
-
-  // 6. Pause Timer Action
-  const pauseTimer = async () => {
-    if (!isRunning) return
-
-    const nowMs = getServerNowMs()
-    const currentElapsed = canonicalStartTime
-      ? Math.max(0, Math.floor((nowMs - canonicalStartTime) / 1000))
-      : elapsedSeconds
-    const safeRemaining = Math.max(0, totalSeconds - currentElapsed)
-
-    const actionId = crypto.randomUUID()
-    const actionNow = Date.now()
-    lastActionIdRef.current = actionId
-    lastActionAtRef.current = actionNow
-
-    const sessionType =
-      mode === 'shortBreak' ? 'short_break' : mode === 'longBreak' ? 'long_break' : 'focus'
-
-    const sessionObj = {
-      ...(activeSessionRef.current || {}),
-      taskName,
-      sessionType,
-      configuredDuration: Math.round(totalSeconds / 60) || 25,
-      pausedAt: new Date(nowMs).toISOString(),
-      remainingSecondsWhenPaused: safeRemaining,
-      elapsedSeconds: currentElapsed,
-      canonicalStartTime: null,
-      status: 'paused',
-      currentSession,
-    }
-
-    updateActiveSession(sessionObj)
-    await recordActiveSession(sessionObj)
-
-    setIsRunning(false)
-    setIsPaused(true)
-    setCanonicalStartTime(null)
-    setElapsedSeconds(currentElapsed)
-    setRemainingSeconds(safeRemaining)
-
-    if (updateTimerState) {
-      await updateTimerState({
-        actionId,
-        status: 'paused',
-        mode,
-        currentSession,
-        totalSessions: Number(settings?.sessions) || 4,
-        canonicalStartTime: null,
-        elapsedSeconds: currentElapsed,
-        configuredDuration: totalSeconds,
-        totalSeconds,
-        remainingSecondsWhenPaused: safeRemaining,
-        taskName,
-        taskId: activeSessionRef.current?.taskId || null,
-        startedAt: activeSessionRef.current?.startedAt || null,
-        lastActionAt: new Date(actionNow).toISOString(),
-      })
-    }
-  }
-
-  // 7. Resume Timer Action
-  const resumeTimer = async () => {
-    const nowMs = getServerNowMs()
-    const currentElapsed = elapsedSeconds
-    const virtualStartTime = nowMs - currentElapsed * 1000
-    const safeRemaining = Math.max(0, totalSeconds - currentElapsed)
-    const endMs = nowMs + safeRemaining * 1000
-
-    const actionId = crypto.randomUUID()
-    const actionNow = Date.now()
-    lastActionIdRef.current = actionId
-    lastActionAtRef.current = actionNow
-
-    const sessionType =
-      mode === 'shortBreak' ? 'short_break' : mode === 'longBreak' ? 'long_break' : 'focus'
-
-    const sessionObj = {
-      ...(activeSessionRef.current || {}),
-      taskName,
-      sessionType,
-      configuredDuration: Math.round(totalSeconds / 60) || 25,
-      expectedEndAt: new Date(endMs).toISOString(),
-      pausedAt: null,
-      remainingSecondsWhenPaused: null,
-      elapsedSeconds: currentElapsed,
-      canonicalStartTime: virtualStartTime,
-      status: 'active',
-      currentSession,
-    }
-
-    updateActiveSession(sessionObj)
-    await recordActiveSession(sessionObj)
-
-    setCanonicalStartTime(virtualStartTime)
-    setIsRunning(true)
-    setIsPaused(false)
-    setRemainingSeconds(safeRemaining)
-
-    if (updateTimerState) {
-      await updateTimerState({
-        actionId,
-        status: 'running',
-        mode,
-        currentSession,
-        totalSessions: Number(settings?.sessions) || 4,
-        canonicalStartTime: virtualStartTime,
-        elapsedSeconds: currentElapsed,
-        configuredDuration: totalSeconds,
-        totalSeconds,
-        remainingSecondsWhenPaused: null,
-        taskName,
-        taskId: activeSessionRef.current?.taskId || null,
-        startedAt: activeSessionRef.current?.startedAt || new Date(virtualStartTime).toISOString(),
-        lastActionAt: new Date(actionNow).toISOString(),
-      })
-    }
-  }
-
-  // 8. Toggle Play/Pause
-  const togglePlayPause = () => {
-    if (isRunning) {
-      pauseTimer()
-    } else if (isPaused) {
-      resumeTimer()
-    } else {
-      startTimer()
-    }
-  }
-
-  // 9. Reset Timer Action
-  const resetTimer = async () => {
-    const nowMs = getServerNowMs()
-    const currentElapsed = canonicalStartTime
-      ? Math.max(0, Math.floor((nowMs - canonicalStartTime) / 1000))
-      : elapsedSeconds
-
-    // If resetting after active focus work (>= 60 seconds), save the actual focus session so progress is preserved
-    if (mode === 'focus' && currentElapsed >= 60) {
-      const sessionStartedAt =
-        activeSessionRef.current?.startedAt ||
-        new Date(nowMs - currentElapsed * 1000).toISOString()
-      recordPomodoroSession({
-        taskId: activeSessionRef.current?.taskId || null,
-        duration: Math.round((currentElapsed / 60) * 10) / 10,
-        durationSeconds: currentElapsed,
-        sessionType: 'focus',
-        startedAt: sessionStartedAt,
-        taskTitle: taskName || '',
-        sessionId: `focus-${sessionStartedAt}`,
-        completed: false,
-      }).catch((err) =>
-        console.warn('[TimerSessionProvider] Failed to record partial focus session on reset:', err)
-      )
-    }
-
-    setIsRunning(false)
-    setIsPaused(false)
-    setCanonicalStartTime(null)
-    setElapsedSeconds(0)
-
-    const actionId = crypto.randomUUID()
-    const actionNow = Date.now()
-    lastActionIdRef.current = actionId
-    lastActionAtRef.current = actionNow
-
-    await clearActiveSession()
-    updateActiveSession(null)
-
-    const durationSecs = getModeDurationSeconds(mode)
-    setRemainingSeconds(durationSecs)
-    setTotalSeconds(durationSecs)
-
-    if (updateTimerState) {
-      await updateTimerState({
-        actionId,
-        status: 'idle',
-        mode,
-        currentSession,
-        totalSessions: Number(settings?.sessions) || 4,
-        canonicalStartTime: null,
-        elapsedSeconds: 0,
-        configuredDuration: durationSecs,
-        totalSeconds: durationSecs,
-        remainingSecondsWhenPaused: durationSecs,
-        taskName: '',
-        taskId: null,
-        startedAt: null,
-        lastActionAt: new Date(actionNow).toISOString(),
-      })
-    }
-  }
-
-  // 10. Dedicated Terminate Focus Session Action (clearly distinct from Reset, stopped/idle, does NOT start next session)
-  const terminateTimer = async () => {
-    const nowMs = getServerNowMs()
-    const currentElapsed = canonicalStartTime
-      ? Math.max(0, Math.floor((nowMs - canonicalStartTime) / 1000))
-      : elapsedSeconds
-
-    // Accurately record actual runtime (>= 60s) for partial/terminated focus sessions without counting planned minutes
-    if (mode === 'focus' && currentElapsed >= 60) {
-      const sessionStartedAt =
-        activeSessionRef.current?.startedAt ||
-        new Date(nowMs - currentElapsed * 1000).toISOString()
-      recordPomodoroSession({
-        taskId: activeSessionRef.current?.taskId || null,
-        duration: Math.round((currentElapsed / 60) * 10) / 10,
-        durationSeconds: currentElapsed,
-        sessionType: 'focus',
-        startedAt: sessionStartedAt,
-        taskTitle: taskName || '',
-        sessionId: `focus-${sessionStartedAt}`,
-        completed: false,
-      }).catch((err) =>
-        console.warn('[TimerSessionProvider] Failed to record partial focus session on terminate:', err)
-      )
-    }
-
-    await clearActiveSession()
-    updateActiveSession(null)
-
-    setIsRunning(false)
-    setIsPaused(false)
-    setCanonicalStartTime(null)
-    setElapsedSeconds(0)
-
-    const actionId = crypto.randomUUID()
-    const actionNow = Date.now()
-    lastActionIdRef.current = actionId
-    lastActionAtRef.current = actionNow
-
-    const durationSecs = getModeDurationSeconds(mode)
-    setRemainingSeconds(durationSecs)
-    setTotalSeconds(durationSecs)
-
-    if (updateTimerState) {
-      await updateTimerState({
-        actionId,
-        status: 'idle',
-        mode,
-        currentSession,
-        totalSessions: Number(settings?.sessions) || 4,
-        canonicalStartTime: null,
-        elapsedSeconds: 0,
-        configuredDuration: durationSecs,
-        totalSeconds: durationSecs,
-        remainingSecondsWhenPaused: durationSecs,
-        taskName: '',
-        taskId: null,
-        startedAt: null,
-        lastActionAt: new Date(actionNow).toISOString(),
-      })
-    }
-  }
-
-  // 11. Skip / Next Session Action
-  const skipTimer = async () => {
-    const nowMs = getServerNowMs()
-    const currentElapsed = canonicalStartTime
-      ? Math.max(0, Math.floor((nowMs - canonicalStartTime) / 1000))
-      : elapsedSeconds
-
-    if (mode === 'focus' && currentElapsed >= 60) {
-      const sessionStartedAt =
-        activeSessionRef.current?.startedAt ||
-        new Date(nowMs - currentElapsed * 1000).toISOString()
-      recordPomodoroSession({
-        taskId: activeSessionRef.current?.taskId || null,
-        duration: Math.round((currentElapsed / 60) * 10) / 10,
-        durationSeconds: currentElapsed,
-        sessionType: 'focus',
-        startedAt: sessionStartedAt,
-        taskTitle: taskName || '',
-        sessionId: `focus-${sessionStartedAt}`,
-        completed: false,
-      }).catch(console.warn)
-    }
-
-    setIsRunning(false)
-    setIsPaused(false)
-    setCanonicalStartTime(null)
-    setElapsedSeconds(0)
-
-    const actionId = crypto.randomUUID()
-    const actionNow = Date.now()
-    lastActionIdRef.current = actionId
-    lastActionAtRef.current = actionNow
-
-    await clearActiveSession()
-    updateActiveSession(null)
-
-    const totalCycles = Number(settings?.sessions) || 4
-
-    let nextMode
-    let nextSession
-
-    if (mode === 'focus') {
-      nextMode = currentSession < totalCycles ? 'shortBreak' : 'longBreak'
-      nextSession = currentSession
-    } else if (mode === 'shortBreak') {
-      nextMode = 'focus'
-      nextSession = currentSession < totalCycles ? currentSession + 1 : 1
-    } else {
-      nextMode = 'focus'
-      nextSession = 1
-    }
-
-    const nextDuration = getModeDurationSeconds(nextMode)
-
-    setMode(nextMode)
-    setCurrentSession(nextSession)
-    setTotalSeconds(nextDuration)
-    setRemainingSeconds(nextDuration)
-
-    if (updateTimerState) {
-      await updateTimerState({
-        actionId,
-        status: 'idle',
-        mode: nextMode,
-        currentSession: nextSession,
-        totalSessions: totalCycles,
-        canonicalStartTime: null,
-        elapsedSeconds: 0,
-        configuredDuration: nextDuration,
-        totalSeconds: nextDuration,
-        remainingSecondsWhenPaused: nextDuration,
-        taskName: '',
-        taskId: null,
-        startedAt: null,
-        lastActionAt: new Date(actionNow).toISOString(),
-      })
-    }
-  }
-
-  // 11. Attached Task Name Change handler
-  const handleSetTaskName = useCallback(
-    (newTaskName) => {
-      setTaskName(newTaskName)
-      const durationSecs = getModeDurationSeconds(mode)
-      const stateToUpdate = settings?.timerState || {
-        actionId: crypto.randomUUID(),
-        status: isRunning ? 'running' : isPaused ? 'paused' : 'idle',
-        mode,
-        currentSession,
-        totalSessions: Number(settings?.sessions) || 4,
-        canonicalStartTime,
-        elapsedSeconds,
-        configuredDuration: totalSeconds || durationSecs,
-        totalSeconds: totalSeconds || durationSecs,
-        remainingSecondsWhenPaused: remainingSeconds,
-        taskId: null,
+  // Handle post-session completion modal actions
+  const handleCompleteSessionModal = async ({ sessionId, note, markTaskDone, nextAction }) => {
+    if (note && sessionId) {
+      try {
+        await db.pomodoroSessions.update(sessionId, { notes: note })
+      } catch (err) {
+        console.warn('[TimerSessionProvider] update session note error:', err)
       }
+    }
 
-      if (updateTimerState) {
-        updateTimerState({
-          ...stateToUpdate,
-          taskName: newTaskName,
-          lastActionAt: new Date().toISOString(),
-        })
+    if (markTaskDone && taskId) {
+      try {
+        const taskObj = await db.tasks.get(taskId)
+        if (taskObj && !taskObj.completed) {
+          const updatedTask = {
+            ...taskObj,
+            completed: true,
+            completedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+          await db.tasks.update(taskId, {
+            completed: true,
+            completedAt: updatedTask.completedAt,
+            updatedAt: updatedTask.updatedAt,
+          })
+          const row = mapTaskToRow(updatedTask, taskObj.userId)
+          if (row) enqueueMutation('upsert', 'tasks', row)
+        }
+      } catch (tErr) {
+        console.warn('[TimerSessionProvider] complete task error:', tErr)
       }
-    },
-    [
-      settings?.timerState,
-      settings?.sessions,
-      mode,
-      currentSession,
-      canonicalStartTime,
-      elapsedSeconds,
-      totalSeconds,
-      remainingSeconds,
-      isRunning,
-      isPaused,
-      getModeDurationSeconds,
-      updateTimerState,
-    ]
-  )
+    }
+
+    setCompletionModalData(null)
+
+    if (nextAction === 'break') {
+      startTimer(undefined, undefined, mode.startsWith('short') || mode.startsWith('long') ? mode : 'shortBreak')
+    } else if (nextAction === 'next-focus') {
+      startTimer(undefined, undefined, 'focus')
+    } else if (nextAction === 'plan') {
+      navigate('/plan')
+    }
+  }
+
+  const contextValue = {
+    mode,
+    status,
+    isRunning,
+    isPaused,
+    remainingSeconds,
+    totalSeconds,
+    elapsedSeconds,
+    currentSession: completedFocusCount + 1,
+    completedFocusCount,
+    taskName,
+    setTaskName,
+    taskId,
+    setTaskId,
+    startTimer,
+    pauseTimer,
+    resumeTimer,
+    togglePlayPause,
+    resetTimer,
+    skipTimer,
+    skipSession: skipTimer,
+    terminateTimer: resetTimer,
+    applyPreset,
+    startPlanSession: startTimer,
+    completionModalData,
+    closeCompletionModal: () => setCompletionModalData(null),
+    handleCompleteSessionModal,
+  }
 
   return (
-    <TimerSessionContext.Provider
-      value={{
-        mode,
-        setMode,
-        isRunning,
-        isPaused,
-        remainingSeconds,
-        totalSeconds,
-        currentSession,
-        taskName,
-        setTaskName: handleSetTaskName,
-        startTimer,
-        togglePlayPause,
-        pauseTimer,
-        resumeTimer,
-        resetTimer,
-        skipTimer,
-        terminateTimer,
-        startPlanSession,
-        activeSession,
-        planBlockId: activeSession?.planBlockId || null,
-        planId: activeSession?.planId || null,
-        blockTimeRange: activeSession?.blockTimeRange || null,
-        justCompletedBlockId,
-        setJustCompletedBlockId,
-      }}
-    >
+    <TimerSessionContext.Provider value={contextValue}>
       {children}
       <SessionCompletionModal
         isOpen={Boolean(completionModalData)}
         sessionData={completionModalData}
         onCompleteSession={handleCompleteSessionModal}
+        onClose={() => setCompletionModalData(null)}
       />
     </TimerSessionContext.Provider>
   )
 }
-

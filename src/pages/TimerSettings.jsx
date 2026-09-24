@@ -28,6 +28,7 @@ export default function TimerSettings() {
     sessions: Number(settings?.sessions) || 4,
     autoStartBreaks: Boolean(settings?.autoStartBreaks),
     autoStartPomo: Boolean(settings?.autoStartPomo),
+    showSessionSummary: Boolean(settings?.showSessionSummary),
   }))
 
   // Render-phase sync when context settings update from external changes (only if user hasn't edited)
@@ -38,7 +39,8 @@ export default function TimerSettings() {
       settings.longBreakDuration !== prevSettings.longBreakDuration ||
       settings.sessions !== prevSettings.sessions ||
       settings.autoStartBreaks !== prevSettings.autoStartBreaks ||
-      settings.autoStartPomo !== prevSettings.autoStartPomo
+      settings.autoStartPomo !== prevSettings.autoStartPomo ||
+      settings.showSessionSummary !== prevSettings.showSessionSummary
     )
   ) {
     setPrevSettings(settings)
@@ -49,6 +51,7 @@ export default function TimerSettings() {
       sessions: Number(settings.sessions) || 4,
       autoStartBreaks: Boolean(settings.autoStartBreaks),
       autoStartPomo: Boolean(settings.autoStartPomo),
+      showSessionSummary: Boolean(settings.showSessionSummary),
     })
   }
 
@@ -59,7 +62,8 @@ export default function TimerSettings() {
       localSettings.longBreakDuration !== (Number(settings?.longBreakDuration) || 15) ||
       localSettings.sessions !== (Number(settings?.sessions) || 4) ||
       localSettings.autoStartBreaks !== Boolean(settings?.autoStartBreaks) ||
-      localSettings.autoStartPomo !== Boolean(settings?.autoStartPomo)
+      localSettings.autoStartPomo !== Boolean(settings?.autoStartPomo) ||
+      localSettings.showSessionSummary !== Boolean(settings?.showSessionSummary)
     )
   }, [localSettings, settings])
 
@@ -280,6 +284,21 @@ export default function TimerSettings() {
               setLocalSettings((prev) => ({
                 ...prev,
                 autoStartPomo: checked,
+              }))
+            }
+          />
+        </Card>
+
+        {/* Show Session Summary Toggle */}
+        <Card className="p-4 sm:p-5">
+          <Switch
+            label="Show Session Summary"
+            description="Display accomplishment prompt overlay after each completed focus session (disabled by default)."
+            checked={localSettings.showSessionSummary}
+            onChange={(checked) =>
+              setLocalSettings((prev) => ({
+                ...prev,
+                showSessionSummary: checked,
               }))
             }
           />

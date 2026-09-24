@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import { useTasks } from '../context/useTasks'
+import { formatDateKey } from '../services/calendarService'
 import {
   calculateProductivityStats,
   calculateDailyHeatmap,
