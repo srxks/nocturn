@@ -10,6 +10,7 @@ import {
   deleteAllVocabWords,
   updateWordQuizResult,
   getReviewQueueWords,
+  completeDailyReview,
   getWordStatus,
 } from '../services/vocabService'
 import { generateDailyVocab } from '../services/geminiVocabService'
@@ -151,6 +152,24 @@ export function useVocab() {
     if (!db || !db.vocab) return []
     return await getReviewQueueWords(userId, 10)
   }, [userId]) || []
+
+  const isReviewCompletedToday = useMemo(() => {
+    if (todayVocabLog?.reviewCompleted === true) return true
+    try {
+      const completedFlagKey = `nocturn_review_completed_${userId || 'guest'}_${todayKey}`
+      if (typeof localStorage !== 'undefined') {
+        if (
+          localStorage.getItem(completedFlagKey) === 'true' ||
+          localStorage.getItem(`nocturn_review_completed_guest_${todayKey}`) === 'true'
+        ) {
+          return true
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return false
+  }, [todayVocabLog, userId, todayKey])
 
   // 5. Generate Brand New Words Action via Gemini AI (guaranteed brand new words every time)
   const generateNewWords = useCallback(
@@ -331,13 +350,15 @@ export function useVocab() {
     sessionCompletedIdsKey,
     dailyLimit,
     reviewQueue,
-    reviewCount: reviewQueue.length,
+    reviewCount: isReviewCompletedToday ? 0 : reviewQueue.length,
+    isReviewCompletedToday,
     isGenerating,
     generationError,
     fetchOrGenerateDailyWords,
     generateNewWords,
     markWordLearned,
     recordQuizResult,
+    completeTodayReview: () => completeDailyReview(userId),
     getWordStatus,
     addWord,
     editWord,

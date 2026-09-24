@@ -18,7 +18,7 @@ import { Card, Badge, Button, Progress } from '../components/ui'
 export default function VocabReview() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { allWords, recordQuizResult, dailyLimit } = useVocab()
+  const { allWords, recordQuizResult, completeTodayReview, isReviewCompletedToday, dailyLimit } = useVocab()
 
   const [quizWords, setQuizWords] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -155,6 +155,7 @@ export default function VocabReview() {
       setIsAnswered(false)
     } else {
       setIsCompleted(true)
+      completeTodayReview().catch(console.warn)
       try {
         if (typeof localStorage !== 'undefined') {
           localStorage.setItem(reviewCompletedKey, 'true')
@@ -180,24 +181,24 @@ export default function VocabReview() {
     )
   }
 
-  // If no words due
-  if (quizWords.length === 0 && !isCompleted) {
+  // If no words due or already completed today
+  if ((quizWords.length === 0 || isReviewCompletedToday) && !isCompleted) {
     return (
       <div className="max-w-xl mx-auto py-12 space-y-6 text-center">
-        <div className="w-16 h-16 rounded-3xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto shadow-[0_0_25px_rgba(251,191,36,0.3)]">
-          <RefreshCw className="w-8 h-8" />
+        <div className="w-16 h-16 rounded-3xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto shadow-[0_0_25px_rgba(16,185,129,0.3)]">
+          <CheckCircle2 className="w-8 h-8" />
         </div>
         <div className="space-y-2">
           <h2 className="text-2xl font-extrabold text-white">
-            No Words Due for Review
+            All Caught Up for Today!
           </h2>
           <p className="text-sm text-nocturn-muted max-w-md mx-auto">
-            You've completed all review queue items for today! Check back later or learn new words.
+            You've completed your daily vocabulary review. Your spaced repetition queue is clear for today.
           </p>
         </div>
         <button
           onClick={() => navigate('/vocab')}
-          className="px-6 py-3 rounded-2xl bg-nocturn-accent text-black font-bold hover:bg-nocturn-accent-bright transition-colors"
+          className="px-6 py-3 rounded-2xl bg-nocturn-accent text-white font-bold hover:bg-nocturn-accent-bright transition-colors cursor-pointer"
         >
           Back to Vocab Home
         </button>

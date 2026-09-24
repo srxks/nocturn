@@ -312,10 +312,12 @@ export default function Vocab() {
               ) : (
                 <div className="space-y-1">
                   <span className="text-xs font-medium text-white block">
-                    No reviews due today
+                    {allWords.length > 0 ? "You're all caught up for today!" : 'No reviews due today'}
                   </span>
                   <span className="text-[11px] text-nocturn-muted block">
-                    Words appear here when spaced repetition refreshes are needed.
+                    {allWords.length > 0
+                      ? 'Spaced repetition reviews will refresh tomorrow.'
+                      : 'Words appear here when spaced repetition refreshes are needed.'}
                   </span>
                 </div>
               )}

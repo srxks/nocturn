@@ -304,14 +304,60 @@ function shuffleArray(arr, rng) {
   return result
 }
 
+export async function completeDailyReview(userId = null) {
+  try {
+    const today = getTodayDateKey()
+    const sessionUserId = getActiveUserId(userId)
+    const existing = db.dailyVocabLogs ? await db.dailyVocabLogs.get(today) : null
+
+    const updated = {
+      ...(existing || { date: today, wordIds: [] }),
+      userId: sessionUserId,
+      reviewCompleted: true,
+      reviewedAt: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    if (db.dailyVocabLogs) {
+      await db.dailyVocabLogs.put(updated)
+    }
+
+    const completedFlagKey = `nocturn_review_completed_${sessionUserId || 'guest'}_${today}`
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(completedFlagKey, 'true')
+      localStorage.setItem(`nocturn_review_completed_guest_${today}`, 'true')
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(completedFlagKey, 'true')
+      sessionStorage.setItem(`nocturn_review_completed_guest_${today}`, 'true')
+    }
+
+    return true
+  } catch (err) {
+    console.error('Failed to mark daily review completed:', err)
+    return false
+  }
+}
+
 export async function getReviewQueueWords(userId = null, limit = 10) {
   try {
     const today = getTodayDateKey()
     const sessionUserId = getActiveUserId(userId)
 
-    // Check if user has explicitly completed their review session for today
+    // 0. Check if user has explicitly completed their review session for today in Dexie or storage
+    if (db && db.dailyVocabLogs) {
+      const todayLog = await db.dailyVocabLogs.get(today)
+      if (todayLog?.reviewCompleted === true) {
+        return []
+      }
+    }
+
     const completedFlagKey = `nocturn_review_completed_${sessionUserId || 'guest'}_${today}`
-    if (typeof localStorage !== 'undefined' && localStorage.getItem(completedFlagKey) === 'true') {
+    if (
+      typeof localStorage !== 'undefined' &&
+      (localStorage.getItem(completedFlagKey) === 'true' ||
+        localStorage.getItem(`nocturn_review_completed_guest_${today}`) === 'true')
+    ) {
       return []
     }
 

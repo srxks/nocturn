@@ -22,6 +22,9 @@ import {
   Maximize2,
   Sun,
   Palette,
+  BarChart3,
+  CalendarClock,
+  Inbox,
 } from 'lucide-react'
 import { useTasks } from '../../context/useTasks'
 import { useVocab } from '../../hooks/useVocab'
@@ -35,13 +38,49 @@ import {
 
 const NAVIGATION_ACTIONS = [
   {
+    id: 'nav-myday',
+    type: 'action',
+    category: 'navigation',
+    title: 'Go to My Day',
+    subtitle: 'Focus on today’s active priorities',
+    icon: Sun,
+    action: (navigate) => navigate('/tasks?view=myday'),
+  },
+  {
+    id: 'nav-inbox',
+    type: 'action',
+    category: 'navigation',
+    title: 'Go to Inbox',
+    subtitle: 'Capture and triage tasks',
+    icon: Inbox,
+    action: (navigate) => navigate('/tasks?view=inbox'),
+  },
+  {
+    id: 'nav-upcoming',
+    type: 'action',
+    category: 'navigation',
+    title: 'Go to Upcoming Tasks',
+    subtitle: 'Chronological timeline of scheduled tasks',
+    icon: CalendarClock,
+    action: (navigate) => navigate('/tasks?view=upcoming'),
+  },
+  {
+    id: 'nav-stats',
+    type: 'action',
+    category: 'navigation',
+    title: 'Go to Statistics',
+    subtitle: 'Focus analytics, consistency heatmap, and session logs',
+    icon: BarChart3,
+    action: (navigate) => navigate('/statistics'),
+  },
+  {
     id: 'nav-tasks',
     type: 'action',
     category: 'navigation',
-    title: 'Go to Tasks',
-    subtitle: 'Manage all tasks and daily to-do lists',
+    title: 'Go to All Tasks',
+    subtitle: 'Manage all tasks and to-do lists',
     icon: CheckSquare,
-    action: (navigate) => navigate('/tasks'),
+    action: (navigate) => navigate('/tasks?view=all'),
   },
   {
     id: 'nav-calendar',
