@@ -4,6 +4,8 @@ import { Play, Pause, RotateCcw, SkipForward, Square } from 'lucide-react'
 export default function TimerControls({
   isRunning,
   isPaused = false,
+  isCompleted = false,
+  mode = 'focus',
   onTogglePlayPause,
   onReset,
   onSkip,
@@ -31,8 +33,12 @@ export default function TimerControls({
           whileTap={{ scale: 0.94 }}
           type="button"
           onClick={onTogglePlayPause}
-          aria-label={isRunning ? 'Pause timer' : 'Start timer'}
-          className="w-16 h-16 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white flex items-center justify-center cursor-pointer shadow-[0_0_24px_rgba(var(--color-nocturn-accent-rgb),0.35)] transition-colors"
+          aria-label={isRunning ? 'Pause timer' : isCompleted ? (mode === 'focus' ? 'Start break' : 'Start focus') : 'Start timer'}
+          className={`w-16 h-16 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white flex items-center justify-center cursor-pointer transition-all ${
+            isCompleted
+              ? 'shadow-[0_0_30px_rgba(var(--color-nocturn-accent-rgb),0.55)] ring-2 ring-nocturn-accent ring-offset-2 ring-offset-[#07070a]'
+              : 'shadow-[0_0_24px_rgba(var(--color-nocturn-accent-rgb),0.35)]'
+          }`}
         >
           <AnimatePresence mode="wait" initial={false}>
             {isRunning ? (
@@ -72,6 +78,22 @@ export default function TimerControls({
           <SkipForward className="w-4 h-4 stroke-[2]" />
         </motion.button>
       </div>
+
+      {/* Explicit Next Phase Action Prompt when Session Completed */}
+      {isCompleted && (
+        <motion.button
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          type="button"
+          onClick={onTogglePlayPause}
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-nocturn-accent-bright bg-nocturn-accent/15 hover:bg-nocturn-accent/25 border border-nocturn-accent/35 transition-all cursor-pointer shadow-[0_0_14px_rgba(var(--color-nocturn-accent-rgb),0.2)]"
+        >
+          <Play className="w-3.5 h-3.5 fill-current" />
+          <span>{mode === 'focus' ? 'Start Break' : 'Start Focus'}</span>
+        </motion.button>
+      )}
 
       {/* Dedicated End Session Action */}
       {(isRunning || isPaused) && onTerminate && (

@@ -23,6 +23,7 @@ import {
 import { useTasks } from '../context/useTasks'
 import { useTimerSession } from '../context/useTimerSession'
 import { useToast } from '../context/useToast'
+import { db } from '../db/db'
 import { generateDailyPlan } from '../services/geminiPlannerService'
 import { savePlanSchedule, getPlanSchedule, togglePlanBlockCompleted } from '../services/plannerPersistenceService'
 import { formatDateKey } from '../services/calendarService'
@@ -616,7 +617,7 @@ export default function PlanMyDay() {
       minutes: 0,
       lateBlocksCount: 0,
     }
-  }, [plan?.blocks])
+  }, [plan])
 
   // Shift remaining unfinished blocks to start right now
   const handleShiftScheduleToNow = async () => {

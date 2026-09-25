@@ -47,7 +47,7 @@ export function parseNaturalTaskInput(input) {
   const now = new Date()
 
   // 1. Labels / Hashtags extraction: e.g. #college, #coding, #study
-  const tagMatches = text.match(/(?:^|\s)#([a-zA-Z0-9_\-]+)/g)
+  const tagMatches = text.match(/(?:^|\s)#([a-zA-Z0-9_-]+)/g)
   if (tagMatches) {
     for (const match of tagMatches) {
       const tag = match.trim().replace(/^#/, '').toLowerCase()

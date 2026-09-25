@@ -1,21 +1,34 @@
 import { useState, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Wifi, WifiOff, RefreshCw, AlertTriangle } from 'lucide-react'
 import { drainSyncQueue } from '../../services/syncQueue'
-import { useTheme } from '../../context/useTheme'
 import { useNetworkState, ConnectionState } from '../../services/networkStateService'
 
 export default function GlobalOfflineBanner() {
-  const { uiStyle } = useTheme()
-  const isAngular = uiStyle === 'angular'
   const { state, isSyncing, hasError } = useNetworkState()
 
   const [showSyncedNotice, setShowSyncedNotice] = useState(false)
   const [showOfflineNotice, setShowOfflineNotice] = useState(false)
+  const [syncTimedOut, setSyncTimedOut] = useState(false)
   const prevSyncingRef = useRef(isSyncing)
   const prevStateRef = useRef(state)
 
   const isOffline = state === ConnectionState.OFFLINE
   const isConnectionProblem = hasError && !isOffline
+
+  // Limit syncing banner duration to max 4 seconds to never get stuck
+  useEffect(() => {
+    if (!isSyncing) return
+    const syncTimer = setTimeout(() => {
+      setSyncTimedOut(true)
+    }, 4000)
+    return () => {
+      clearTimeout(syncTimer)
+      setSyncTimedOut(false)
+    }
+  }, [isSyncing])
+
+  const showSyncingNotice = isSyncing && !syncTimedOut
 
   // Show temporary transient notices for state changes (Online, Offline, Error)
   useEffect(() => {
@@ -32,9 +45,11 @@ export default function GlobalOfflineBanner() {
       setShowOfflineNotice(true)
       timer = setTimeout(() => {
         setShowOfflineNotice(false)
-      }, 4000)
-    } else if ((wasSyncing && !isSyncing && state === ConnectionState.ONLINE) ||
-        (wasErrorOrOffline && state === ConnectionState.ONLINE)) {
+      }, 3500)
+    } else if (
+      (wasSyncing && !isSyncing && state === ConnectionState.ONLINE) ||
+      (wasErrorOrOffline && state === ConnectionState.ONLINE)
+    ) {
       setShowSyncedNotice(true)
       setShowOfflineNotice(false)
       timer = setTimeout(() => {
@@ -62,53 +77,45 @@ export default function GlobalOfflineBanner() {
     return () => window.removeEventListener('online', handleOnline)
   }, [])
 
-  // Show banner while syncing, or during transient offline/synced notice duration
-  if (!isSyncing && !showOfflineNotice && !showSyncedNotice) {
-    return null
-  }
+  const isVisible = showSyncingNotice || showOfflineNotice || showSyncedNotice
 
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-20 sm:bottom-5 left-1/2 -translate-x-1/2 z-[85] pointer-events-none transition-all duration-300 select-none"
+      className="fixed bottom-20 sm:bottom-5 left-1/2 -translate-x-1/2 z-[85] pointer-events-none select-none"
     >
-      {isSyncing ? (
-        <div
-          className={`flex items-center gap-2 px-3.5 py-1.5 bg-sky-500/15 border border-sky-500/35 text-sky-300 text-xs font-semibold shadow-lg backdrop-blur-md ${
-            isAngular ? 'rounded-none font-mono text-[10px] angular-chamfer-sm' : 'rounded-full'
-          }`}
-        >
-          <RefreshCw className="w-3.5 h-3.5 text-sky-400 animate-spin shrink-0" />
-          <span>{isAngular ? '[ SYNCING // CLOUD ]' : 'Syncing...'}</span>
-        </div>
-      ) : isOffline ? (
-        <div
-          className={`flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/15 border border-amber-500/35 text-amber-300 text-xs font-semibold shadow-lg backdrop-blur-md ${
-            isAngular ? 'rounded-none font-mono text-[10px] angular-chamfer-sm' : 'rounded-full'
-          }`}
-        >
-          <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span>{isAngular ? '[ OFFLINE // LOCAL_MODE ]' : 'Offline • Working locally'}</span>
-        </div>
-      ) : isConnectionProblem ? (
-        <div
-          className={`flex items-center gap-2 px-3.5 py-1.5 bg-orange-500/15 border border-orange-500/35 text-orange-300 text-xs font-semibold shadow-lg backdrop-blur-md ${
-            isAngular ? 'rounded-none font-mono text-[10px] angular-chamfer-sm' : 'rounded-full'
-          }`}
-        >
-          <AlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-          <span>{isAngular ? '[ CONNECTION PROBLEM // RETRYING ]' : 'Connection problem • Retrying...'}</span>
-        </div>
-      ) : showSyncedNotice ? (
-        <div
-          className={`flex items-center gap-2 px-3.5 py-1.5 bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-semibold shadow-lg backdrop-blur-md ${
-            isAngular ? 'rounded-none font-mono text-[10px] angular-chamfer-sm' : 'rounded-full'
-          }`}
-        >
-          <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span>{isAngular ? '[ ONLINE // SYNCED ]' : 'Online / Synced'}</span>
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {isVisible && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+          >
+            {showSyncingNotice ? (
+              <div className="flex items-center gap-2 px-3.5 py-1.5 bg-sky-500/15 border border-sky-500/35 text-sky-300 text-xs font-semibold shadow-lg backdrop-blur-md rounded-full">
+                <RefreshCw className="w-3.5 h-3.5 text-sky-400 animate-spin shrink-0" />
+                <span>Syncing...</span>
+              </div>
+            ) : isOffline || showOfflineNotice ? (
+              <div className="flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/15 border border-amber-500/35 text-amber-300 text-xs font-semibold shadow-lg backdrop-blur-md rounded-full">
+                <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Offline • Working locally</span>
+              </div>
+            ) : isConnectionProblem ? (
+              <div className="flex items-center gap-2 px-3.5 py-1.5 bg-orange-500/15 border border-orange-500/35 text-orange-300 text-xs font-semibold shadow-lg backdrop-blur-md rounded-full">
+                <AlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                <span>Connection problem • Retrying...</span>
+              </div>
+            ) : showSyncedNotice ? (
+              <div className="flex items-center gap-2 px-3.5 py-1.5 bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-semibold shadow-lg backdrop-blur-md rounded-full">
+                <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Online / Synced</span>
+              </div>
+            ) : null}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

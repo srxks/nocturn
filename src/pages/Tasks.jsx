@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import TaskListNav from '../components/tasks/TaskListNav'
@@ -128,6 +128,10 @@ export default function Tasks() {
   const [localSelectedTaskIds, setLocalSelectedTaskIds] = useState([])
   const selectedTaskIds = contextSelectedTaskIds !== undefined ? contextSelectedTaskIds : localSelectedTaskIds
   const setSelectedTaskIds = contextSetSelectedTaskIds || setLocalSelectedTaskIds
+
+  const handleCloseDrawer = useCallback(() => {
+    setSelectedTask(null)
+  }, [setSelectedTask])
 
   const [isCompletedOpen, setIsCompletedOpen] = useState(false)
   const [isMobileQuickAddOpen, setIsMobileQuickAddOpen] = useState(false)
@@ -963,10 +967,11 @@ export default function Tasks() {
       <AnimatePresence>
         {selectedTask && (
           <TaskDetailDrawer
+            key={selectedTask.id}
             task={selectedTask}
             lists={lists}
             allTasks={tasks}
-            onClose={() => setSelectedTask(null)}
+            onClose={handleCloseDrawer}
             onUpdateTask={updateTask}
             onToggleComplete={toggleTask}
             onDeleteTask={deleteTask}

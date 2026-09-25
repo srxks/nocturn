@@ -463,7 +463,9 @@ export function startRealtime(userId) {
           if (_channel && supabase) {
             try {
               supabase.removeChannel(_channel)
-            } catch {}
+            } catch {
+              // Ignore channel removal failure
+            }
             _channel = null
           }
           if (_currentUserId) {

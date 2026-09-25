@@ -4,10 +4,8 @@ import {
   Moon,
   Sparkles,
   CheckCircle2,
-  Calendar,
   ArrowRight,
   Star,
-  Clock,
   X,
 } from 'lucide-react'
 

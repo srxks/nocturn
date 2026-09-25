@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCheck,
@@ -8,7 +8,6 @@ import {
   Tag,
   Trash2,
   X,
-  Check,
 } from 'lucide-react'
 import { useTasks } from '../../context/useTasks'
 import { formatDateKey } from '../../services/calendarService'
@@ -34,9 +33,14 @@ export default function BulkActionBar({
   const [labelInput, setLabelInput] = useState('')
 
   const hasSelection = Boolean(selectedTaskIds && selectedTaskIds.length > 0)
-  if (typeof document !== 'undefined') {
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
     document.body.dataset.bulkActive = hasSelection ? 'true' : 'false'
-  }
+    return () => {
+      document.body.dataset.bulkActive = 'false'
+    }
+  }, [hasSelection])
 
   if (!selectedTaskIds || selectedTaskIds.length === 0) return null
 
@@ -182,6 +186,7 @@ export default function BulkActionBar({
                     type="date"
                     value={customDate}
                     onChange={(e) => {
+                      setCustomDate(e.target.value)
                       if (e.target.value) handleReschedule(e.target.value)
                     }}
                     className="w-full bg-nocturn-surface text-white text-xs p-1.5 rounded-lg border border-nocturn-border outline-none font-mono"

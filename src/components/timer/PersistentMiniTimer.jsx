@@ -107,10 +107,10 @@ export default function PersistentMiniTimer() {
   // lg+: Fixed bottom 24px, right: if drawer open -> calc(420px + 24px) = 444px, else 24px
   // md: Fixed bottom 24px, right 16px, width: if bulk active -> 180px, else 220px, opacity: if drawer open -> 0.4
   // sm/xs: Fixed bottom calc(64px + env(safe-area-inset-bottom, 0px) + 12px), centered 100% - 24px wide, opacity: if drawer open -> 0.4
-  let dynamicWidth = 260
-  let dynamicHeight = 64
-  let dynamicOpacity = 1
-  let dynamicStyle = {}
+  let dynamicWidth
+  let dynamicHeight
+  let dynamicOpacity
+  let dynamicStyle
 
   if (isLg) {
     dynamicWidth = isHovered ? 290 : 260

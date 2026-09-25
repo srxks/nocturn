@@ -19,7 +19,6 @@ import {
   CheckCircle2,
   Flame,
   Clock,
-  Calendar,
   ChevronLeft,
   ChevronRight,
   TrendingUp,
@@ -36,9 +35,10 @@ export default function Statistics() {
   const [periodOffset, setPeriodOffset] = useState(0)
 
   // Live queries for persisted sessions and active session
-  const sessions = useLiveQuery(async () => {
+  const rawSessions = useLiveQuery(async () => {
     return await db.pomodoroSessions.toArray()
-  }, []) || []
+  }, [])
+  const sessions = useMemo(() => rawSessions || [], [rawSessions])
 
   const activeSession = useLiveQuery(async () => {
     return await db.activeSessions.get('active')
@@ -164,8 +164,6 @@ export default function Statistics() {
       })
       .slice(0, 8)
   }, [sessions])
-
-  const hasAnyData = sessions.length > 0 || tasks.some((t) => t.completed)
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8 select-none">

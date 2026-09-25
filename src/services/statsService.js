@@ -352,7 +352,6 @@ export function calculateFocusByTask(sessions = [], tasks = []) {
     const mins = getSessionDurationMinutes(s)
     if (mins <= 0) continue
 
-    const key = s.taskId || s.taskName || s.taskTitle || 'Free Focus'
     const title = s.taskId ? (taskTitleLookup.get(s.taskId) || s.taskName || 'Completed Task') : (s.taskName || 'Free Focus')
 
     minsByTask.set(title, (minsByTask.get(title) || 0) + mins)

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, ensureSeedData } from '../db/db'
 import { TaskContext } from './TaskContext'
@@ -68,14 +68,17 @@ export function TaskProvider({ children }) {
   const isLoading = liveTasks === undefined || liveLists === undefined
 
   // Derived selected task object
-  const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) || null : null
-  const setSelectedTask = (taskOrNull) => {
+  const selectedTask = useMemo(
+    () => (selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) || null : null),
+    [selectedTaskId, tasks]
+  )
+  const setSelectedTask = useCallback((taskOrNull) => {
     if (!taskOrNull) {
       setSelectedTaskId(null)
     } else {
       setSelectedTaskId(taskOrNull.id)
     }
-  }
+  }, [])
 
   // Synchronize scheduled notifications for active task reminders
   useEffect(() => {
@@ -935,45 +938,80 @@ export function TaskProvider({ children }) {
     return taskIds.length
   }
 
+  const contextValue = useMemo(
+    () => ({
+      isLoading,
+      tasks,
+      lists,
+      activeListId,
+      setActiveListId,
+      selectedTask,
+      setSelectedTask,
+      selectedTaskIds,
+      setSelectedTaskIds,
+      isBulkActive: selectedTaskIds.length > 0,
+      addTask,
+      updateTask,
+      editTask,
+      deleteTask,
+      restoreTask,
+      duplicateTask,
+      toggleTask,
+      toggleStar,
+      toggleMyDay,
+      addSubtask,
+      toggleSubtask,
+      deleteSubtask,
+      createList,
+      renameList,
+      deleteList,
+      clearCompleted,
+      clearList,
+      deleteMultipleTasks,
+      bulkComplete,
+      bulkReschedule,
+      bulkChangePriority,
+      bulkMove,
+      bulkApplyLabels,
+      completeTaskFromTimer,
+    }),
+    [
+      isLoading,
+      tasks,
+      lists,
+      activeListId,
+      selectedTask,
+      setSelectedTask,
+      selectedTaskIds,
+      addTask,
+      updateTask,
+      editTask,
+      deleteTask,
+      restoreTask,
+      duplicateTask,
+      toggleTask,
+      toggleStar,
+      toggleMyDay,
+      addSubtask,
+      toggleSubtask,
+      deleteSubtask,
+      createList,
+      renameList,
+      deleteList,
+      clearCompleted,
+      clearList,
+      deleteMultipleTasks,
+      bulkComplete,
+      bulkReschedule,
+      bulkChangePriority,
+      bulkMove,
+      bulkApplyLabels,
+      completeTaskFromTimer,
+    ]
+  )
+
   return (
-    <TaskContext.Provider
-      value={{
-        isLoading,
-        tasks,
-        lists,
-        activeListId,
-        setActiveListId,
-        selectedTask,
-        setSelectedTask,
-        selectedTaskIds,
-        setSelectedTaskIds,
-        isBulkActive: selectedTaskIds.length > 0,
-        addTask,
-        updateTask,
-        editTask,
-        deleteTask,
-        restoreTask,
-        duplicateTask,
-        toggleTask,
-        toggleStar,
-        toggleMyDay,
-        addSubtask,
-        toggleSubtask,
-        deleteSubtask,
-        createList,
-        renameList,
-        deleteList,
-        clearCompleted,
-        clearList,
-        deleteMultipleTasks,
-        bulkComplete,
-        bulkReschedule,
-        bulkChangePriority,
-        bulkMove,
-        bulkApplyLabels,
-        completeTaskFromTimer,
-      }}
-    >
+    <TaskContext.Provider value={contextValue}>
       {children}
     </TaskContext.Provider>
   )

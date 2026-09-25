@@ -26,13 +26,15 @@ export default function TaskItemRow({
 
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editedTitle, setEditedTitle] = useState(task.title)
+  const [prevTaskTitle, setPrevTaskTitle] = useState(task.title)
   const [showPreview, setShowPreview] = useState(false)
   const hoverTimerRef = useRef(null)
   const titleInputRef = useRef(null)
 
-  useEffect(() => {
+  if (task.title !== prevTaskTitle) {
+    setPrevTaskTitle(task.title)
     setEditedTitle(task.title)
-  }, [task.title])
+  }
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {

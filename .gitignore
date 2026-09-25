@@ -41,5 +41,7 @@ dist-ssr
 .chrome-session
 .chrome-session/*
 .auth-status.json
+# Scratch scripts
+scratch/
 
 

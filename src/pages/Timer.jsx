@@ -1,16 +1,13 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Settings,
   Clock,
   Edit3,
-  CheckCircle2,
   Target,
   Maximize2,
-  Check,
   Sparkles,
-  ChevronDown,
 } from 'lucide-react'
 import TimerRing from '../components/timer/TimerRing'
 import TimerControls from '../components/timer/TimerControls'
@@ -20,11 +17,6 @@ import AmbientSoundWidget from '../components/timer/AmbientSoundWidget'
 import { useTimerSettings } from '../context/useTimerSettings'
 import { useTimerSession } from '../context/useTimerSession'
 import { useTasks } from '../context/useTasks'
-import {
-  playTimerStartSound,
-  playTimerPauseSound,
-  playTimerResumeSound,
-} from '../services/soundService'
 
 const TIMER_PRESETS = [
   { id: 'pomodoro', name: 'Pomodoro', duration: 25, breakDuration: 5 },
@@ -47,7 +39,6 @@ export default function Timer() {
     currentSession,
     taskName,
     setTaskName,
-    startTimer,
     togglePlayPause,
     resetTimer,
     skipTimer,
@@ -123,9 +114,9 @@ export default function Timer() {
     }
   }
 
-  const handleTogglePlayPause = () => {
+  const handleTogglePlayPause = useCallback(() => {
     togglePlayPause()
-  }
+  }, [togglePlayPause])
 
   // ONLY EXCEPTION: Spacebar toggles Play/Pause on the /timer route (and only when not inside an input/textarea)
   useEffect(() => {
@@ -147,7 +138,7 @@ export default function Timer() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isRunning, isPaused, togglePlayPause])
+  }, [handleTogglePlayPause])
 
   const modeLabel =
     mode === 'focus' ? 'FOCUS' : mode === 'shortBreak' ? 'SHORT BREAK' : 'LONG BREAK'
@@ -226,7 +217,7 @@ export default function Timer() {
                 modeLabel={modeLabel}
                 isRunning={isRunning}
                 isPaused={isPaused}
-                isCompleted={mode === 'completed' || remainingSeconds === 0}
+                isCompleted={isCompleted}
               />
             </div>
 
@@ -338,6 +329,8 @@ export default function Timer() {
             <TimerControls
               isRunning={isRunning}
               isPaused={isPaused}
+              isCompleted={isCompleted}
+              mode={mode}
               onTogglePlayPause={handleTogglePlayPause}
               onReset={resetTimer}
               onSkip={skipTimer}

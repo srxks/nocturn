@@ -88,6 +88,7 @@ export default function Calendar() {
       <AnimatePresence>
         {selectedTask && (
           <TaskDetailDrawer
+            key={selectedTask.id}
             task={selectedTask}
             lists={lists}
             onClose={() => setSelectedTask(null)}

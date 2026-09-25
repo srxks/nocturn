@@ -143,7 +143,7 @@ export async function ensureSeedData() {
     if (themeSettingsCount === 0) {
       await db.themeSettings.add({
         id: 'active',
-        activeThemeId: 'preset-nocturn-green',
+        activeThemeId: 'indigo',
         customColors: null,
       })
     }

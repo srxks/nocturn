@@ -42,7 +42,6 @@ export default function ThemeSettingsCard() {
     activePreset,
     applyThemePreset,
     v3Presets,
-    presetThemes,
     savedThemes,
     applyTheme,
     previewCustomColors,

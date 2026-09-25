@@ -73,11 +73,13 @@ export default function DataManagementCard() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
+      const exportNow = new Date().getTime()
       try {
-        localStorage.setItem('nocturn_last_export_timestamp', String(Date.now()))
+        localStorage.setItem('nocturn_last_export_timestamp', String(exportNow))
       } catch {
         // storage quota or private mode
       }
+      setLastExportTs(exportNow)
 
       addToast(
         `Exported ${userTasks.length} tasks and ${userVocab.length} vocabulary words`,
@@ -194,8 +196,11 @@ export default function DataManagementCard() {
     }
   }
 
-  const lastExportTs = typeof window !== 'undefined' ? Number(localStorage.getItem('nocturn_last_export_timestamp') || 0) : 0
-  const daysSinceExport = lastExportTs ? Math.floor((Date.now() - lastExportTs) / (1000 * 60 * 60 * 24)) : null
+  const [lastExportTs, setLastExportTs] = useState(() => {
+    return typeof window !== 'undefined' ? Number(localStorage.getItem('nocturn_last_export_timestamp') || 0) : 0
+  })
+  const [mountTime] = useState(() => new Date().getTime())
+  const daysSinceExport = lastExportTs ? Math.floor((mountTime - lastExportTs) / (1000 * 60 * 60 * 24)) : null
   const isBackupRecommended = !lastExportTs || (daysSinceExport !== null && daysSinceExport > 7)
 
   return (

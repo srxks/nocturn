@@ -43,8 +43,17 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
   const [prevTaskId, setPrevTaskId] = useState(task?.id)
   const [localTitle, setLocalTitle] = useState(task?.title || '')
   const [localNotes, setLocalNotes] = useState(task?.notes || '')
+  const [isMobile, setIsMobile] = useState(() => {
+    return typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  })
   const titleTimeoutRef = useRef(null)
   const notesTimeoutRef = useRef(null)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // Synchronize local title and notes when selected task changes
   if (task && task.id !== prevTaskId) {
@@ -53,8 +62,9 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
     setLocalNotes(task.notes || '')
   }
 
+  const hasTask = Boolean(task)
   useEffect(() => {
-    if (task) {
+    if (hasTask) {
       document.body.dataset.drawerOpen = 'true'
     } else {
       document.body.dataset.drawerOpen = 'false'
@@ -62,7 +72,7 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
     return () => {
       document.body.dataset.drawerOpen = 'false'
     }
-  }, [Boolean(task)])
+  }, [hasTask])
 
   useEffect(() => {
     return () => {
@@ -127,12 +137,30 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
     setNewSubtaskTitle('')
   }
 
+  const drawerVariants = {
+    initial: isDesktopInline
+      ? { opacity: 0 }
+      : isMobile
+      ? { y: '100%' }
+      : { x: '100%' },
+    animate: isDesktopInline
+      ? { opacity: 1 }
+      : isMobile
+      ? { y: 0 }
+      : { x: 0 },
+    exit: isDesktopInline
+      ? { opacity: 0 }
+      : isMobile
+      ? { y: '100%' }
+      : { x: '100%' },
+  }
+
   const content = (
     <motion.div
-      initial={{ x: isDesktopInline ? 0 : '100%' }}
-      animate={{ x: 0 }}
-      exit={{ x: isDesktopInline ? 0 : '100%' }}
-      transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+      initial={drawerVariants.initial}
+      animate={drawerVariants.animate}
+      exit={drawerVariants.exit}
+      transition={{ type: 'spring', stiffness: 350, damping: 35 }}
       role="dialog"
       aria-modal={!isDesktopInline}
       aria-label={`Task details for ${task.title}`}
@@ -680,7 +708,7 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
   }
 
   return (
-    <>
+    <div className="fixed inset-0 z-[75] overflow-hidden pointer-events-none">
       {/* Translucent Backdrop with Blur for Mobile/Tablet overlay */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -688,10 +716,12 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
         onClick={onClose}
-        className="fixed inset-0 z-[70] bg-black/65 backdrop-blur-md"
+        className="fixed inset-0 z-[70] bg-black/65 backdrop-blur-md pointer-events-auto"
       />
-      {content}
-    </>
+      <div className="pointer-events-auto">
+        {content}
+      </div>
+    </div>
   )
 })
 

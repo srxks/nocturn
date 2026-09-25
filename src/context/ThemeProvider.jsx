@@ -60,7 +60,9 @@ export function ThemeProvider({ children }) {
       document.documentElement.setAttribute('data-theme', activePreset)
       try {
         localStorage.setItem('nocturn_theme_preset', activePreset)
-      } catch {}
+      } catch {
+        // ignore localStorage error
+      }
     }
   }, [activePreset])
 
@@ -78,13 +80,14 @@ export function ThemeProvider({ children }) {
   const presetThemes = allThemes.filter((t) => t.isPreset)
   const savedThemes = allThemes.filter((t) => !t.isPreset)
 
-  // Resolve current active theme object (migrate legacy cyber-cyan or warm-amber to midnight-violet)
-  const rawActiveThemeId = activeThemeSetting?.activeThemeId || DEFAULT_NOCTURN_THEME.id
-  const activeThemeId =
-    rawActiveThemeId === 'preset-cyber-cyan' || rawActiveThemeId === 'preset-warm-amber'
-      ? 'preset-midnight-violet'
-      : rawActiveThemeId
-  let activeTheme = allThemes.find((t) => t.id === activeThemeId) || DEFAULT_NOCTURN_THEME
+  // Resolve current active theme object (normalizing any legacy 'preset-' prefix)
+  const rawActiveThemeId = activeThemeSetting?.activeThemeId || activePreset || DEFAULT_NOCTURN_THEME.id
+  const cleanActiveId = String(rawActiveThemeId).replace(/^preset-/, '')
+  const matchedPreset = PRESET_THEMES.find((p) => p.id === cleanActiveId || p.id === `preset-${cleanActiveId}`)
+  let activeTheme =
+    allThemes.find((t) => t.id === rawActiveThemeId || t.id === cleanActiveId || t.id === `preset-${cleanActiveId}`) ||
+    matchedPreset ||
+    DEFAULT_NOCTURN_THEME
 
   // If custom colors were temporarily applied (live preview)
   if (activeThemeSetting?.customColors) {
@@ -134,15 +137,16 @@ export function ThemeProvider({ children }) {
   // 1. Apply Theme — changes theme immediately locally, then persists to Supabase
   const applyTheme = async (themeObj) => {
     if (!themeObj?.id) return
+    const cleanId = String(themeObj.id).replace(/^preset-/, '')
 
     await db.themeSettings.put({
       id: 'active',
-      activeThemeId: themeObj.id,
+      activeThemeId: cleanId,
       customColors: null,
     })
 
     if (user?.id && !isRealtimeWrite()) {
-      await upsertUserSettings(user.id, { activeThemeId: themeObj.id })
+      await upsertUserSettings(user.id, { activeThemeId: cleanId })
     }
   }
 
@@ -241,35 +245,22 @@ export function ThemeProvider({ children }) {
 
   // 5. Apply Theme Preset (v3 7-preset instant switch)
   const applyThemePreset = async (presetKey) => {
-    setActivePreset(presetKey)
+    const cleanKey = String(presetKey).replace(/^preset-/, '')
+    setActivePreset(cleanKey)
     if (typeof document !== 'undefined') {
-      document.documentElement.setAttribute('data-theme', presetKey)
+      document.documentElement.setAttribute('data-theme', cleanKey)
       try {
-        localStorage.setItem('nocturn_theme_preset', presetKey)
-      } catch {}
-    }
-    const matched = V3_THEME_PRESETS.find((p) => p.key === presetKey || p.id === presetKey)
-    if (matched) {
-      const themeObj = {
-        id: `preset-${presetKey}`,
-        name: matched.name,
-        isPreset: true,
-        colors: {
-          background: matched.background,
-          surface: matched.surface,
-          elevated: matched.elevated,
-          accent: matched.accent,
-          accentGlow: matched.accentGlow,
-          text: '#F8FAFC',
-          textSecondary: '#94A3B8',
-          border: 'rgba(255, 255, 255, 0.08)',
-          overdue: '#EF4444',
-          today: matched.accent,
-          tomorrow: '#F59E0B',
-          future: '#10B981',
-        },
+        localStorage.setItem('nocturn_theme_preset', cleanKey)
+      } catch {
+        // ignore localStorage error
       }
-      await applyTheme(themeObj)
+    }
+    const matched = PRESET_THEMES.find((p) => p.id === cleanKey || p.id === `preset-${cleanKey}`) || DEFAULT_NOCTURN_THEME
+    if (matched) {
+      await applyTheme({
+        ...matched,
+        id: cleanKey,
+      })
     }
   }
 

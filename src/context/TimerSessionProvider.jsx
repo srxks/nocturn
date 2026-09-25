@@ -82,262 +82,211 @@ export function TimerSessionProvider({ children }) {
   const [remainingSeconds, setRemainingSeconds] = useState(targetDuration)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
-  // Keep duration synchronized while idle
-  useEffect(() => {
-    if (status === 'idle') {
-      const dur = getModeDurationSeconds(mode)
-      setTotalSeconds(dur)
-      setRemainingSeconds(dur)
-      setElapsedSeconds(0)
-    }
-  }, [mode, settings?.focusDuration, settings?.shortBreakDuration, settings?.longBreakDuration, status, getModeDurationSeconds])
+  const effectiveTotalSeconds = status === 'idle' ? targetDuration : totalSeconds
+  const effectiveRemainingSeconds = status === 'idle' ? targetDuration : remainingSeconds
+  const effectiveElapsedSeconds = status === 'idle' ? 0 : elapsedSeconds
 
-  // ── ADVANCE PHASE TRANSITION LOGIC ──
-  const advancePhase = useCallback(
-    async ({ isNaturalCompletion = false } = {}) => {
-      if (isAdvancingRef.current) return
-      isAdvancingRef.current = true
+  // ── NATURAL COMPLETION: STOPS AND WAITS AT 0:00 (NO AUTO-CHAINING) ──
+  const handleNaturalCompletion = useCallback(async () => {
+    if (isAdvancingRef.current) return
+    isAdvancingRef.current = true
 
-      try {
-        const nowMs = Date.now()
-        const currentMode = mode
-        const currentCount = completedFocusCount
-        const currentTask = taskName
-        const currentTaskId = taskId
-        const currentTotal = totalSeconds
-        const currentRemaining = remainingSeconds
-        const currentElapsed = Math.max(0, currentTotal - currentRemaining)
+    try {
+      const nowMs = Date.now()
+      const currentMode = mode
+      const currentCount = completedFocusCount
+      const currentTask = taskName
+      const currentTaskId = taskId
+      const currentTotal = totalSeconds
 
-        if (currentMode === 'focus') {
-          let newCount = currentCount
+      // 1. Immediately STOP the timer and hold at 0:00
+      setStatus('completed')
+      setEndAt(null)
+      setRemainingSeconds(0)
+      setElapsedSeconds(currentTotal)
+      hasWarned5mRef.current = false
 
-          if (isNaturalCompletion) {
-            const focusMins = Math.round(currentTotal / 60) || 25
-            const sessionStartedAt =
-              activeSessionRef.current?.startedAt ||
-              new Date(nowMs - currentTotal * 1000).toISOString()
-            const sessionId = `focus-${sessionStartedAt}`
+      await clearActiveSession()
+      updateActiveSession(null)
 
-            // 1. Record completed focus session in Dexie
-            await recordPomodoroSession({
-              taskId: currentTaskId,
-              duration: focusMins,
-              durationSeconds: currentTotal,
-              sessionType: 'focus',
-              startedAt: sessionStartedAt,
-              taskTitle: currentTask,
-              sessionId,
-              completed: true,
-            })
+      if (currentMode === 'focus') {
+        const focusMins = Math.round(currentTotal / 60) || 25
+        const sessionStartedAt =
+          activeSessionRef.current?.startedAt ||
+          new Date(nowMs - currentTotal * 1000).toISOString()
+        const sessionId = `focus-${sessionStartedAt}`
 
-            newCount = currentCount + 1
-            setCompletedFocusCount(newCount)
+        // Record completed focus session in Dexie
+        await recordPomodoroSession({
+          taskId: currentTaskId,
+          duration: focusMins,
+          durationSeconds: currentTotal,
+          sessionType: 'focus',
+          startedAt: sessionStartedAt,
+          taskTitle: currentTask,
+          sessionId,
+          completed: true,
+        })
 
-            // 2. Play warm bell sound
-            if (isTimerSoundsEnabled()) {
-              playBell()
-            }
+        const newCount = currentCount + 1
+        setCompletedFocusCount(newCount)
 
-            // 3. Native OS Notification
-            if (hasNotificationPermission()) {
-              notifyTimerEnded(currentTask || 'Focus Session', sessionId)
-            }
-
-            // 4. Toast feedback
-            addToast(`Focus session complete! (${focusMins} min logged)`, {
-              type: 'success',
-              duration: 4000,
-            })
-          } else {
-            // Manual skip - record partial focus session if >= 60s
-            if (currentElapsed >= 60) {
-              const focusMins = Math.round((currentElapsed / 60) * 10) / 10
-              const sessionStartedAt =
-                activeSessionRef.current?.startedAt ||
-                new Date(nowMs - currentElapsed * 1000).toISOString()
-              await recordPomodoroSession({
-                taskId: currentTaskId,
-                duration: focusMins,
-                durationSeconds: currentElapsed,
-                sessionType: 'focus',
-                startedAt: sessionStartedAt,
-                taskTitle: currentTask,
-                sessionId: `focus-${sessionStartedAt}`,
-                completed: false,
-              }).catch(console.warn)
-
-              newCount = currentCount + 1
-              setCompletedFocusCount(newCount)
-            }
-          }
-
-          // Determine next break phase
-          const longBreakInterval = Number(settings?.sessions) || 4
-          const isLongBreak = newCount > 0 && newCount % longBreakInterval === 0
-          const nextMode = isLongBreak ? 'longBreak' : 'shortBreak'
-          const breakSecs = getModeDurationSeconds(nextMode)
-          const autoStartBreaks = Boolean(settings?.autoStartBreaks)
-
-          await clearActiveSession()
-          updateActiveSession(null)
-
-          setMode(nextMode)
-          setTotalSeconds(breakSecs)
-          setRemainingSeconds(breakSecs)
-          setElapsedSeconds(0)
-          hasWarned5mRef.current = false
-
-          if (autoStartBreaks) {
-            const nextEndAt = nowMs + breakSecs * 1000
-            setStatus('running')
-            setEndAt(nextEndAt)
-
-            const sessionObj = {
-              sessionId: `session-${nowMs}`,
-              taskName: currentTask,
-              sessionType: isLongBreak ? 'long_break' : 'short_break',
-              configuredDuration: Math.round(breakSecs / 60),
-              startedAt: new Date(nowMs).toISOString(),
-              expectedEndAt: new Date(nextEndAt).toISOString(),
-              status: 'active',
-              currentSession: newCount + 1,
-            }
-            await recordActiveSession(sessionObj)
-            updateActiveSession(sessionObj)
-
-            if (updateTimerState) {
-              await updateTimerState({
-                actionId: crypto.randomUUID(),
-                status: 'running',
-                mode: nextMode,
-                currentSession: newCount + 1,
-                endAt: nextEndAt,
-                totalSeconds: breakSecs,
-                lastActionAt: new Date(nowMs).toISOString(),
-              })
-            }
-          } else {
-            setStatus('idle')
-            setEndAt(null)
-
-            if (updateTimerState) {
-              await updateTimerState({
-                actionId: crypto.randomUUID(),
-                status: 'idle',
-                mode: nextMode,
-                currentSession: newCount + 1,
-                endAt: null,
-                totalSeconds: breakSecs,
-                lastActionAt: new Date(nowMs).toISOString(),
-              })
-            }
-          }
-
-          // Summary Modal check (ONLY on focus completion & if setting enabled)
-          if (isNaturalCompletion && Boolean(settings?.showSessionSummary)) {
-            setCompletionModalData({
-              sessionId: `focus-${Date.now()}`,
-              taskTitle: currentTask,
-              taskId: currentTaskId,
-              durationMins: Math.round(currentTotal / 60),
-              isLongBreak,
-              planBlockId,
-            })
-          } else {
-            setCompletionModalData(null)
-          }
-
-        } else {
-          // BREAK (short or long) ENDS
-          if (isNaturalCompletion) {
-            if (isTimerSoundsEnabled()) {
-              playBreakEndSound()
-            }
-            if (hasNotificationPermission()) {
-              notifyTimerEnded('Break Over — Time to Focus')
-            }
-            addToast('Break completed. Ready to focus!', { type: 'info', duration: 4000 })
-          }
-
-          const focusSecs = getModeDurationSeconds('focus')
-          const autoStartFocus = Boolean(settings?.autoStartPomo)
-
-          await clearActiveSession()
-          updateActiveSession(null)
-
-          setMode('focus')
-          setTotalSeconds(focusSecs)
-          setRemainingSeconds(focusSecs)
-          setElapsedSeconds(0)
-          hasWarned5mRef.current = false
-          setCompletionModalData(null) // NEVER show modal after break!
-
-          if (autoStartFocus) {
-            const nextEndAt = nowMs + focusSecs * 1000
-            setStatus('running')
-            setEndAt(nextEndAt)
-
-            const sessionObj = {
-              sessionId: `session-${nowMs}`,
-              taskName: currentTask,
-              sessionType: 'focus',
-              configuredDuration: Math.round(focusSecs / 60),
-              startedAt: new Date(nowMs).toISOString(),
-              expectedEndAt: new Date(nextEndAt).toISOString(),
-              status: 'active',
-              currentSession: currentCount + 1,
-            }
-            await recordActiveSession(sessionObj)
-            updateActiveSession(sessionObj)
-
-            if (updateTimerState) {
-              await updateTimerState({
-                actionId: crypto.randomUUID(),
-                status: 'running',
-                mode: 'focus',
-                currentSession: currentCount + 1,
-                endAt: nextEndAt,
-                totalSeconds: focusSecs,
-                lastActionAt: new Date(nowMs).toISOString(),
-              })
-            }
-          } else {
-            setStatus('idle')
-            setEndAt(null)
-
-            if (updateTimerState) {
-              await updateTimerState({
-                actionId: crypto.randomUUID(),
-                status: 'idle',
-                mode: 'focus',
-                currentSession: currentCount + 1,
-                endAt: null,
-                totalSeconds: focusSecs,
-                lastActionAt: new Date(nowMs).toISOString(),
-              })
-            }
-          }
+        // Play warm bell sound
+        if (isTimerSoundsEnabled()) {
+          playBell()
         }
-      } finally {
-        setTimeout(() => {
-          isAdvancingRef.current = false
-        }, 400)
+
+        // Native OS Notification
+        if (hasNotificationPermission()) {
+          notifyTimerEnded(currentTask || 'Focus Session', sessionId)
+        }
+
+        // Toast feedback
+        addToast(`Focus session complete! (${focusMins} min logged)`, {
+          type: 'success',
+          duration: 4000,
+        })
+
+        // Summary Modal check (ONLY on focus completion & if setting enabled)
+        const longBreakInterval = Number(settings?.sessions) || 4
+        const isLongBreak = newCount > 0 && newCount % longBreakInterval === 0
+        if (settings?.showSessionSummary) {
+          setCompletionModalData({
+            sessionId,
+            taskTitle: currentTask,
+            taskId: currentTaskId,
+            durationMins: focusMins,
+            isLongBreak,
+            planBlockId,
+          })
+        }
+      } else {
+        // Break completed
+        if (isTimerSoundsEnabled()) {
+          playBreakEndSound()
+        }
+        if (hasNotificationPermission()) {
+          notifyTimerEnded('Break Over — Ready to Focus')
+        }
+        addToast('Break completed. Ready to focus!', { type: 'info', duration: 4000 })
       }
-    },
-    [
-      mode,
-      completedFocusCount,
-      taskName,
-      taskId,
-      totalSeconds,
-      remainingSeconds,
-      planBlockId,
-      settings,
-      getModeDurationSeconds,
-      updateTimerState,
-      addToast,
-    ]
-  )
+
+      if (updateTimerState) {
+        await updateTimerState({
+          actionId: crypto.randomUUID(),
+          status: 'completed',
+          mode: currentMode,
+          currentSession: currentCount + 1,
+          endAt: null,
+          totalSeconds: currentTotal,
+          lastActionAt: new Date(nowMs).toISOString(),
+        })
+      }
+    } finally {
+      setTimeout(() => {
+        isAdvancingRef.current = false
+      }, 400)
+    }
+  }, [
+    mode,
+    completedFocusCount,
+    taskName,
+    taskId,
+    totalSeconds,
+    planBlockId,
+    settings,
+    updateTimerState,
+    addToast,
+  ])
+
+  // ── START NEXT PHASE (EXPLICIT USER CLICK REQUIRED) ──
+  const startNextPhase = useCallback(async () => {
+    const nowMs = Date.now()
+    hasWarned5mRef.current = false
+
+    if (mode === 'focus') {
+      const longBreakInterval = Number(settings?.sessions) || 4
+      const isLongBreak = completedFocusCount > 0 && completedFocusCount % longBreakInterval === 0
+      const nextMode = isLongBreak ? 'longBreak' : 'shortBreak'
+      const breakSecs = getModeDurationSeconds(nextMode)
+      const nextEndAt = nowMs + breakSecs * 1000
+
+      setMode(nextMode)
+      setTotalSeconds(breakSecs)
+      setRemainingSeconds(breakSecs)
+      setElapsedSeconds(0)
+      setStatus('running')
+      setEndAt(nextEndAt)
+
+      if (isTimerSoundsEnabled()) {
+        playTimerStartSound()
+      }
+
+      const sessionObj = {
+        sessionId: `session-${nowMs}`,
+        taskName,
+        sessionType: isLongBreak ? 'long_break' : 'short_break',
+        configuredDuration: Math.round(breakSecs / 60),
+        startedAt: new Date(nowMs).toISOString(),
+        expectedEndAt: new Date(nextEndAt).toISOString(),
+        status: 'active',
+        currentSession: completedFocusCount + 1,
+      }
+      await recordActiveSession(sessionObj)
+      updateActiveSession(sessionObj)
+
+      if (updateTimerState) {
+        await updateTimerState({
+          actionId: crypto.randomUUID(),
+          status: 'running',
+          mode: nextMode,
+          currentSession: completedFocusCount + 1,
+          endAt: nextEndAt,
+          totalSeconds: breakSecs,
+          lastActionAt: new Date(nowMs).toISOString(),
+        })
+      }
+    } else {
+      const focusSecs = getModeDurationSeconds('focus')
+      const nextEndAt = nowMs + focusSecs * 1000
+
+      setMode('focus')
+      setTotalSeconds(focusSecs)
+      setRemainingSeconds(focusSecs)
+      setElapsedSeconds(0)
+      setStatus('running')
+      setEndAt(nextEndAt)
+
+      if (isTimerSoundsEnabled()) {
+        playPomodoroStartSound()
+      }
+
+      const sessionObj = {
+        sessionId: `session-${nowMs}`,
+        taskName,
+        sessionType: 'focus',
+        configuredDuration: Math.round(focusSecs / 60),
+        startedAt: new Date(nowMs).toISOString(),
+        expectedEndAt: new Date(nextEndAt).toISOString(),
+        status: 'active',
+        currentSession: completedFocusCount + 1,
+      }
+      await recordActiveSession(sessionObj)
+      updateActiveSession(sessionObj)
+
+      if (updateTimerState) {
+        await updateTimerState({
+          actionId: crypto.randomUUID(),
+          status: 'running',
+          mode: 'focus',
+          currentSession: completedFocusCount + 1,
+          endAt: nextEndAt,
+          totalSeconds: focusSecs,
+          lastActionAt: new Date(nowMs).toISOString(),
+        })
+      }
+    }
+  }, [mode, completedFocusCount, taskName, settings, getModeDurationSeconds, updateTimerState])
 
   // ── START TIMER ──
   const startTimer = async (
@@ -346,9 +295,24 @@ export function TimerSessionProvider({ children }) {
     overrideMode,
     overrideDurationMinutes
   ) => {
-    const targetMode = overrideMode || mode
+    let actualTaskName = overrideTaskName
+    let actualTaskId = overrideTaskId
+    let actualMode = overrideMode
+    let actualDurationMins = overrideDurationMinutes
+
+    if (overrideTaskName && typeof overrideTaskName === 'object') {
+      actualTaskName = overrideTaskName.taskName || overrideTaskName.title
+      actualTaskId = overrideTaskName.taskId
+      actualMode = overrideTaskName.mode
+      actualDurationMins = overrideTaskName.durationMinutes || overrideTaskName.duration
+      if (overrideTaskName.planBlockId) {
+        setPlanBlockId(overrideTaskName.planBlockId)
+      }
+    }
+
+    const targetMode = actualMode || mode
     const targetMins =
-      overrideDurationMinutes ||
+      actualDurationMins ||
       (targetMode === 'focus'
         ? settings?.focusDuration
         : targetMode === 'shortBreak'
@@ -360,8 +324,8 @@ export function TimerSessionProvider({ children }) {
     const nowMs = Date.now()
     const targetEndAt = nowMs + durationSecs * 1000
 
-    if (overrideTaskName !== undefined) setTaskName(overrideTaskName)
-    if (overrideTaskId !== undefined) setTaskId(overrideTaskId)
+    if (actualTaskName !== undefined) setTaskName(actualTaskName)
+    if (actualTaskId !== undefined) setTaskId(actualTaskId)
 
     setMode(targetMode)
     setTotalSeconds(durationSecs)
@@ -379,8 +343,8 @@ export function TimerSessionProvider({ children }) {
 
     const sessionObj = {
       sessionId: `session-${nowMs}`,
-      taskId: overrideTaskId !== undefined ? overrideTaskId : taskId,
-      taskName: overrideTaskName !== undefined ? overrideTaskName : taskName,
+      taskId: actualTaskId !== undefined ? actualTaskId : taskId,
+      taskName: actualTaskName !== undefined ? actualTaskName : taskName,
       sessionType:
         targetMode === 'shortBreak'
           ? 'short_break'
@@ -403,8 +367,8 @@ export function TimerSessionProvider({ children }) {
         mode: targetMode,
         endAt: targetEndAt,
         totalSeconds: durationSecs,
-        taskName: overrideTaskName !== undefined ? overrideTaskName : taskName,
-        taskId: overrideTaskId !== undefined ? overrideTaskId : taskId,
+        taskName: actualTaskName !== undefined ? actualTaskName : taskName,
+        taskId: actualTaskId !== undefined ? actualTaskId : taskId,
         lastActionAt: new Date(nowMs).toISOString(),
       })
     }
@@ -478,6 +442,8 @@ export function TimerSessionProvider({ children }) {
       pauseTimer()
     } else if (status === 'paused') {
       resumeTimer()
+    } else if (status === 'completed') {
+      startNextPhase()
     } else {
       startTimer()
     }
@@ -510,7 +476,48 @@ export function TimerSessionProvider({ children }) {
 
   // ── SKIP TIMER ──
   const skipTimer = async () => {
-    await advancePhase({ isNaturalCompletion: false })
+    await clearActiveSession()
+    updateActiveSession(null)
+    setEndAt(null)
+    hasWarned5mRef.current = false
+
+    if (mode === 'focus') {
+      const currentElapsed = Math.max(0, totalSeconds - remainingSeconds)
+      if (currentElapsed >= 60) {
+        const focusMins = Math.round((currentElapsed / 60) * 10) / 10
+        const sessionStartedAt =
+          activeSessionRef.current?.startedAt ||
+          new Date(Date.now() - currentElapsed * 1000).toISOString()
+        await recordPomodoroSession({
+          taskId,
+          duration: focusMins,
+          durationSeconds: currentElapsed,
+          sessionType: 'focus',
+          startedAt: sessionStartedAt,
+          taskTitle: taskName,
+          sessionId: `focus-${sessionStartedAt}`,
+          completed: false,
+        }).catch(console.warn)
+      }
+
+      const longBreakInterval = Number(settings?.sessions) || 4
+      const isLongBreak = (completedFocusCount + 1) > 0 && (completedFocusCount + 1) % longBreakInterval === 0
+      const nextMode = isLongBreak ? 'longBreak' : 'shortBreak'
+      const breakSecs = getModeDurationSeconds(nextMode)
+
+      setMode(nextMode)
+      setTotalSeconds(breakSecs)
+      setRemainingSeconds(breakSecs)
+      setElapsedSeconds(0)
+      setStatus('idle')
+    } else {
+      const focusSecs = getModeDurationSeconds('focus')
+      setMode('focus')
+      setTotalSeconds(focusSecs)
+      setRemainingSeconds(focusSecs)
+      setElapsedSeconds(0)
+      setStatus('idle')
+    }
   }
 
   // ── APPLY PRESET (Sets durations & idle status, NEVER auto-starts!) ──
@@ -579,7 +586,7 @@ export function TimerSessionProvider({ children }) {
         }
 
         if (remaining <= 0) {
-          advancePhase({ isNaturalCompletion: true })
+          handleNaturalCompletion()
         }
       }, 250)
     }
@@ -587,7 +594,7 @@ export function TimerSessionProvider({ children }) {
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [status, endAt, totalSeconds, mode, taskName, advancePhase])
+  }, [status, endAt, totalSeconds, mode, taskName, handleNaturalCompletion])
 
   // ── TAB VISIBILITY RE-SYNC ──
   useEffect(() => {
@@ -600,14 +607,14 @@ export function TimerSessionProvider({ children }) {
         setRemainingSeconds(remaining)
         setElapsedSeconds(Math.max(0, totalSeconds - remaining))
         if (remaining <= 0) {
-          advancePhase({ isNaturalCompletion: true })
+          handleNaturalCompletion()
         }
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [totalSeconds, advancePhase])
+  }, [totalSeconds, handleNaturalCompletion])
 
   // ── RESTORE ACTIVE SESSION ON MOUNT ──
   useEffect(() => {
@@ -632,7 +639,7 @@ export function TimerSessionProvider({ children }) {
           setElapsedSeconds(Math.max(0, total - remaining))
           return
         } else {
-          advancePhase({ isNaturalCompletion: true })
+          handleNaturalCompletion()
           return
         }
       }
@@ -668,7 +675,7 @@ export function TimerSessionProvider({ children }) {
           setRemainingSeconds(remaining)
           setElapsedSeconds(Math.max(0, configuredTotal - remaining))
         } else {
-          advancePhase({ isNaturalCompletion: true })
+          handleNaturalCompletion()
         }
       }
     }
@@ -739,6 +746,12 @@ export function TimerSessionProvider({ children }) {
       }
     }
 
+    if (completionModalData?.planBlockId) {
+      markPlanBlockCompleted(completionModalData.planBlockId).catch((err) => {
+        console.warn('[TimerSessionProvider] complete plan block error:', err)
+      })
+    }
+
     setCompletionModalData(null)
 
     if (nextAction === 'break') {
@@ -755,9 +768,10 @@ export function TimerSessionProvider({ children }) {
     status,
     isRunning,
     isPaused,
-    remainingSeconds,
-    totalSeconds,
-    elapsedSeconds,
+    isCompleted: status === 'completed' || (effectiveRemainingSeconds === 0 && !isRunning && !isPaused),
+    remainingSeconds: effectiveRemainingSeconds,
+    totalSeconds: effectiveTotalSeconds,
+    elapsedSeconds: effectiveElapsedSeconds,
     currentSession: completedFocusCount + 1,
     completedFocusCount,
     taskName,
@@ -768,6 +782,7 @@ export function TimerSessionProvider({ children }) {
     pauseTimer,
     resumeTimer,
     togglePlayPause,
+    startNextPhase,
     resetTimer,
     skipTimer,
     skipSession: skipTimer,

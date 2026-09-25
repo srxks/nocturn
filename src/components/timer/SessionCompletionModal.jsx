@@ -7,7 +7,7 @@ import {
   Calendar,
   X,
 } from 'lucide-react'
-import { modalCenter, backdrop } from '../../motion/presets'
+import { modalCenter } from '../../motion/presets'
 import { useTimerSettings } from '../../context/useTimerSettings'
 
 export default function SessionCompletionModal({
