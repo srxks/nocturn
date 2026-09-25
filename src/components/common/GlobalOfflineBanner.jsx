@@ -10,10 +10,14 @@ export default function GlobalOfflineBanner() {
   const { state, isSyncing, hasError } = useNetworkState()
 
   const [showSyncedNotice, setShowSyncedNotice] = useState(false)
+  const [showOfflineNotice, setShowOfflineNotice] = useState(false)
   const prevSyncingRef = useRef(isSyncing)
   const prevStateRef = useRef(state)
 
-  // Show temporary "Online / Synced" banner when syncing completes or after reconnecting
+  const isOffline = state === ConnectionState.OFFLINE
+  const isConnectionProblem = hasError && !isOffline
+
+  // Show temporary transient notices for state changes (Online, Offline, Error)
   useEffect(() => {
     let timer = null
     const wasSyncing = prevSyncingRef.current
@@ -22,21 +26,29 @@ export default function GlobalOfflineBanner() {
       prevStateRef.current === ConnectionState.NETWORK_ERROR ||
       prevStateRef.current === ConnectionState.BACKEND_ERROR
 
-    prevSyncingRef.current = isSyncing
-    prevStateRef.current = state
+    const isNowOffline = state === ConnectionState.OFFLINE || hasError
 
-    if ((wasSyncing && !isSyncing && state === ConnectionState.ONLINE) ||
+    if (isNowOffline && prevStateRef.current !== state) {
+      setShowOfflineNotice(true)
+      timer = setTimeout(() => {
+        setShowOfflineNotice(false)
+      }, 4000)
+    } else if ((wasSyncing && !isSyncing && state === ConnectionState.ONLINE) ||
         (wasErrorOrOffline && state === ConnectionState.ONLINE)) {
       setShowSyncedNotice(true)
+      setShowOfflineNotice(false)
       timer = setTimeout(() => {
         setShowSyncedNotice(false)
       }, 3500)
     }
 
+    prevSyncingRef.current = isSyncing
+    prevStateRef.current = state
+
     return () => {
       if (timer) clearTimeout(timer)
     }
-  }, [isSyncing, state])
+  }, [isSyncing, state, hasError])
 
   // When coming back online, flush queue
   useEffect(() => {
@@ -50,11 +62,8 @@ export default function GlobalOfflineBanner() {
     return () => window.removeEventListener('online', handleOnline)
   }, [])
 
-  const isOffline = state === ConnectionState.OFFLINE
-  const isConnectionProblem = hasError && !isOffline
-
-  // If fully online, not syncing, no errors, and synced notice expired -> render nothing
-  if (!isOffline && !isConnectionProblem && !isSyncing && !showSyncedNotice) {
+  // Show banner while syncing, or during transient offline/synced notice duration
+  if (!isSyncing && !showOfflineNotice && !showSyncedNotice) {
     return null
   }
 

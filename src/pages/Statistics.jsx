@@ -53,7 +53,6 @@ export default function Statistics() {
     const todayTasks = tasks.some((t) => t.completed && t.dueDate === todayKey)
     return todaySessions || todayTasks
   }, [sessions, tasks, todayKey])
-  const isStreakAtRisk = (stats?.streak || 0) > 0 && !hasCompletedToday
 
   const stats = useMemo(() => {
     return calculateProductivityStats(
@@ -64,6 +63,8 @@ export default function Statistics() {
       activeSession
     )
   }, [sessions, tasks, period, periodOffset, activeSession])
+
+  const isStreakAtRisk = (stats?.streak || 0) > 0 && !hasCompletedToday
 
   // Heatmap for last 60 days
   const heatmap = useMemo(() => {

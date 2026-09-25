@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -22,7 +22,7 @@ import {
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
 import { requestNotificationPermission } from '../../services/notificationService'
 
-export default function TaskDetailDrawer({
+const TaskDetailDrawer = memo(function TaskDetailDrawer({
   task,
   lists = [],
   allTasks = [],
@@ -693,5 +693,7 @@ export default function TaskDetailDrawer({
       {content}
     </>
   )
-}
+})
+
+export default TaskDetailDrawer
 
