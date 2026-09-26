@@ -32,12 +32,35 @@ export function TimerSessionProvider({ children }) {
   const { settings, updateTimerState, updateSettings } = useTimerSettings()
 
   // ── EXPLICIT TIMER STATE MACHINE ──
-  // phase: 'focus' | 'shortBreak' | 'longBreak'
-  const [mode, setMode] = useState('focus')
-  // status: 'idle' | 'running' | 'paused' | 'complete'
+  // mode: 'focus' | 'shortBreak' | 'longBreak' | 'normal_stopwatch' | 'focus_stopwatch'
+  const [mode, setMode] = useState(() => {
+    try {
+      const savedPreset = typeof localStorage !== 'undefined' ? localStorage.getItem('nocturn_timer_preset') : null
+      if (savedPreset === 'normal_stopwatch') return 'normal_stopwatch'
+      if (savedPreset === 'focus_stopwatch') return 'focus_stopwatch'
+    } catch {
+      // ignore
+    }
+    return 'focus'
+  })
+
+  // status: 'idle' | 'running' | 'paused' | 'completed' | 'terminated'
   const [status, setStatus] = useState('idle')
-  // endAt: absolute epoch timestamp in ms when running
+
+  // Countdown end timestamp (epoch ms)
   const [endAt, setEndAt] = useState(null)
+
+  // Stopwatch state: accumulated seconds from completed running intervals
+  const [accumulatedSeconds, setAccumulatedSeconds] = useState(0)
+  const [stopwatchElapsed, setStopwatchElapsed] = useState(0)
+  const startedAtMsRef = useRef(null)
+  const accumulatedSecondsRef = useRef(0)
+
+  useEffect(() => {
+    accumulatedSecondsRef.current = accumulatedSeconds
+  }, [accumulatedSeconds])
+
+  const isStopwatch = mode === 'normal_stopwatch' || mode === 'focus_stopwatch'
 
   const [completedFocusCount, setCompletedFocusCount] = useState(() => {
     try {
@@ -98,19 +121,22 @@ export function TimerSessionProvider({ children }) {
 
       if (targetMode === 'focus') return Math.round(focusMins * 60)
       if (targetMode === 'shortBreak') return Math.round(shortMins * 60)
-      return Math.round(longMins * 60)
+      if (targetMode === 'longBreak') return Math.round(longMins * 60)
+      return 0
     },
     [settings]
   )
 
-  const targetDuration = getModeDurationSeconds(mode)
+  const targetDuration = isStopwatch ? 0 : getModeDurationSeconds(mode)
   const [totalSeconds, setTotalSeconds] = useState(targetDuration)
   const [remainingSeconds, setRemainingSeconds] = useState(targetDuration)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
-  const effectiveTotalSeconds = status === 'idle' ? targetDuration : totalSeconds
-  const effectiveRemainingSeconds = status === 'idle' ? targetDuration : remainingSeconds
-  const effectiveElapsedSeconds = status === 'idle' ? 0 : elapsedSeconds
+  const effectiveTotalSeconds = isStopwatch ? 0 : (status === 'idle' ? targetDuration : totalSeconds)
+  const effectiveRemainingSeconds = isStopwatch ? 0 : (status === 'idle' ? targetDuration : remainingSeconds)
+  const effectiveElapsedSeconds = isStopwatch
+    ? (status === 'idle' ? 0 : stopwatchElapsed)
+    : (status === 'idle' ? 0 : elapsedSeconds)
 
   // ── NATURAL COMPLETION: STOPS AND WAITS AT 0:00 (NO AUTO-CHAINING) ──
   const handleNaturalCompletion = useCallback(async () => {
@@ -125,6 +151,26 @@ export function TimerSessionProvider({ children }) {
       const currentTaskId = taskId
       const currentTotal = totalSeconds
 
+      // Multi-tab and rerender idempotency check
+      const sessionStartedAt =
+        activeSessionRef.current?.startedAt ||
+        new Date(nowMs - currentTotal * 1000).toISOString()
+      const sessionId = `focus-${sessionStartedAt}`
+
+      try {
+        const lastFinalized = localStorage.getItem('nocturn_last_completed_session')
+        if (lastFinalized === sessionId) {
+          setStatus('completed')
+          setEndAt(null)
+          setRemainingSeconds(0)
+          setElapsedSeconds(currentTotal)
+          return
+        }
+        localStorage.setItem('nocturn_last_completed_session', sessionId)
+      } catch {
+        // ignore
+      }
+
       // 1. Immediately STOP the timer and hold at 0:00
       setStatus('completed')
       setEndAt(null)
@@ -137,12 +183,8 @@ export function TimerSessionProvider({ children }) {
 
       if (currentMode === 'focus') {
         const focusMins = Math.round(currentTotal / 60) || 25
-        const sessionStartedAt =
-          activeSessionRef.current?.startedAt ||
-          new Date(nowMs - currentTotal * 1000).toISOString()
-        const sessionId = `focus-${sessionStartedAt}`
 
-        // Record completed focus session in Dexie
+        // Record completed focus session in Dexie and Supabase
         await recordPomodoroSession({
           taskId: currentTaskId,
           duration: focusMins,
@@ -315,7 +357,7 @@ export function TimerSessionProvider({ children }) {
     }
   }, [mode, completedFocusCount, taskName, settings, getModeDurationSeconds, updateTimerState])
 
-  // ── START TIMER ──
+  // ── START TIMER (COUNTDOWN) ──
   const startTimer = async (
     overrideTaskName,
     overrideTaskId,
@@ -337,7 +379,7 @@ export function TimerSessionProvider({ children }) {
       }
     }
 
-    const targetMode = actualMode || mode
+    const targetMode = actualMode || (isStopwatch ? 'focus' : mode)
     const targetMins =
       actualDurationMins ||
       (targetMode === 'focus'
@@ -401,7 +443,7 @@ export function TimerSessionProvider({ children }) {
     }
   }
 
-  // ── PAUSE TIMER ──
+  // ── PAUSE TIMER (COUNTDOWN) ──
   const pauseTimer = async () => {
     if (status !== 'running') return
     const nowMs = Date.now()
@@ -433,7 +475,7 @@ export function TimerSessionProvider({ children }) {
     }
   }
 
-  // ── RESUME TIMER ──
+  // ── RESUME TIMER (COUNTDOWN) ──
   const resumeTimer = async () => {
     if (status !== 'paused') return
     const nowMs = Date.now()
@@ -463,46 +505,210 @@ export function TimerSessionProvider({ children }) {
     }
   }
 
-  // ── TOGGLE PLAY / PAUSE ──
-  const togglePlayPause = () => {
-    if (status === 'running') {
-      pauseTimer()
-    } else if (status === 'paused') {
-      resumeTimer()
-    } else if (status === 'completed') {
-      startNextPhase()
-    } else {
-      startTimer()
-    }
-  }
+  // ── STOPWATCH METHODS ──
+  const startStopwatch = useCallback(async () => {
+    const nowMs = Date.now()
+    startedAtMsRef.current = nowMs
+    setStatus('running')
 
-  // ── RESET TIMER ──
-  const resetTimer = async () => {
-    const resetDur = getModeDurationSeconds(mode)
+    if (mode === 'focus_stopwatch') {
+      playPomodoroStartSound()
+    } else {
+      playTimerStartSound()
+    }
+
+    const sessionObj = {
+      sessionId: `stopwatch-${nowMs}`,
+      taskId: taskId || null,
+      taskName: taskName || (mode === 'focus_stopwatch' ? 'Focus Stopwatch' : 'Normal Stopwatch'),
+      sessionType: mode,
+      status: 'active',
+      startedAt: new Date(nowMs - accumulatedSecondsRef.current * 1000).toISOString(),
+      canonicalStartTime: nowMs,
+      elapsedSeconds: accumulatedSecondsRef.current,
+      createdAt: new Date(nowMs).toISOString(),
+    }
+    updateActiveSession(sessionObj)
+    await recordActiveSession(sessionObj)
+  }, [mode, taskId, taskName])
+
+  const pauseStopwatch = useCallback(async () => {
+    if (status !== 'running') return
+    const nowMs = Date.now()
+    const deltaSecs = startedAtMsRef.current ? Math.max(0, Math.floor((nowMs - startedAtMsRef.current) / 1000)) : 0
+    const totalElapsed = accumulatedSecondsRef.current + deltaSecs
+    accumulatedSecondsRef.current = totalElapsed
+    startedAtMsRef.current = null
+
+    setAccumulatedSeconds(totalElapsed)
+    setStopwatchElapsed(totalElapsed)
+    setStatus('paused')
+    playTimerPauseSound()
+
+    const sessionObj = {
+      ...(activeSessionRef.current || {}),
+      status: 'paused',
+      canonicalStartTime: null,
+      elapsedSeconds: totalElapsed,
+    }
+    updateActiveSession(sessionObj)
+    await recordActiveSession(sessionObj)
+  }, [status])
+
+  const resumeStopwatch = useCallback(async () => {
+    if (status !== 'paused') return
+    const nowMs = Date.now()
+    startedAtMsRef.current = nowMs
+    setStatus('running')
+    playTimerResumeSound()
+
+    const sessionObj = {
+      ...(activeSessionRef.current || {}),
+      status: 'active',
+      canonicalStartTime: nowMs,
+      elapsedSeconds: accumulatedSecondsRef.current,
+    }
+    updateActiveSession(sessionObj)
+    await recordActiveSession(sessionObj)
+  }, [status])
+
+  const stopStopwatch = useCallback(async () => {
+    if (status === 'running') {
+      await pauseStopwatch()
+    }
+  }, [status, pauseStopwatch])
+
+  const resetStopwatch = useCallback(async () => {
     setStatus('idle')
-    setEndAt(null)
-    setTotalSeconds(resetDur)
-    setRemainingSeconds(resetDur)
-    setElapsedSeconds(0)
-    hasWarned5mRef.current = false
+    startedAtMsRef.current = null
+    accumulatedSecondsRef.current = 0
+    setAccumulatedSeconds(0)
+    setStopwatchElapsed(0)
+    await clearActiveSession()
+    updateActiveSession(null)
+  }, [])
+
+  const finishFocusStopwatch = useCallback(async () => {
+    const nowMs = Date.now()
+    let runningSecs = accumulatedSecondsRef.current
+    if (status === 'running' && startedAtMsRef.current) {
+      runningSecs += Math.max(0, Math.floor((nowMs - startedAtMsRef.current) / 1000))
+    }
+
+    setStatus('idle')
+    startedAtMsRef.current = null
+    accumulatedSecondsRef.current = 0
+    setAccumulatedSeconds(0)
+    setStopwatchElapsed(0)
 
     await clearActiveSession()
     updateActiveSession(null)
 
-    if (updateTimerState) {
-      await updateTimerState({
-        actionId: crypto.randomUUID(),
-        status: 'idle',
-        mode,
-        endAt: null,
-        totalSeconds: resetDur,
-        lastActionAt: new Date().toISOString(),
+    if (runningSecs >= 1) {
+      const focusMins = Math.round((runningSecs / 60) * 10) / 10
+      const sessionId = `focus-stopwatch-${nowMs}`
+      const sessionStartedAt = new Date(nowMs - runningSecs * 1000).toISOString()
+
+      await recordPomodoroSession({
+        taskId: taskId || null,
+        duration: focusMins,
+        durationSeconds: runningSecs,
+        sessionType: 'focus_stopwatch',
+        startedAt: sessionStartedAt,
+        taskTitle: taskName || 'Focus Stopwatch',
+        sessionId,
+        completed: true,
       })
+
+      if (isTimerSoundsEnabled()) {
+        playBell()
+      }
+
+      if (hasNotificationPermission()) {
+        notifyTimerEnded(taskName || 'Focus Stopwatch', sessionId)
+      }
+
+      addToast(`Focus session complete! (${focusMins > 0 ? focusMins + ' min' : Math.round(runningSecs) + 's'} logged)`, {
+        type: 'success',
+        duration: 4000,
+      })
+    }
+  }, [status, taskId, taskName, addToast])
+
+  const discardFocusStopwatch = useCallback(async () => {
+    setStatus('idle')
+    startedAtMsRef.current = null
+    accumulatedSecondsRef.current = 0
+    setAccumulatedSeconds(0)
+    setStopwatchElapsed(0)
+    await clearActiveSession()
+    updateActiveSession(null)
+    addToast('Focus session discarded', { type: 'info', duration: 3000 })
+  }, [addToast])
+
+  // ── TOGGLE PLAY / PAUSE (UNIFIED) ──
+  const togglePlayPause = () => {
+    if (isStopwatch) {
+      if (status === 'running') {
+        pauseStopwatch()
+      } else if (status === 'paused') {
+        resumeStopwatch()
+      } else {
+        startStopwatch()
+      }
+    } else {
+      if (status === 'running') {
+        pauseTimer()
+      } else if (status === 'paused') {
+        resumeTimer()
+      } else if (status === 'completed') {
+        startNextPhase()
+      } else {
+        startTimer()
+      }
     }
   }
 
-  // ── SKIP TIMER ──
+  // ── RESET TIMER (UNIFIED) ──
+  const resetTimer = async () => {
+    if (isStopwatch) {
+      await resetStopwatch()
+    } else {
+      const resetDur = getModeDurationSeconds(mode)
+      setStatus('idle')
+      setEndAt(null)
+      setTotalSeconds(resetDur)
+      setRemainingSeconds(resetDur)
+      setElapsedSeconds(0)
+      hasWarned5mRef.current = false
+
+      await clearActiveSession()
+      updateActiveSession(null)
+
+      if (updateTimerState) {
+        await updateTimerState({
+          actionId: crypto.randomUUID(),
+          status: 'idle',
+          mode,
+          endAt: null,
+          totalSeconds: resetDur,
+          lastActionAt: new Date().toISOString(),
+        })
+      }
+    }
+  }
+
+  // ── SKIP TIMER (COUNTDOWN) ──
   const skipTimer = async () => {
+    if (isStopwatch) {
+      if (mode === 'focus_stopwatch') {
+        await finishFocusStopwatch()
+      } else {
+        await stopStopwatch()
+      }
+      return
+    }
+
     await clearActiveSession()
     updateActiveSession(null)
     setEndAt(null)
@@ -547,10 +753,62 @@ export function TimerSessionProvider({ children }) {
     }
   }
 
-  // ── APPLY PRESET (Sets durations & idle status, NEVER auto-starts!) ──
+  // ── APPLY PRESET OR STOPWATCH MODE (NEVER AUTO-STARTS) ──
   const applyPreset = async (preset) => {
     if (status === 'running') {
       addToast('Timer stopped to apply preset', { type: 'info', duration: 3000 })
+    }
+
+    if (preset.id === 'normal_stopwatch' || preset.mode === 'normal_stopwatch') {
+      setMode('normal_stopwatch')
+      setStatus('idle')
+      setEndAt(null)
+      startedAtMsRef.current = null
+      accumulatedSecondsRef.current = 0
+      setAccumulatedSeconds(0)
+      setStopwatchElapsed(0)
+      setTotalSeconds(0)
+      setRemainingSeconds(0)
+      setElapsedSeconds(0)
+      hasWarned5mRef.current = false
+
+      await clearActiveSession()
+      updateActiveSession(null)
+
+      try {
+        localStorage.setItem('nocturn_timer_preset', 'normal_stopwatch')
+      } catch {
+        // ignore
+      }
+
+      addToast('Selected Normal Stopwatch', { type: 'success', duration: 3000 })
+      return
+    }
+
+    if (preset.id === 'focus_stopwatch' || preset.mode === 'focus_stopwatch') {
+      setMode('focus_stopwatch')
+      setStatus('idle')
+      setEndAt(null)
+      startedAtMsRef.current = null
+      accumulatedSecondsRef.current = 0
+      setAccumulatedSeconds(0)
+      setStopwatchElapsed(0)
+      setTotalSeconds(0)
+      setRemainingSeconds(0)
+      setElapsedSeconds(0)
+      hasWarned5mRef.current = false
+
+      await clearActiveSession()
+      updateActiveSession(null)
+
+      try {
+        localStorage.setItem('nocturn_timer_preset', 'focus_stopwatch')
+      } catch {
+        // ignore
+      }
+
+      addToast('Selected Focus Stopwatch', { type: 'success', duration: 3000 })
+      return
     }
 
     const focus = preset.duration || preset.focus || 25
@@ -569,7 +827,10 @@ export function TimerSessionProvider({ children }) {
     setMode('focus')
     setStatus('idle')
     setEndAt(null)
-    updateCompletedFocusCount(0)
+    startedAtMsRef.current = null
+    accumulatedSecondsRef.current = 0
+    setAccumulatedSeconds(0)
+    setStopwatchElapsed(0)
     setTotalSeconds(durSecs)
     setRemainingSeconds(durSecs)
     setElapsedSeconds(0)
@@ -577,6 +838,12 @@ export function TimerSessionProvider({ children }) {
 
     await clearActiveSession()
     updateActiveSession(null)
+
+    try {
+      localStorage.setItem('nocturn_timer_preset', preset.id)
+    } catch {
+      // ignore
+    }
 
     if (updateTimerState) {
       await updateTimerState({
@@ -599,49 +866,69 @@ export function TimerSessionProvider({ children }) {
   useEffect(() => {
     let interval = null
 
-    if (status === 'running' && endAt) {
-      interval = setInterval(() => {
-        const nowMs = Date.now()
-        const remaining = Math.max(0, Math.round((endAt - nowMs) / 1000))
-        setRemainingSeconds(remaining)
-        setElapsedSeconds(Math.max(0, totalSeconds - remaining))
+    if (status === 'running') {
+      if (isStopwatch) {
+        interval = setInterval(() => {
+          if (startedAtMsRef.current) {
+            const nowMs = Date.now()
+            const deltaSecs = Math.max(0, Math.floor((nowMs - startedAtMsRef.current) / 1000))
+            const totalElapsed = accumulatedSecondsRef.current + deltaSecs
+            setStopwatchElapsed(totalElapsed)
+          }
+        }, 250)
+      } else if (endAt) {
+        interval = setInterval(() => {
+          const nowMs = Date.now()
+          const remaining = Math.max(0, Math.round((endAt - nowMs) / 1000))
+          setRemainingSeconds(remaining)
+          setElapsedSeconds(Math.max(0, totalSeconds - remaining))
 
-        // 5-minute warning notification
-        if (remaining <= 300 && remaining > 0 && !hasWarned5mRef.current && mode === 'focus') {
-          hasWarned5mRef.current = true
-          notifyTimerFiveMinuteWarning(taskName, activeSessionRef.current?.sessionId)
-        }
+          // 5-minute warning notification
+          if (remaining <= 300 && remaining > 0 && !hasWarned5mRef.current && mode === 'focus') {
+            hasWarned5mRef.current = true
+            notifyTimerFiveMinuteWarning(taskName, activeSessionRef.current?.sessionId)
+          }
 
-        if (remaining <= 0) {
-          handleNaturalCompletion()
-        }
-      }, 250)
+          if (remaining <= 0) {
+            handleNaturalCompletion()
+          }
+        }, 250)
+      }
     }
 
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [status, endAt, totalSeconds, mode, taskName, handleNaturalCompletion])
+  }, [status, endAt, totalSeconds, mode, taskName, isStopwatch, handleNaturalCompletion])
 
   // ── TAB VISIBILITY RE-SYNC ──
   useEffect(() => {
     if (typeof document === 'undefined') return
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && statusRef.current === 'running' && endAtRef.current) {
-        const nowMs = Date.now()
-        const remaining = Math.max(0, Math.round((endAtRef.current - nowMs) / 1000))
-        setRemainingSeconds(remaining)
-        setElapsedSeconds(Math.max(0, totalSeconds - remaining))
-        if (remaining <= 0) {
-          handleNaturalCompletion()
+      if (document.visibilityState === 'visible' && statusRef.current === 'running') {
+        if (isStopwatch) {
+          if (startedAtMsRef.current) {
+            const nowMs = Date.now()
+            const deltaSecs = Math.max(0, Math.floor((nowMs - startedAtMsRef.current) / 1000))
+            const totalElapsed = accumulatedSecondsRef.current + deltaSecs
+            setStopwatchElapsed(totalElapsed)
+          }
+        } else if (endAtRef.current) {
+          const nowMs = Date.now()
+          const remaining = Math.max(0, Math.round((endAtRef.current - nowMs) / 1000))
+          setRemainingSeconds(remaining)
+          setElapsedSeconds(Math.max(0, totalSeconds - remaining))
+          if (remaining <= 0) {
+            handleNaturalCompletion()
+          }
         }
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [totalSeconds, handleNaturalCompletion])
+  }, [totalSeconds, isStopwatch, handleNaturalCompletion])
 
   // ── RESTORE ACTIVE SESSION ON MOUNT ──
   useEffect(() => {
@@ -650,6 +937,66 @@ export function TimerSessionProvider({ children }) {
     async function restoreSession() {
       if (statusRef.current === 'running' || statusRef.current === 'paused') return
 
+      const persisted = await getActiveSession()
+      if (!isMounted) return
+
+      if (persisted) {
+        if (persisted.sessionType === 'normal_stopwatch' || persisted.sessionType === 'focus_stopwatch') {
+          setMode(persisted.sessionType)
+          const baseElapsed = Number(persisted.elapsedSeconds) || 0
+          if (persisted.status === 'active' && persisted.canonicalStartTime) {
+            const nowMs = Date.now()
+            const deltaSecs = Math.max(0, Math.floor((nowMs - persisted.canonicalStartTime) / 1000))
+            const currentElapsed = baseElapsed + deltaSecs
+            accumulatedSecondsRef.current = baseElapsed
+            startedAtMsRef.current = persisted.canonicalStartTime
+            setAccumulatedSeconds(baseElapsed)
+            setStopwatchElapsed(currentElapsed)
+            setStatus('running')
+          } else {
+            accumulatedSecondsRef.current = baseElapsed
+            setAccumulatedSeconds(baseElapsed)
+            setStopwatchElapsed(baseElapsed)
+            setStatus('paused')
+          }
+          return
+        }
+
+        const modeKey =
+          persisted.sessionType === 'short_break'
+            ? 'shortBreak'
+            : persisted.sessionType === 'long_break'
+            ? 'longBreak'
+            : 'focus'
+        const configuredTotal = (persisted.configuredDuration || 25) * 60
+
+        setMode(modeKey)
+        setTotalSeconds(configuredTotal)
+
+        if (persisted.status === 'paused') {
+          const remaining = persisted.remainingSecondsWhenPaused ?? configuredTotal
+          setStatus('paused')
+          setEndAt(null)
+          setRemainingSeconds(remaining)
+          setElapsedSeconds(Math.max(0, configuredTotal - remaining))
+        } else if (persisted.status === 'active' && persisted.expectedEndAt) {
+          const endMs = new Date(persisted.expectedEndAt).getTime()
+          const nowMs = Date.now()
+          const remaining = Math.max(0, Math.round((endMs - nowMs) / 1000))
+
+          if (remaining > 0) {
+            setStatus('running')
+            setEndAt(endMs)
+            setRemainingSeconds(remaining)
+            setElapsedSeconds(Math.max(0, configuredTotal - remaining))
+          } else {
+            handleNaturalCompletion()
+          }
+        }
+        return
+      }
+
+      // Check cloud state if available
       const cloudState = settings?.timerState
       if (cloudState && cloudState.endAt && cloudState.status === 'running') {
         const nowMs = Date.now()
@@ -670,41 +1017,6 @@ export function TimerSessionProvider({ children }) {
           return
         }
       }
-
-      const persisted = await getActiveSession()
-      if (!isMounted || !persisted) return
-
-      const modeKey =
-        persisted.sessionType === 'short_break'
-          ? 'shortBreak'
-          : persisted.sessionType === 'long_break'
-          ? 'longBreak'
-          : 'focus'
-      const configuredTotal = (persisted.configuredDuration || 25) * 60
-
-      setMode(modeKey)
-      setTotalSeconds(configuredTotal)
-
-      if (persisted.status === 'paused') {
-        const remaining = persisted.remainingSecondsWhenPaused ?? configuredTotal
-        setStatus('paused')
-        setEndAt(null)
-        setRemainingSeconds(remaining)
-        setElapsedSeconds(Math.max(0, configuredTotal - remaining))
-      } else if (persisted.status === 'active' && persisted.expectedEndAt) {
-        const endMs = new Date(persisted.expectedEndAt).getTime()
-        const nowMs = Date.now()
-        const remaining = Math.max(0, Math.round((endMs - nowMs) / 1000))
-
-        if (remaining > 0) {
-          setStatus('running')
-          setEndAt(endMs)
-          setRemainingSeconds(remaining)
-          setElapsedSeconds(Math.max(0, configuredTotal - remaining))
-        } else {
-          handleNaturalCompletion()
-        }
-      }
     }
 
     restoreSession()
@@ -719,26 +1031,44 @@ export function TimerSessionProvider({ children }) {
 
     setFaviconActive(isRunning)
 
-    if (isRunning) {
-      const mins = Math.floor(remainingSeconds / 60)
-      const secs = remainingSeconds % 60
-      const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-      const label = taskName || (mode === 'focus' ? 'Focus' : mode === 'shortBreak' ? 'Short Break' : 'Long Break')
-      document.title = `(${formatted}) ${label} · Nocturn`
-    } else if (isPaused) {
-      const mins = Math.floor(remainingSeconds / 60)
-      const secs = remainingSeconds % 60
-      const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-      document.title = `[Paused ${formatted}] Nocturn`
+    if (isStopwatch) {
+      const hrs = Math.floor(effectiveElapsedSeconds / 3600)
+      const mins = Math.floor((effectiveElapsedSeconds % 3600) / 60)
+      const secs = effectiveElapsedSeconds % 60
+      const formatted = hrs > 0
+        ? `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+        : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+      const label = mode === 'focus_stopwatch' ? (taskName || 'Focus Stopwatch') : 'Stopwatch'
+
+      if (isRunning) {
+        document.title = `(${formatted}) ${label} · Nocturn`
+      } else if (isPaused) {
+        document.title = `[Paused ${formatted}] ${label} · Nocturn`
+      } else {
+        document.title = 'Nocturn — Calm Focus & Planning'
+      }
     } else {
-      document.title = 'Nocturn — Calm Focus & Planning'
+      if (isRunning) {
+        const mins = Math.floor(remainingSeconds / 60)
+        const secs = remainingSeconds % 60
+        const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+        const label = taskName || (mode === 'focus' ? 'Focus' : mode === 'shortBreak' ? 'Short Break' : 'Long Break')
+        document.title = `(${formatted}) ${label} · Nocturn`
+      } else if (isPaused) {
+        const mins = Math.floor(remainingSeconds / 60)
+        const secs = remainingSeconds % 60
+        const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+        document.title = `[Paused ${formatted}] Nocturn`
+      } else {
+        document.title = 'Nocturn — Calm Focus & Planning'
+      }
     }
 
     return () => {
       document.title = 'Nocturn — Calm Focus & Planning'
       setFaviconActive(false)
     }
-  }, [isRunning, isPaused, remainingSeconds, taskName, mode])
+  }, [isRunning, isPaused, remainingSeconds, effectiveElapsedSeconds, taskName, mode, isStopwatch])
 
   // Handle post-session completion modal actions
   const handleCompleteSessionModal = async ({ sessionId, note, markTaskDone, nextAction }) => {
@@ -790,12 +1120,29 @@ export function TimerSessionProvider({ children }) {
     }
   }
 
+  const startBreak = useCallback((isLong = false) => {
+    const targetBreakMode = isLong ? 'longBreak' : 'shortBreak'
+    startTimer(undefined, undefined, targetBreakMode)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startAnotherFocus = useCallback(() => {
+    startTimer(undefined, undefined, 'focus')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const returnToPlan = useCallback(() => {
+    navigate('/plan')
+  }, [navigate])
+
   const contextValue = {
     mode,
+    setMode,
     status,
     isRunning,
     isPaused,
-    isCompleted: status === 'completed' || (effectiveRemainingSeconds === 0 && !isRunning && !isPaused),
+    isCompleted: !isStopwatch && (status === 'completed' || (effectiveRemainingSeconds === 0 && !isRunning && !isPaused && status !== 'idle')),
+    isStopwatch,
+    isNormalStopwatch: mode === 'normal_stopwatch',
+    isFocusStopwatch: mode === 'focus_stopwatch',
     remainingSeconds: effectiveRemainingSeconds,
     totalSeconds: effectiveTotalSeconds,
     elapsedSeconds: effectiveElapsedSeconds,
@@ -810,10 +1157,13 @@ export function TimerSessionProvider({ children }) {
     resumeTimer,
     togglePlayPause,
     startNextPhase,
+    startBreak,
+    startAnotherFocus,
+    returnToPlan,
     resetTimer,
     skipTimer,
     skipSession: skipTimer,
-    terminateTimer: resetTimer,
+    terminateTimer: isStopwatch ? (mode === 'focus_stopwatch' ? finishFocusStopwatch : stopStopwatch) : resetTimer,
     applyPreset,
     startPlanSession: startTimer,
     completionModalData,
@@ -822,6 +1172,14 @@ export function TimerSessionProvider({ children }) {
     pendingPreset,
     queuePendingPreset,
     resetCycles: () => updateCompletedFocusCount(0),
+    // Stopwatch methods
+    startStopwatch,
+    pauseStopwatch,
+    resumeStopwatch,
+    stopStopwatch,
+    resetStopwatch,
+    finishFocusStopwatch,
+    discardFocusStopwatch,
   }
 
   return (

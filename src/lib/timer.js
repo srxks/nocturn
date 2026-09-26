@@ -27,6 +27,8 @@ export const TIMER_PRESETS = [
   { id: '52-17', name: '52 / 17', duration: 52, breakDuration: 17, longDuration: 25, sessions: 3 },
   { id: 'ultradian', name: '90m Ultradian', duration: 90, breakDuration: 20, longDuration: 30, sessions: 2 },
   { id: 'quick', name: '15m Sprint', duration: 15, breakDuration: 3, longDuration: 10, sessions: 4 },
+  { id: 'normal_stopwatch', name: 'Normal Stopwatch', type: 'stopwatch', isFocus: false },
+  { id: 'focus_stopwatch', name: 'Focus Stopwatch', type: 'stopwatch', isFocus: true },
 ]
 
 export const DEFAULT_TIMER_SETTINGS = {

@@ -27,13 +27,20 @@ export default function Timer() {
 
   const {
     mode,
+    isStopwatch,
+    isNormalStopwatch,
+    isFocusStopwatch,
     isRunning,
     isPaused,
     remainingSeconds,
     totalSeconds,
+    elapsedSeconds,
     currentSession,
+    completedFocusCount,
     taskName,
     setTaskName,
+    taskId,
+    setTaskId,
     togglePlayPause,
     resetTimer,
     skipTimer,
@@ -42,6 +49,11 @@ export default function Timer() {
     blockTimeRange,
     pendingPreset,
     queuePendingPreset,
+    startBreak,
+    startAnotherFocus,
+    returnToPlan,
+    finishFocusStopwatch,
+    discardFocusStopwatch,
   } = useTimerSession()
 
   const [isEditingTask, setIsEditingTask] = useState(false)
@@ -52,6 +64,12 @@ export default function Timer() {
   const [pendingSwitchPreset, setPendingSwitchPreset] = useState(null)
   const [isFocusModeOpen, setIsFocusModeOpen] = useState(() => Boolean(location.state?.focusMode))
   const [prevFocusModeProp, setPrevFocusModeProp] = useState(location.state?.focusMode)
+
+  const activePresetId = isNormalStopwatch
+    ? 'normal_stopwatch'
+    : isFocusStopwatch
+    ? 'focus_stopwatch'
+    : selectedPreset
 
   if (location.state?.focusMode !== prevFocusModeProp) {
     setPrevFocusModeProp(location.state?.focusMode)
@@ -82,7 +100,10 @@ export default function Timer() {
     if (location.state?.taskName && location.state.taskName !== taskName) {
       setTaskName(location.state.taskName)
     }
-  }, [location.state?.taskName, setTaskName, taskName])
+    if (location.state?.taskId && location.state.taskId !== taskId) {
+      setTaskId(location.state.taskId)
+    }
+  }, [location.state?.taskName, location.state?.taskId, setTaskName, setTaskId, taskName, taskId])
 
   const handleStartEdit = () => {
     setTaskInputVal(taskName || '')
@@ -97,6 +118,7 @@ export default function Timer() {
 
   const handlePickTask = (t) => {
     setTaskName(t.title)
+    if (setTaskId) setTaskId(t.id)
     setIsEditingTask(false)
   }
 
@@ -145,10 +167,18 @@ export default function Timer() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleTogglePlayPause])
 
-  const modeLabel =
-    mode === 'focus' ? 'FOCUS' : mode === 'shortBreak' ? 'SHORT BREAK' : 'LONG BREAK'
+  const modeLabel = isNormalStopwatch
+    ? 'NORMAL STOPWATCH'
+    : isFocusStopwatch
+    ? 'FOCUS STOPWATCH'
+    : mode === 'focus'
+    ? 'FOCUS'
+    : mode === 'shortBreak'
+    ? 'SHORT BREAK'
+    : 'LONG BREAK'
 
-  const isCompleted = remainingSeconds === 0 && !isRunning && !isPaused
+  const isCompleted = !isStopwatch && remainingSeconds === 0 && !isRunning && !isPaused
+  const isLongBreak = completedFocusCount > 0 && completedFocusCount % (Number(settings?.sessions) || 4) === 0
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
@@ -168,10 +198,16 @@ export default function Timer() {
           <span className="text-[11px] font-bold tracking-widest text-nocturn-accent uppercase">
             {modeLabel}
           </span>
-          <p className="text-xs font-medium text-nocturn-muted">
-            Session {currentSession} of {settings.sessions}
-            {mode !== 'focus' && ` • Rest & Recharge`}
-          </p>
+          {isNormalStopwatch ? (
+            <p className="text-xs font-medium text-nocturn-muted">Standard Count-Up Stopwatch</p>
+          ) : isFocusStopwatch ? (
+            <p className="text-xs font-medium text-nocturn-muted">Open-Ended Deep Work Session</p>
+          ) : (
+            <p className="text-xs font-medium text-nocturn-muted">
+              Session {currentSession} of {settings.sessions}
+              {mode !== 'focus' && ` • Rest & Recharge`}
+            </p>
+          )}
         </div>
         <Link
           to="/timer-settings"
@@ -184,151 +220,154 @@ export default function Timer() {
 
       {/* Main Timer Display */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 lg:gap-8 items-start">
-          {/* Left Main Column: Ring, Controls, Rhythm Presets */}
-          <div className="flex flex-col items-center justify-center space-y-4 sm:space-y-6 w-full max-w-md lg:max-w-none mx-auto">
-            {/* Preset Rhythm Selector (Always accessible) */}
-            <div className="w-full flex items-center gap-1.5 p-1 bg-[#11131a]/80 backdrop-blur-xl border border-white/[0.08] rounded-2xl overflow-x-auto no-scrollbar shadow-sm">
-              {TIMER_PRESETS.map((preset) => {
-                const isSelected = selectedPreset === preset.id
-                const isQueued = pendingPreset?.id === preset.id
-                return (
+        {/* Left Main Column: Ring, Controls, Rhythm Presets */}
+        <div className="flex flex-col items-center justify-center space-y-4 sm:space-y-6 w-full max-w-md lg:max-w-none mx-auto">
+          {/* Preset Rhythm & Stopwatch Selector (Always accessible) */}
+          <div className="w-full flex items-center gap-1.5 p-1 bg-[#11131a]/80 backdrop-blur-xl border border-white/[0.08] rounded-2xl overflow-x-auto no-scrollbar shadow-sm">
+            {TIMER_PRESETS.map((preset) => {
+              const isSelected = activePresetId === preset.id
+              const isQueued = pendingPreset?.id === preset.id
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handleSelectPreset(preset)}
+                  className={`relative px-3.5 py-1.5 rounded-xl text-xs font-medium transition-colors shrink-0 cursor-pointer ${
+                    isSelected
+                      ? 'text-white font-semibold'
+                      : isQueued
+                      ? 'text-nocturn-accent-bright font-medium'
+                      : 'text-nocturn-muted hover:text-white'
+                  }`}
+                >
+                  {isSelected && (
+                    <motion.div
+                      layoutId="timerPresetPill"
+                      className="absolute inset-0 bg-nocturn-accent/15 border border-nocturn-accent/30 rounded-xl shadow-sm"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    {preset.name}
+                    {isQueued && (
+                      <span className="text-[10px] text-nocturn-accent font-mono font-normal">
+                        (Queued)
+                      </span>
+                    )}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* SVG Circular Timer Ring with Digital Countdown or Count-Up */}
+          <div className="py-1">
+            <TimerRing
+              remainingSeconds={remainingSeconds}
+              totalSeconds={totalSeconds}
+              elapsedSeconds={elapsedSeconds}
+              mode={mode}
+              modeLabel={modeLabel}
+              isRunning={isRunning}
+              isPaused={isPaused}
+              isCompleted={isCompleted}
+            />
+          </div>
+
+          {/* Prominent Task Name Section */}
+          <div className="w-full max-w-sm text-center space-y-2">
+            {isEditingTask ? (
+              <div className="space-y-3 bg-nocturn-card border border-nocturn-border rounded-2xl p-3.5 shadow-lg text-left">
+                <form onSubmit={handleSaveTaskName} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={taskInputVal}
+                    onChange={(e) => setTaskInputVal(e.target.value)}
+                    placeholder="Task or subject name..."
+                    className="flex-1 bg-nocturn-surface border border-nocturn-accent text-white text-sm px-3.5 py-1.5 rounded-xl outline-none"
+                  />
                   <button
-                    key={preset.id}
+                    type="submit"
+                    className="px-3 py-1.5 rounded-xl bg-nocturn-accent text-white text-xs font-semibold cursor-pointer"
+                  >
+                    Save
+                  </button>
+                  <button
                     type="button"
-                    onClick={() => handleSelectPreset(preset)}
-                    className={`relative px-3.5 py-1.5 rounded-xl text-xs font-medium transition-colors shrink-0 cursor-pointer ${
-                      isSelected
-                        ? 'text-white font-semibold'
-                        : isQueued
-                        ? 'text-nocturn-accent-bright font-medium'
-                        : 'text-nocturn-muted hover:text-white'
+                    onClick={() => setIsEditingTask(false)}
+                    className="px-2.5 py-1.5 rounded-xl text-nocturn-muted hover:text-white text-xs cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </form>
+
+                {/* Quick Task Selection Chips */}
+                {activeTaskList.length > 0 && (
+                  <div className="space-y-1.5 pt-1 border-t border-nocturn-border/60">
+                    <span className="text-[11px] font-bold text-nocturn-muted uppercase tracking-wider block">
+                      Choose from your tasks:
+                    </span>
+                    <div className="space-y-1 max-h-36 overflow-y-auto no-scrollbar">
+                      {activeTaskList.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => handlePickTask(t)}
+                          className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-nocturn-muted hover:text-white hover:bg-white/[0.05] transition-colors text-left truncate cursor-pointer"
+                        >
+                          <span className="truncate">{t.title}</span>
+                          {t.priority === 'urgent' || t.priority === 'high' ? (
+                            <span className="text-[10px] font-mono text-rose-400">High</span>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <div
+                  onClick={handleStartEdit}
+                  className="group cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <h2
+                    className={`text-xl sm:text-2xl font-bold tracking-tight transition-colors ${
+                      taskName.trim()
+                        ? 'text-white group-hover:text-nocturn-accent'
+                        : 'text-nocturn-muted/80 italic font-normal text-lg group-hover:text-white'
                     }`}
                   >
-                    {isSelected && (
-                      <motion.div
-                        layoutId="timerPresetPill"
-                        className="absolute inset-0 bg-nocturn-accent/15 border border-nocturn-accent/30 rounded-xl shadow-sm"
-                        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                      />
-                    )}
-                    <span className="relative z-10 flex items-center gap-1.5">
-                      {preset.name}
-                      {isQueued && (
-                        <span className="text-[10px] text-nocturn-accent font-mono font-normal">
-                          (Queued)
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+                    {taskName.trim() || (isNormalStopwatch ? 'Standard Stopwatch' : 'Unassigned Focus')}
+                  </h2>
+                  <Edit3 className="w-3.5 h-3.5 text-nocturn-muted/60 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
 
-            {/* SVG Circular Timer Ring with Digital Countdown */}
-            <div className="py-1">
-              <TimerRing
-                remainingSeconds={remainingSeconds}
-                totalSeconds={totalSeconds}
-                modeLabel={modeLabel}
-                isRunning={isRunning}
-                isPaused={isPaused}
-                isCompleted={isCompleted}
-              />
-            </div>
-
-            {/* Prominent Task Name Section */}
-            <div className="w-full max-w-sm text-center space-y-2">
-              {isEditingTask ? (
-                <div className="space-y-3 bg-nocturn-card border border-nocturn-border rounded-2xl p-3.5 shadow-lg text-left">
-                  <form onSubmit={handleSaveTaskName} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      autoFocus
-                      value={taskInputVal}
-                      onChange={(e) => setTaskInputVal(e.target.value)}
-                      placeholder="Task or subject name..."
-                      className="flex-1 bg-nocturn-surface border border-nocturn-accent text-white text-sm px-3.5 py-1.5 rounded-xl outline-none"
-                    />
-                    <button
-                      type="submit"
-                      className="px-3 py-1.5 rounded-xl bg-nocturn-accent text-white text-xs font-semibold cursor-pointer"
-                    >
-                      Save
-                    </button>
+                {/* Plan My Day or Assigned Badge */}
+                {blockTimeRange ? (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs font-medium text-nocturn-muted">
+                    <Clock className="w-3.5 h-3.5 text-nocturn-accent" />
+                    <span>Plan My Day • {blockTimeRange}</span>
+                  </div>
+                ) : (
+                  !taskName.trim() && !isNormalStopwatch && (
                     <button
                       type="button"
-                      onClick={() => setIsEditingTask(false)}
-                      className="px-2.5 py-1.5 rounded-xl text-nocturn-muted hover:text-white text-xs cursor-pointer"
+                      onClick={handleStartEdit}
+                      className="inline-flex items-center gap-1 text-[11px] text-nocturn-muted hover:text-nocturn-accent transition-colors cursor-pointer"
                     >
-                      Cancel
+                      <Target className="w-3 h-3" />
+                      <span>Click to assign a task</span>
                     </button>
-                  </form>
+                  )
+                )}
+              </div>
+            )}
+          </div>
 
-                  {/* Quick Task Selection Chips */}
-                  {activeTaskList.length > 0 && (
-                    <div className="space-y-1.5 pt-1 border-t border-nocturn-border/60">
-                      <span className="text-[11px] font-bold text-nocturn-muted uppercase tracking-wider block">
-                        Choose from your tasks:
-                      </span>
-                      <div className="space-y-1 max-h-36 overflow-y-auto no-scrollbar">
-                        {activeTaskList.map((t) => (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => handlePickTask(t)}
-                            className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-nocturn-muted hover:text-white hover:bg-white/[0.05] transition-colors text-left truncate cursor-pointer"
-                          >
-                            <span className="truncate">{t.title}</span>
-                            {t.priority === 'urgent' || t.priority === 'high' ? (
-                              <span className="text-[10px] font-mono text-rose-400">High</span>
-                            ) : null}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <div
-                    onClick={handleStartEdit}
-                    className="group cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <h2
-                      className={`text-xl sm:text-2xl font-bold tracking-tight transition-colors ${
-                        taskName.trim()
-                          ? 'text-white group-hover:text-nocturn-accent'
-                          : 'text-nocturn-muted/80 italic font-normal text-lg group-hover:text-white'
-                      }`}
-                    >
-                      {taskName.trim() || 'Unassigned Focus'}
-                    </h2>
-                    <Edit3 className="w-3.5 h-3.5 text-nocturn-muted/60 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-
-                  {/* Plan My Day or Assigned Badge */}
-                  {blockTimeRange ? (
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs font-medium text-nocturn-muted">
-                      <Clock className="w-3.5 h-3.5 text-nocturn-accent" />
-                      <span>Plan My Day • {blockTimeRange}</span>
-                    </div>
-                  ) : (
-                    !taskName.trim() && (
-                      <button
-                        type="button"
-                        onClick={handleStartEdit}
-                        className="inline-flex items-center gap-1 text-[11px] text-nocturn-muted hover:text-nocturn-accent transition-colors cursor-pointer"
-                      >
-                        <Target className="w-3 h-3" />
-                        <span>Click to assign a task</span>
-                      </button>
-                    )
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Session Progress Dots */}
+          {/* Session Progress Dots (Shown for countdown modes only) */}
+          {!isStopwatch && (
             <div className="w-full flex flex-col items-center space-y-1">
               <SessionDots
                 currentSession={currentSession}
@@ -339,100 +378,107 @@ export default function Timer() {
                 {mode === 'focus' ? `${settings.sessions} Focus blocks cycle` : 'Break in progress'}
               </span>
             </div>
+          )}
 
-            {/* Main Timer Controls */}
-            <TimerControls
-              isRunning={isRunning}
-              isPaused={isPaused}
-              isCompleted={isCompleted}
-              mode={mode}
-              onTogglePlayPause={handleTogglePlayPause}
-              onReset={resetTimer}
-              onSkip={skipTimer}
-              onTerminate={terminateTimer}
-            />
+          {/* Main Timer Controls */}
+          <TimerControls
+            isRunning={isRunning}
+            isPaused={isPaused}
+            isCompleted={isCompleted}
+            mode={mode}
+            isLongBreak={isLongBreak}
+            onTogglePlayPause={handleTogglePlayPause}
+            onReset={resetTimer}
+            onSkip={skipTimer}
+            onTerminate={terminateTimer}
+            onFinishFocus={finishFocusStopwatch}
+            onDiscardFocus={discardFocusStopwatch}
+            onStartBreak={() => startBreak(isLongBreak)}
+            onStartAnotherFocus={startAnotherFocus}
+            onReturnToPlan={returnToPlan}
+          />
 
-            {/* Ambient Soundscape Section on Mobile/Tablet */}
-            <div className="pt-2 w-full flex justify-center lg:hidden">
-              <AmbientSoundWidget />
-            </div>
+          {/* Ambient Soundscape Section on Mobile/Tablet */}
+          <div className="pt-2 w-full flex justify-center lg:hidden">
+            <AmbientSoundWidget />
+          </div>
+        </div>
+
+        {/* Right Column: 360px Sticky Glass Panel on lg+ */}
+        <div className="hidden lg:flex flex-col space-y-5 sticky top-6">
+          {/* Ambient Sounds Widget */}
+          <div className="p-5 rounded-3xl bg-[#11131a]/70 backdrop-blur-2xl border border-white/[0.08] shadow-2xl space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-nocturn-muted flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-nocturn-accent" />
+              <span>Ambient Soundscapes</span>
+            </h3>
+            <AmbientSoundWidget />
           </div>
 
-          {/* Right Column: 360px Sticky Glass Panel on lg+ */}
-          <div className="hidden lg:flex flex-col space-y-5 sticky top-6">
-            {/* Ambient Sounds Widget */}
-            <div className="p-5 rounded-3xl bg-[#11131a]/70 backdrop-blur-2xl border border-white/[0.08] shadow-2xl space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-nocturn-muted flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-nocturn-accent" />
-                <span>Ambient Soundscapes</span>
+          {/* Current Active Task Card */}
+          <div className="p-5 rounded-3xl bg-[#11131a]/70 backdrop-blur-2xl border border-white/[0.08] shadow-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-nocturn-muted">
+                Focus Target
               </h3>
-              <AmbientSoundWidget />
+              <button
+                type="button"
+                onClick={handleStartEdit}
+                className="text-[11px] font-semibold text-nocturn-accent hover:underline cursor-pointer"
+              >
+                {taskName ? 'Edit' : 'Assign'}
+              </button>
             </div>
 
-            {/* Current Active Task Card */}
-            <div className="p-5 rounded-3xl bg-[#11131a]/70 backdrop-blur-2xl border border-white/[0.08] shadow-2xl space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-nocturn-muted">
-                  Focus Target
-                </h3>
-                <button
-                  type="button"
-                  onClick={handleStartEdit}
-                  className="text-[11px] font-semibold text-nocturn-accent hover:underline cursor-pointer"
-                >
-                  {taskName ? 'Edit' : 'Assign'}
-                </button>
+            {taskName ? (
+              <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.06] space-y-1.5">
+                <span className="text-sm font-bold text-white block truncate">{taskName}</span>
+                {blockTimeRange && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-nocturn-muted font-mono">
+                    <Clock className="w-3 h-3 text-nocturn-accent" /> {blockTimeRange}
+                  </span>
+                )}
               </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStartEdit}
+                className="w-full p-4 rounded-2xl border border-dashed border-white/10 hover:border-nocturn-accent/40 text-left transition-colors cursor-pointer group"
+              >
+                <span className="text-xs font-medium text-nocturn-muted group-hover:text-white transition-colors block">
+                  + Assign a task or subject
+                </span>
+              </button>
+            )}
+          </div>
 
-              {taskName ? (
-                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.06] space-y-1.5">
-                  <span className="text-sm font-bold text-white block truncate">{taskName}</span>
-                  {blockTimeRange && (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-nocturn-muted font-mono">
-                      <Clock className="w-3 h-3 text-nocturn-accent" /> {blockTimeRange}
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleStartEdit}
-                  className="w-full p-4 rounded-2xl border border-dashed border-white/10 hover:border-nocturn-accent/40 text-left transition-colors cursor-pointer group"
-                >
-                  <span className="text-xs font-medium text-nocturn-muted group-hover:text-white transition-colors block">
-                    + Assign a task or subject
-                  </span>
-                </button>
-              )}
-            </div>
-
-            {/* Daily Rhythm Progress */}
-            <div className="p-5 rounded-3xl bg-[#11131a]/70 backdrop-blur-2xl border border-white/[0.08] shadow-2xl space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-nocturn-muted flex items-center gap-1.5">
-                <Target className="w-3.5 h-3.5 text-nocturn-accent" />
-                <span>Today's Progress</span>
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] text-center">
-                  <span className="text-xl font-bold font-mono text-white block">
-                    {Math.max(0, currentSession - 1)} / {settings.sessions}
-                  </span>
-                  <span className="text-[10px] text-nocturn-muted uppercase tracking-wider font-semibold">
-                    Blocks Done
-                  </span>
-                </div>
-                <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] text-center">
-                  <span className="text-xl font-bold font-mono text-nocturn-accent block">
-                    {Math.round((Math.max(0, currentSession - 1) * (totalSeconds || 1500)) / 60)}m
-                  </span>
-                  <span className="text-[10px] text-nocturn-muted uppercase tracking-wider font-semibold">
-                    Focused
-                  </span>
-                </div>
+          {/* Daily Rhythm Progress */}
+          <div className="p-5 rounded-3xl bg-[#11131a]/70 backdrop-blur-2xl border border-white/[0.08] shadow-2xl space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-nocturn-muted flex items-center gap-1.5">
+              <Target className="w-3.5 h-3.5 text-nocturn-accent" />
+              <span>Today's Progress</span>
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] text-center">
+                <span className="text-xl font-bold font-mono text-white block">
+                  {Math.max(0, currentSession - 1)} / {settings.sessions}
+                </span>
+                <span className="text-[10px] text-nocturn-muted uppercase tracking-wider font-semibold">
+                  Blocks Done
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] text-center">
+                <span className="text-xl font-bold font-mono text-nocturn-accent block">
+                  {Math.round((Math.max(0, currentSession - 1) * (totalSeconds || 1500)) / 60)}m
+                </span>
+                <span className="text-[10px] text-nocturn-muted uppercase tracking-wider font-semibold">
+                  Focused
+                </span>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
       {/* Distraction-Free Focus Mode Overlay */}
       <FocusModeOverlay
@@ -440,6 +486,8 @@ export default function Timer() {
         onClose={() => setIsFocusModeOpen(false)}
         remainingSeconds={remainingSeconds}
         totalSeconds={totalSeconds}
+        elapsedSeconds={elapsedSeconds}
+        mode={mode}
         isRunning={isRunning}
         isPaused={isPaused}
         taskName={taskName}
@@ -452,6 +500,9 @@ export default function Timer() {
         onResume={handleTogglePlayPause}
         onTerminate={terminateTimer}
         onSkip={skipTimer}
+        onFinishFocus={finishFocusStopwatch}
+        onDiscardFocus={discardFocusStopwatch}
+        onReset={resetTimer}
       />
 
       {/* Mid-Session Preset Switch Confirmation Modal */}
@@ -468,8 +519,18 @@ export default function Timer() {
               </div>
             </div>
             <p className="text-xs text-nocturn-dim leading-relaxed">
-              Changing to <span className="text-white font-medium">{pendingSwitchPreset.name}</span> will set your focus rhythm to{' '}
-              <span className="text-nocturn-accent-bright font-mono">{pendingSwitchPreset.duration}m focus / {pendingSwitchPreset.breakDuration}m break</span>.
+              {pendingSwitchPreset.type === 'stopwatch' || pendingSwitchPreset.isStopwatch ? (
+                <>
+                  Changing to <span className="text-white font-medium">{pendingSwitchPreset.name}</span> will switch to count-up stopwatch mode.
+                </>
+              ) : (
+                <>
+                  Changing to <span className="text-white font-medium">{pendingSwitchPreset.name}</span> will set your focus rhythm to{' '}
+                  <span className="text-nocturn-accent-bright font-mono">
+                    {pendingSwitchPreset.duration}m focus / {pendingSwitchPreset.breakDuration}m break
+                  </span>.
+                </>
+              )}
             </p>
             <div className="space-y-2 pt-1">
               <button
