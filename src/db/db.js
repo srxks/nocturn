@@ -68,6 +68,10 @@ db.version(7).stores({
   userSettings: 'id, userId, updatedAt',
 })
 
+db.version(8).stores({
+  vocab: 'id, word, date_added, correct_count, last_quizzed_date, userId, updatedAt, difficulty',
+})
+
 /**
  * Development-only utility to reset local database and persistence.
  * Exposed on window.__resetNocturnLocalDB.

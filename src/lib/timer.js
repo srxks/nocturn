@@ -22,6 +22,13 @@ export function getServerNowMs() {
   return Date.now() + _serverClockOffsetMs
 }
 
+export const TIMER_PRESETS = [
+  { id: 'pomodoro', name: 'Pomodoro', duration: 25, breakDuration: 5, longDuration: 15, sessions: 4 },
+  { id: '52-17', name: '52 / 17', duration: 52, breakDuration: 17, longDuration: 25, sessions: 3 },
+  { id: 'ultradian', name: '90m Ultradian', duration: 90, breakDuration: 20, longDuration: 30, sessions: 2 },
+  { id: 'quick', name: '15m Sprint', duration: 15, breakDuration: 3, longDuration: 10, sessions: 4 },
+]
+
 export const DEFAULT_TIMER_SETTINGS = {
   focusDuration: 25,
   shortBreakDuration: 5,

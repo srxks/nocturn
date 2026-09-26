@@ -18,12 +18,7 @@ import { useTimerSettings } from '../context/useTimerSettings'
 import { useTimerSession } from '../context/useTimerSession'
 import { useTasks } from '../context/useTasks'
 
-const TIMER_PRESETS = [
-  { id: 'pomodoro', name: 'Pomodoro', duration: 25, breakDuration: 5 },
-  { id: '52-17', name: '52 / 17', duration: 52, breakDuration: 17 },
-  { id: 'ultradian', name: '90m Ultradian', duration: 90, breakDuration: 20 },
-  { id: 'quick', name: '15m Sprint', duration: 15, breakDuration: 3 },
-]
+import { TIMER_PRESETS } from '../lib/timer'
 
 export default function Timer() {
   const { settings } = useTimerSettings()
@@ -45,6 +40,8 @@ export default function Timer() {
     terminateTimer,
     applyPreset,
     blockTimeRange,
+    pendingPreset,
+    queuePendingPreset,
   } = useTimerSession()
 
   const [isEditingTask, setIsEditingTask] = useState(false)
@@ -52,6 +49,7 @@ export default function Timer() {
   const [selectedPreset, setSelectedPreset] = useState(() => {
     return localStorage.getItem('nocturn_timer_preset') || 'pomodoro'
   })
+  const [pendingSwitchPreset, setPendingSwitchPreset] = useState(null)
   const [isFocusModeOpen, setIsFocusModeOpen] = useState(() => Boolean(location.state?.focusMode))
   const [prevFocusModeProp, setPrevFocusModeProp] = useState(location.state?.focusMode)
 
@@ -103,6 +101,13 @@ export default function Timer() {
   }
 
   const handleSelectPreset = (preset) => {
+    if (preset.id === selectedPreset && !pendingPreset) return
+
+    if (isRunning || isPaused) {
+      setPendingSwitchPreset(preset)
+      return
+    }
+
     setSelectedPreset(preset.id)
     try {
       localStorage.setItem('nocturn_timer_preset', preset.id)
@@ -181,33 +186,43 @@ export default function Timer() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
           {/* Left Main Column: Ring, Controls, Rhythm Presets */}
           <div className="flex flex-col items-center justify-center space-y-6 sm:space-y-7 w-full max-w-md lg:max-w-none mx-auto">
-            {/* Preset Rhythm Selector (only when timer is not running) */}
-            {!isRunning && !isPaused && (
-              <div className="flex items-center gap-1.5 p-1 bg-[#11131a]/80 backdrop-blur-xl border border-white/[0.08] rounded-2xl overflow-x-auto max-w-full no-scrollbar shadow-sm">
-                {TIMER_PRESETS.map((preset) => {
-                  const isSelected = selectedPreset === preset.id
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => handleSelectPreset(preset)}
-                      className={`relative px-3.5 py-1.5 rounded-xl text-xs font-medium transition-colors shrink-0 cursor-pointer ${
-                        isSelected ? 'text-white font-semibold' : 'text-nocturn-muted hover:text-white'
-                      }`}
-                    >
-                      {isSelected && (
-                        <motion.div
-                          layoutId="timerPresetPill"
-                          className="absolute inset-0 bg-nocturn-accent/15 border border-nocturn-accent/30 rounded-xl shadow-sm"
-                          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                        />
+            {/* Preset Rhythm Selector (Always accessible) */}
+            <div className="flex items-center gap-1.5 p-1 bg-[#11131a]/80 backdrop-blur-xl border border-white/[0.08] rounded-2xl overflow-x-auto max-w-full no-scrollbar shadow-sm">
+              {TIMER_PRESETS.map((preset) => {
+                const isSelected = selectedPreset === preset.id
+                const isQueued = pendingPreset?.id === preset.id
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => handleSelectPreset(preset)}
+                    className={`relative px-3.5 py-1.5 rounded-xl text-xs font-medium transition-colors shrink-0 cursor-pointer ${
+                      isSelected
+                        ? 'text-white font-semibold'
+                        : isQueued
+                        ? 'text-nocturn-accent-bright font-medium'
+                        : 'text-nocturn-muted hover:text-white'
+                    }`}
+                  >
+                    {isSelected && (
+                      <motion.div
+                        layoutId="timerPresetPill"
+                        className="absolute inset-0 bg-nocturn-accent/15 border border-nocturn-accent/30 rounded-xl shadow-sm"
+                        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center gap-1.5">
+                      {preset.name}
+                      {isQueued && (
+                        <span className="text-[10px] text-nocturn-accent font-mono font-normal">
+                          (Queued)
+                        </span>
                       )}
-                      <span className="relative z-10">{preset.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
 
             {/* SVG Circular Timer Ring with Digital Countdown */}
             <div className="py-1">
@@ -438,6 +453,62 @@ export default function Timer() {
         onTerminate={terminateTimer}
         onSkip={skipTimer}
       />
+
+      {/* Mid-Session Preset Switch Confirmation Modal */}
+      {pendingSwitchPreset && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto">
+          <div className="bg-nocturn-card border border-white/10 rounded-2xl p-5 sm:p-6 shadow-2xl max-w-md w-full space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent-bright">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Switch to {pendingSwitchPreset.name}?</h3>
+                <p className="text-xs text-nocturn-muted">A session is currently in progress</p>
+              </div>
+            </div>
+            <p className="text-xs text-nocturn-dim leading-relaxed">
+              Changing to <span className="text-white font-medium">{pendingSwitchPreset.name}</span> will set your focus rhythm to{' '}
+              <span className="text-nocturn-accent-bright font-mono">{pendingSwitchPreset.duration}m focus / {pendingSwitchPreset.breakDuration}m break</span>.
+            </p>
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPreset(pendingSwitchPreset.id)
+                  try {
+                    localStorage.setItem('nocturn_timer_preset', pendingSwitchPreset.id)
+                  } catch {
+                    // ignore
+                  }
+                  applyPreset(pendingSwitchPreset)
+                  setPendingSwitchPreset(null)
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-nocturn-accent hover:bg-nocturn-accent-bright text-white text-xs font-semibold shadow-sm transition-colors text-center cursor-pointer"
+              >
+                Switch Now & Reset Session
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  queuePendingPreset(pendingSwitchPreset)
+                  setPendingSwitchPreset(null)
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white border border-white/10 text-xs font-semibold transition-colors text-center cursor-pointer"
+              >
+                Apply After Current Session
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingSwitchPreset(null)}
+                className="w-full py-2 px-4 rounded-xl text-nocturn-muted hover:text-white text-xs font-medium transition-colors text-center cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

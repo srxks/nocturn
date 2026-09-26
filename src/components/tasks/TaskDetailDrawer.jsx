@@ -66,13 +66,21 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
   useEffect(() => {
     if (hasTask) {
       document.body.dataset.drawerOpen = 'true'
+      if (!isDesktopInline) {
+        const originalOverflow = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+        return () => {
+          document.body.dataset.drawerOpen = 'false'
+          document.body.style.overflow = originalOverflow
+        }
+      }
     } else {
       document.body.dataset.drawerOpen = 'false'
     }
     return () => {
       document.body.dataset.drawerOpen = 'false'
     }
-  }, [hasTask])
+  }, [hasTask, isDesktopInline])
 
   useEffect(() => {
     return () => {

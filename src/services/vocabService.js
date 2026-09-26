@@ -10,6 +10,7 @@ import { isRealtimeWrite } from './realtimeService.js'
 import { enqueueMutation, purgePendingVocabMutations } from './syncQueue.js'
 import { recordTombstone } from './conflictService.js'
 import { toUuid } from '../lib/idUtils.js'
+import { GRE_VOCAB_DATASET } from '../data/greVocabDataset.js'
 
 /**
  * Synchronous, offline-first helper to retrieve the active user ID without
@@ -116,7 +117,7 @@ export async function saveLearnedWord(wordRecord) {
       example_sentence: wordRecord.example_sentence || '',
       part_of_speech: wordRecord.part_of_speech || 'noun',
       synonyms: wordRecord.synonyms || [],
-      difficulty: wordRecord.difficulty || 'Hard',
+      difficulty: wordRecord.difficulty || 'Medium',
       date_added: wordRecord.date_added || getTodayDateKey(),
       correct_count: Math.min(Math.max(wordRecord.correct_count ?? existing?.correct_count ?? 0, 0), 5),
       last_quizzed_date: wordRecord.last_quizzed_date || existing?.last_quizzed_date || null,
@@ -484,4 +485,78 @@ export function generateQuizOptions(targetWord, allWordsPool = []) {
   ]
 
   return rawChoices.sort(() => 0.5 - Math.random())
+}
+
+/**
+ * Retrieves words distributed across difficulty levels (Easy, Medium, Hard).
+ * Automatically seeds authentic GRE words from GRE_VOCAB_DATASET if local database
+ * has fewer available words than requested for a given difficulty.
+ */
+export async function getWordsByDifficultyDistribution({
+  easy = 0,
+  medium = 0,
+  hard = 0,
+  userId = null,
+} = {}) {
+  const sessionUserId = getActiveUserId(userId)
+  const today = getTodayDateKey()
+  const allLocal = await getAllLearnedWords(sessionUserId)
+
+  const requests = [
+    { difficulty: 'Easy', count: Math.max(0, parseInt(easy, 10) || 0) },
+    { difficulty: 'Medium', count: Math.max(0, parseInt(medium, 10) || 0) },
+    { difficulty: 'Hard', count: Math.max(0, parseInt(hard, 10) || 0) },
+  ]
+
+  const selectedWords = []
+  const existingWordsLower = new Set(allLocal.map((w) => (w.word || '').trim().toLowerCase()))
+
+  for (const req of requests) {
+    if (req.count <= 0) continue
+
+    // Find local words matching this difficulty tier
+    let matchingLocal = allLocal.filter(
+      (w) => (w.difficulty || 'Medium').toLowerCase() === req.difficulty.toLowerCase()
+    )
+
+    // Sort: unmastered first (correct_count < 5), then fewest correct reviews
+    matchingLocal.sort((a, b) => {
+      const aDone = (a.correct_count || 0) >= 5
+      const bDone = (b.correct_count || 0) >= 5
+      if (aDone !== bDone) return aDone ? 1 : -1
+      return (a.correct_count || 0) - (b.correct_count || 0)
+    })
+
+    // If local has fewer than requested, seed from GRE_VOCAB_DATASET
+    if (matchingLocal.length < req.count) {
+      const needed = req.count - matchingLocal.length
+      const datasetCandidates = GRE_VOCAB_DATASET.filter(
+        (item) =>
+          item.difficulty.toLowerCase() === req.difficulty.toLowerCase() &&
+          !existingWordsLower.has(item.word.trim().toLowerCase())
+      )
+
+      for (let i = 0; i < Math.min(needed, datasetCandidates.length); i++) {
+        const candidate = datasetCandidates[i]
+        existingWordsLower.add(candidate.word.trim().toLowerCase())
+        try {
+          const saved = await saveLearnedWord({
+            ...candidate,
+            userId: sessionUserId,
+            date_added: today,
+            correct_count: 0,
+          })
+          matchingLocal.push(saved)
+        } catch (err) {
+          console.warn('[vocabService] Seed word error:', err)
+        }
+      }
+    }
+
+    // Pick requested number of words
+    const chosen = matchingLocal.slice(0, req.count)
+    selectedWords.push(...chosen)
+  }
+
+  return selectedWords
 }

@@ -39,7 +39,33 @@ export function TimerSessionProvider({ children }) {
   // endAt: absolute epoch timestamp in ms when running
   const [endAt, setEndAt] = useState(null)
 
-  const [completedFocusCount, setCompletedFocusCount] = useState(0)
+  const [completedFocusCount, setCompletedFocusCount] = useState(() => {
+    try {
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('nocturn_timer_cycles') : null
+      return saved !== null && !isNaN(parseInt(saved, 10)) ? parseInt(saved, 10) : 0
+    } catch {
+      return 0
+    }
+  })
+  const [pendingPreset, setPendingPreset] = useState(null)
+  const pendingPresetRef = useRef(null)
+
+  const updateCompletedFocusCount = useCallback((newCount) => {
+    setCompletedFocusCount(newCount)
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('nocturn_timer_cycles', String(newCount))
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const queuePendingPreset = useCallback((preset) => {
+    pendingPresetRef.current = preset
+    setPendingPreset(preset)
+  }, [])
+
   const [taskName, setTaskName] = useState('')
   const [taskId, setTaskId] = useState(null)
   const [planBlockId, setPlanBlockId] = useState(null)
@@ -129,7 +155,7 @@ export function TimerSessionProvider({ children }) {
         })
 
         const newCount = currentCount + 1
-        setCompletedFocusCount(newCount)
+        updateCompletedFocusCount(newCount)
 
         // Play warm bell sound
         if (isTimerSoundsEnabled()) {
@@ -197,6 +223,7 @@ export function TimerSessionProvider({ children }) {
     settings,
     updateTimerState,
     addToast,
+    updateCompletedFocusCount,
   ])
 
   // ── START NEXT PHASE (EXPLICIT USER CLICK REQUIRED) ──
@@ -542,7 +569,7 @@ export function TimerSessionProvider({ children }) {
     setMode('focus')
     setStatus('idle')
     setEndAt(null)
-    setCompletedFocusCount(0)
+    updateCompletedFocusCount(0)
     setTotalSeconds(durSecs)
     setRemainingSeconds(durSecs)
     setElapsedSeconds(0)
@@ -792,6 +819,9 @@ export function TimerSessionProvider({ children }) {
     completionModalData,
     closeCompletionModal: () => setCompletionModalData(null),
     handleCompleteSessionModal,
+    pendingPreset,
+    queuePendingPreset,
+    resetCycles: () => updateCompletedFocusCount(0),
   }
 
   return (

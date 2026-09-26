@@ -450,10 +450,40 @@ export default function Tasks() {
         </div>
       )}
 
+      {/* Mobile Horizontal View Pill Selector */}
+      <div className="lg:hidden -mx-3 px-3 overflow-x-auto no-scrollbar flex items-center gap-1.5 py-1">
+        {[
+          { id: 'my-day', name: 'My Day', icon: Sun },
+          { id: 'inbox', name: 'Inbox', icon: Inbox },
+          { id: 'upcoming', name: 'Upcoming', icon: CalendarDays },
+          { id: 'all', name: 'All Tasks', icon: ListTodo },
+          { id: 'completed', name: 'Completed', icon: CheckCircle2 },
+          ...lists.map((l) => ({ id: l.id, name: l.name, icon: ListTodo })),
+        ].map((v) => {
+          const isActive = activeListId === v.id
+          const Icon = v.icon
+          return (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => handleSelectView(v.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 transition-colors cursor-pointer border ${
+                isActive
+                  ? 'bg-nocturn-accent/15 text-nocturn-accent-bright border-nocturn-accent/30 font-semibold shadow-sm'
+                  : 'bg-nocturn-card text-nocturn-muted hover:text-white border-nocturn-border/70'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{v.name}</span>
+            </button>
+          )
+        })}
+      </div>
+
       {/* Main Grid Layout: Navigation Sidebar + Task List Content */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
-        {/* Left Navigation */}
-        <div className="lg:col-span-3 xl:col-span-3 bg-nocturn-card/60 p-3.5 sm:p-4 rounded-2xl border border-nocturn-border/80">
+        {/* Left Navigation (Desktop only) */}
+        <div className="hidden lg:block lg:col-span-3 xl:col-span-3 bg-nocturn-card/60 p-3.5 sm:p-4 rounded-2xl border border-nocturn-border/80">
           <TaskListNav onSelectView={handleSelectView} />
         </div>
 
@@ -996,14 +1026,16 @@ export default function Tasks() {
       </AnimatePresence>
 
       {/* Mobile Floating Quick Add Button (FAB) */}
-      <button
-        type="button"
-        onClick={() => setIsMobileQuickAddOpen(true)}
-        aria-label="Quick add task"
-        className="lg:hidden fixed bottom-20 right-4 sm:right-6 z-30 w-13 h-13 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white shadow-[0_8px_24px_rgba(var(--color-nocturn-accent-rgb),0.4)] flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer"
-      >
-        <Plus className="w-6 h-6 stroke-[2.5]" />
-      </button>
+      {selectedTaskIds.length === 0 && !isSelectMode && (
+        <button
+          type="button"
+          onClick={() => setIsMobileQuickAddOpen(true)}
+          aria-label="Quick add task"
+          className="lg:hidden fixed bottom-20 right-4 sm:right-6 z-30 w-13 h-13 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white shadow-[0_8px_24px_rgba(var(--color-nocturn-accent-rgb),0.4)] flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer"
+        >
+          <Plus className="w-6 h-6 stroke-[2.5]" />
+        </button>
+      )}
 
       {/* Mobile Quick Add Bottom Sheet */}
       <MobileQuickAddSheet

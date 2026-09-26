@@ -13,13 +13,19 @@ import {
   Plus,
   Trash2,
   Volume2,
+  SlidersHorizontal,
+  Play,
 } from 'lucide-react'
+import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
 import VocabWordModal from '../components/vocab/VocabWordModal'
+import VocabSessionConfigModal from '../components/vocab/VocabSessionConfigModal'
+import { getWordsByDifficultyDistribution } from '../services/vocabService'
 import { Card, Badge, Button, Progress } from '../components/ui'
 
 export default function Vocab() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const {
     allWords,
     dailyWords,
@@ -36,8 +42,24 @@ export default function Vocab() {
   } = useVocab()
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
   const [isConfirmDeleteAllOpen, setIsConfirmDeleteAllOpen] = useState(false)
   const [isDeletingAll, setIsDeletingAll] = useState(false)
+
+  const handleStartCustomSession = async (sessionConfig) => {
+    try {
+      const words = await getWordsByDifficultyDistribution({
+        easy: sessionConfig.easy,
+        medium: sessionConfig.medium,
+        hard: sessionConfig.hard,
+        userId: user?.id,
+      })
+      navigate('/vocab/learn', { state: { customWords: words, config: sessionConfig } })
+    } catch (err) {
+      console.error('Failed to configure custom vocab session:', err)
+      navigate('/vocab/learn')
+    }
+  }
 
   const handleDeleteAllConfirm = async () => {
     try {
@@ -266,14 +288,22 @@ export default function Vocab() {
 
           <div className="pt-6">
             {isDailyCompleted ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <Button
                   variant="secondary"
                   onClick={() => navigate('/vocab/learn')}
                   className="w-full justify-center"
                   icon={ArrowRight}
                 >
-                  Review Today's Words
+                  Review Set
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsConfigModalOpen(true)}
+                  className="w-full justify-center"
+                  icon={SlidersHorizontal}
+                >
+                  Custom Set
                 </Button>
                 <Button
                   variant="primary"
@@ -282,19 +312,27 @@ export default function Vocab() {
                   className="w-full justify-center"
                   icon={isGenerating ? RefreshCw : Sparkles}
                 >
-                  {isGenerating ? 'Generating...' : 'Generate More'}
+                  {isGenerating ? 'Generating...' : 'AI Generate'}
                 </Button>
               </div>
             ) : allWords.length === 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <Button
                   variant="primary"
-                  onClick={handleStartLearn}
+                  onClick={() => setIsConfigModalOpen(true)}
+                  className="w-full justify-center"
+                  icon={Play}
+                >
+                  Configure & Start
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleGenerateNewWords}
                   disabled={isGenerating}
                   className="w-full justify-center"
                   icon={isGenerating ? RefreshCw : Sparkles}
                 >
-                  {isGenerating ? 'Generating with AI...' : 'Generate with AI'}
+                  {isGenerating ? 'Generating...' : 'AI Generate'}
                 </Button>
                 <Button
                   variant="secondary"
@@ -317,8 +355,16 @@ export default function Vocab() {
                   {isGenerating
                     ? 'Generating with Gemini...'
                     : learnedTodayCount > 0
-                    ? `Continue (Word ${Math.min(currentLearningIndex + 1, Math.max(dailyWords.length, 1))} of ${dailyWords.length})`
+                    ? `Continue (${Math.min(currentLearningIndex + 1, Math.max(dailyWords.length, 1))} of ${dailyWords.length})`
                     : `Start Learning (${dailyWords.length} words)`}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsConfigModalOpen(true)}
+                  icon={SlidersHorizontal}
+                  title="Configure word count and difficulty"
+                >
+                  <span>Configure</span>
                 </Button>
                 <Button
                   variant="secondary"
@@ -327,7 +373,7 @@ export default function Vocab() {
                   icon={isGenerating ? RefreshCw : Sparkles}
                   title="Generate brand new words with AI"
                 >
-                  <span className="hidden sm:inline">Generate</span>
+                  <span className="hidden sm:inline">AI Generate</span>
                 </Button>
               </div>
             )}
@@ -503,6 +549,13 @@ export default function Vocab() {
           </div>
         </div>
       )}
+
+      {/* Vocab Session Difficulty & Word Count Config Modal */}
+      <VocabSessionConfigModal
+        isOpen={isConfigModalOpen}
+        onClose={() => setIsConfigModalOpen(false)}
+        onStartSession={handleStartCustomSession}
+      />
     </motion.div>
   )
 }

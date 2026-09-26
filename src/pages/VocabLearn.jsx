@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft,
@@ -12,16 +12,19 @@ import {
   Plus,
   BookOpen,
   Volume2,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
-import { getTodayDateKey, saveDailyVocabLog } from '../services/vocabService'
+import { getTodayDateKey, saveDailyVocabLog, getWordsByDifficultyDistribution } from '../services/vocabService'
 import { speakWord } from '../services/soundService'
 import VocabWordModal from '../components/vocab/VocabWordModal'
+import VocabSessionConfigModal from '../components/vocab/VocabSessionConfigModal'
 import { Card, Badge, Button, Progress } from '../components/ui'
 
 export default function VocabLearn() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
   const {
     allWords,
@@ -41,6 +44,15 @@ export default function VocabLearn() {
   } = useVocab()
 
   const todayKey = getTodayDateKey()
+
+  const [customWords, setCustomWords] = useState(() => location.state?.customWords || null)
+  const [sessionConfig, setSessionConfig] = useState(() => location.state?.config || null)
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
+
+  const effectiveWords = useMemo(() => {
+    if (customWords && customWords.length > 0) return customWords
+    return dailyWords
+  }, [customWords, dailyWords])
 
   const [currentIndex, setCurrentIndex] = useState(() => {
     try {
@@ -66,8 +78,8 @@ export default function VocabLearn() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const markedWordsRef = useRef(new Set())
 
-  const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(0, dailyWords.length - 1)))
-  const currentWord = dailyWords[safeIndex]
+  const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(0, effectiveWords.length - 1)))
+  const currentWord = effectiveWords[safeIndex]
 
   // Persist current learning index so leaving halfway resumes exactly where left off
   useEffect(() => {
@@ -119,7 +131,7 @@ export default function VocabLearn() {
       // ignore
     }
 
-    if (nextIdx < dailyWords.length) {
+    if (nextIdx < effectiveWords.length) {
       setCurrentIndex(nextIdx)
       try {
         if (sessionLearnKey) localStorage.setItem(sessionLearnKey, String(nextIdx))
@@ -129,7 +141,7 @@ export default function VocabLearn() {
       await saveDailyVocabLog({
         date: todayKey,
         userId: user?.id || null,
-        wordIds: dailyWords.map((w) => w.id),
+        wordIds: effectiveWords.map((w) => w.id),
         currentIndex: nextIdx,
         completedWordIds: currentCompletedIds,
         completed: false,
@@ -140,19 +152,37 @@ export default function VocabLearn() {
       setBrowsingCards(false)
       try {
         if (sessionCompleteKey) localStorage.setItem(sessionCompleteKey, 'true')
-        if (sessionLearnKey) localStorage.setItem(sessionLearnKey, String(dailyWords.length - 1))
+        if (sessionLearnKey) localStorage.setItem(sessionLearnKey, String(effectiveWords.length - 1))
       } catch {
         // ignore
       }
       await saveDailyVocabLog({
         date: todayKey,
         userId: user?.id || null,
-        wordIds: dailyWords.map((w) => w.id),
-        currentIndex: dailyWords.length - 1,
-        completedWordIds: dailyWords.map((w) => w.id),
+        wordIds: effectiveWords.map((w) => w.id),
+        currentIndex: effectiveWords.length - 1,
+        completedWordIds: effectiveWords.map((w) => w.id),
         completed: true,
         updated_at: new Date().toISOString(),
       })
+    }
+  }
+
+  const handleStartNewSession = async (cfg) => {
+    try {
+      const words = await getWordsByDifficultyDistribution({
+        easy: cfg.easy,
+        medium: cfg.medium,
+        hard: cfg.hard,
+        userId: user?.id,
+      })
+      setCustomWords(words)
+      setSessionConfig(cfg)
+      setCurrentIndex(0)
+      setCompletedManually(false)
+      setBrowsingCards(false)
+    } catch (err) {
+      console.error('Failed to start new custom session:', err)
     }
   }
 
@@ -411,7 +441,7 @@ export default function VocabLearn() {
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-12">
       {/* Navigation Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <button
           onClick={() => navigate('/vocab')}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-nocturn-muted hover:text-white transition-colors cursor-pointer"
@@ -420,15 +450,31 @@ export default function VocabLearn() {
           <span>Back</span>
         </button>
 
-        {/* Step Indicator */}
-        <Badge variant="neutral" size="sm" icon={Sparkles}>
-          {safeIndex + 1} of {dailyWords.length}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {sessionConfig && (
+            <span className="text-[11px] font-mono text-nocturn-muted hidden sm:inline">
+              Custom ({sessionConfig.easy > 0 ? `${sessionConfig.easy}E ` : ''}{sessionConfig.medium > 0 ? `${sessionConfig.medium}M ` : ''}{sessionConfig.hard > 0 ? `${sessionConfig.hard}H` : ''})
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsConfigModalOpen(true)}
+            className="px-2.5 py-1 rounded-xl text-xs font-medium text-nocturn-muted hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Configure difficulty & word count"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Configure</span>
+          </button>
+          {/* Step Indicator */}
+          <Badge variant="neutral" size="sm" icon={Sparkles}>
+            {safeIndex + 1} of {effectiveWords.length}
+          </Badge>
+        </div>
       </div>
 
       {/* Progress Bar */}
       <Progress
-        value={((safeIndex + 1) / Math.max(1, dailyWords.length)) * 100}
+        value={((safeIndex + 1) / Math.max(1, effectiveWords.length)) * 100}
       />
 
       {/* Flashcard Component with AnimatePresence */}
@@ -440,19 +486,27 @@ export default function VocabLearn() {
           exit={{ opacity: 0, x: -12 }}
           transition={{ duration: 0.15, ease: 'easeOut' }}
         >
-          <Card variant="elevated" className="p-6 sm:p-9 space-y-6">
+          <Card variant="elevated" className="p-5 sm:p-8 space-y-6">
             {/* Top Word Badges */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {currentWord?.part_of_speech && (
                   <Badge variant="accent" size="sm">
                     {currentWord.part_of_speech}
                   </Badge>
                 )}
                 {currentWord?.difficulty && (
-                  <Badge variant="warning" size="sm">
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                      currentWord.difficulty.toLowerCase() === 'easy'
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : currentWord.difficulty.toLowerCase() === 'hard'
+                        ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                        : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                    }`}
+                  >
                     {currentWord.difficulty}
-                  </Badge>
+                  </span>
                 )}
               </div>
               <span className="text-[11px] font-mono text-nocturn-muted">GRE Level</span>
@@ -538,13 +592,20 @@ export default function VocabLearn() {
           onClick={handleNext}
         >
           <span>
-            {safeIndex === dailyWords.length - 1
-              ? 'Complete Daily Set'
+            {safeIndex === effectiveWords.length - 1
+              ? 'Complete Set'
               : 'Next Word'}
           </span>
           <ChevronRight className="w-4 h-4 ml-1.5" />
         </Button>
       </div>
+
+      {/* Vocab Session Config Modal */}
+      <VocabSessionConfigModal
+        isOpen={isConfigModalOpen}
+        onClose={() => setIsConfigModalOpen(false)}
+        onStartSession={handleStartNewSession}
+      />
     </div>
   )
 }
