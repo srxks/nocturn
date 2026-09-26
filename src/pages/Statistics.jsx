@@ -12,6 +12,7 @@ import {
   calculateFocusByTask,
   getSessionDurationMinutes,
   getActiveSessionMinutes,
+  isFocusSessionRecord,
 } from '../services/statsService'
 import {
   BarChart3,
@@ -89,9 +90,7 @@ export default function Statistics() {
 
   // Average session duration
   const avgSessionMins = useMemo(() => {
-    const focusSessions = sessions.filter(
-      (s) => s.sessionType === 'focus' || s.sessionType === 'focus_session'
-    )
+    const focusSessions = sessions.filter(isFocusSessionRecord)
     if (focusSessions.length === 0) return 25
     const total = focusSessions.reduce((acc, s) => acc + getSessionDurationMinutes(s), 0)
     return Math.round(total / focusSessions.length)
@@ -99,9 +98,7 @@ export default function Statistics() {
 
   // Longest session duration
   const longestSessionMins = useMemo(() => {
-    const focusSessions = sessions.filter(
-      (s) => s.sessionType === 'focus' || s.sessionType === 'focus_session'
-    )
+    const focusSessions = sessions.filter(isFocusSessionRecord)
     if (focusSessions.length === 0) return 0
     const max = Math.max(...focusSessions.map((s) => getSessionDurationMinutes(s)))
     return Math.round(max)
@@ -123,8 +120,7 @@ export default function Statistics() {
       const key = formatDateKey(d)
 
       const daySessions = sessions.filter((s) => {
-        const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
-        if (!isFocus) return false
+        if (!isFocusSessionRecord(s)) return false
         const dateStr = s.completedAt || s.ended_at || s.createdAt || s.created_at || s.startedAt
         return dateStr && formatDateKey(new Date(dateStr)) === key
       })
@@ -156,7 +152,7 @@ export default function Statistics() {
   // Recent focus sessions history log
   const recentHistory = useMemo(() => {
     return [...sessions]
-      .filter((s) => s.sessionType === 'focus' || s.sessionType === 'focus_session')
+      .filter(isFocusSessionRecord)
       .sort((a, b) => {
         const dateA = new Date(a.completedAt || a.startedAt || 0).getTime()
         const dateB = new Date(b.completedAt || b.startedAt || 0).getTime()
@@ -581,7 +577,16 @@ export default function Statistics() {
                       <span className="text-xs font-semibold text-white truncate">
                         {s.taskName || s.taskTitle || 'Focus Session'}
                       </span>
-                      <span className="text-[10px] font-mono text-nocturn-accent bg-nocturn-accent/10 px-2 py-0.5 rounded-full border border-nocturn-accent/20">
+                      {s.sessionType === 'focus_stopwatch' ? (
+                        <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
+                          Stopwatch
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono text-nocturn-accent bg-nocturn-accent/10 px-2 py-0.5 rounded-full border border-nocturn-accent/20">
+                          Pomodoro
+                        </span>
+                      )}
+                      <span className="text-[10px] font-mono text-white/70 bg-white/[0.06] px-2 py-0.5 rounded-full border border-white/10">
                         {Math.round(durationMins)} min
                       </span>
                     </div>

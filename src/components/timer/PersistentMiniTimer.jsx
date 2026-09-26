@@ -10,6 +10,9 @@ import {
   playTimerResumeSound,
 } from '../../services/soundService'
 
+const RADIUS = 18
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS
+
 export default function PersistentMiniTimer() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -31,6 +34,7 @@ export default function PersistentMiniTimer() {
     isPaused,
     remainingSeconds,
     totalSeconds,
+    elapsedSeconds,
     mode,
     taskName,
     togglePlayPause,
@@ -70,15 +74,29 @@ export default function PersistentMiniTimer() {
     return null
   }
 
-  const mins = Math.floor(remainingSeconds / 60)
-  const secs = remainingSeconds % 60
-  const formattedTime = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  const isNormalStopwatch = mode === 'normal_stopwatch'
+  const isFocusStopwatch = mode === 'focus_stopwatch'
+  const isStopwatch = isNormalStopwatch || isFocusStopwatch
 
-  // 44px circular progress ring calculations
-  const radius = 17
-  const circumference = 2 * Math.PI * radius
-  const progressRatio = totalSeconds > 0 ? (totalSeconds - remainingSeconds) / totalSeconds : 0
-  const strokeDashoffset = circumference - progressRatio * circumference
+  let formattedTime
+  let progressRatio
+
+  if (isStopwatch) {
+    const validElapsed = Math.max(0, Math.floor(elapsedSeconds || 0))
+    const hrs = Math.floor(validElapsed / 3600)
+    const mins = Math.floor((validElapsed % 3600) / 60)
+    const secs = validElapsed % 60
+    formattedTime = hrs > 0
+      ? `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+      : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+    progressRatio = isNormalStopwatch ? (validElapsed % 60) / 60 : 1.0
+  } else {
+    const mins = Math.floor(remainingSeconds / 60)
+    const secs = remainingSeconds % 60
+    formattedTime = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+    progressRatio = totalSeconds > 0 ? (totalSeconds - remainingSeconds) / totalSeconds : 0
+  }
+  const strokeDashoffset = CIRCUMFERENCE - progressRatio * CIRCUMFERENCE
 
   const handleToggle = (e) => {
     e.stopPropagation()
@@ -175,7 +193,7 @@ export default function PersistentMiniTimer() {
               <circle
                 cx="22"
                 cy="22"
-                r={radius}
+                r={RADIUS}
                 className="text-white/[0.08]"
                 strokeWidth="3"
                 stroke="currentColor"
@@ -185,10 +203,10 @@ export default function PersistentMiniTimer() {
               <motion.circle
                 cx="22"
                 cy="22"
-                r={radius}
+                r={RADIUS}
                 className={mode === 'focus' ? 'text-nocturn-accent' : 'text-emerald-400'}
                 strokeWidth="3"
-                strokeDasharray={circumference}
+                strokeDasharray={CIRCUMFERENCE}
                 strokeDashoffset={strokeDashoffset}
                 strokeLinecap="round"
                 stroke="currentColor"

@@ -21,6 +21,7 @@ import {
   calculateProductivityStats,
   getSessionDurationMinutes,
   getActiveSessionMinutes,
+  isFocusSessionRecord,
 } from '../services/statsService'
 import { formatDateKey } from '../services/calendarService'
 import { useAuth } from '../context/useAuth'
@@ -161,8 +162,7 @@ export default function Profile() {
       const key = formatDateKey(d)
 
       const daySessions = sessions.filter((s) => {
-        const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
-        if (!isFocus) return false
+        if (!isFocusSessionRecord(s)) return false
         const dateStr = s.completedAt || s.ended_at || s.createdAt || s.created_at || s.startedAt
         return dateStr && formatDateKey(new Date(dateStr)) === key
       })
@@ -210,8 +210,7 @@ export default function Profile() {
 
     return weeks.map((w) => {
       const weekSessions = sessions.filter((s) => {
-        const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
-        if (!isFocus) return false
+        if (!isFocusSessionRecord(s)) return false
         const dateStr = s.completedAt || s.ended_at || s.createdAt || s.created_at || s.startedAt
         if (!dateStr) return false
         const d = new Date(dateStr)
@@ -249,8 +248,7 @@ export default function Profile() {
 
     return monthNames.map((name, idx) => {
       const monthSessions = sessions.filter((s) => {
-        const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
-        if (!isFocus) return false
+        if (!isFocusSessionRecord(s)) return false
         const dateStr = s.completedAt || s.ended_at || s.createdAt || s.created_at || s.startedAt
         if (!dateStr) return false
         const d = new Date(dateStr)

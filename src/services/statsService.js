@@ -12,6 +12,17 @@ import { formatDateKey } from './calendarService.js'
  * - Zero fake/seeded values when there is no data.
  */
 
+/**
+ * Returns true if the session record qualifies as a genuine focused session.
+ * Includes Pomodoro focus and Focus Stopwatch.
+ * Strictly EXCLUDES breaks and Normal Stopwatch.
+ */
+export function isFocusSessionRecord(s) {
+  if (!s || typeof s !== 'object') return false
+  const t = s.sessionType
+  return t === 'focus' || t === 'focus_session' || t === 'focus_stopwatch' || t === 'pomodoro_focus'
+}
+
 export function getSessionDurationMinutes(s) {
   if (!s || typeof s !== 'object') return 0
   if (Number.isFinite(Number(s.durationSeconds)) && Number(s.durationSeconds) > 0) {
@@ -28,7 +39,7 @@ export function getSessionDurationMinutes(s) {
 
 export function getActiveSessionMinutes(activeSession) {
   if (!activeSession || typeof activeSession !== 'object') return 0
-  const isFocus = activeSession.sessionType === 'focus' || activeSession.sessionType === 'focus_session'
+  const isFocus = isFocusSessionRecord(activeSession)
   if (!isFocus) return 0
 
   if (activeSession.status === 'paused') {
@@ -59,10 +70,8 @@ export function calculateProductivityStats(
   const safeSessions = Array.isArray(sessions) ? sessions.filter((s) => s && typeof s === 'object') : []
   const safeTasks = Array.isArray(tasks) ? tasks.filter((t) => t && typeof t === 'object') : []
 
-  // Filter focus sessions (exclude break records)
-  const focusSessions = safeSessions.filter(
-    (s) => s.sessionType === 'focus' || s.sessionType === 'focus_session'
-  )
+  // Filter genuine focus sessions (Pomodoro focus + Focus Stopwatch; excludes breaks & normal stopwatch)
+  const focusSessions = safeSessions.filter(isFocusSessionRecord)
 
   // Completed sessions focus minutes
   const completedFocusMinutes = focusSessions.reduce((acc, s) => acc + getSessionDurationMinutes(s), 0)
@@ -224,8 +233,7 @@ export function calculateDailyHeatmap(sessions = [], tasks = [], days = 60) {
   // Create lookup of minutes per dateKey
   const minsByDate = new Map()
   for (const s of safeSessions) {
-    const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
-    if (!isFocus) continue
+    if (!isFocusSessionRecord(s)) continue
     const dateStr = s.completedAt || s.ended_at || s.createdAt || s.created_at || s.startedAt
     if (!dateStr) continue
     const key = formatDateKey(new Date(dateStr))
@@ -302,8 +310,7 @@ export function calculateFocusByList(sessions = [], tasks = [], lists = []) {
   let grandTotalMins = 0
 
   for (const s of safeSessions) {
-    const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
-    if (!isFocus) continue
+    if (!isFocusSessionRecord(s)) continue
     const mins = getSessionDurationMinutes(s)
     if (mins <= 0) continue
 
@@ -347,8 +354,7 @@ export function calculateFocusByTask(sessions = [], tasks = []) {
   let grandTotalMins = 0
 
   for (const s of safeSessions) {
-    const isFocus = s.sessionType === 'focus' || s.sessionType === 'focus_session'
-    if (!isFocus) continue
+    if (!isFocusSessionRecord(s)) continue
     const mins = getSessionDurationMinutes(s)
     if (mins <= 0) continue
 
@@ -373,5 +379,46 @@ export function calculateFocusByTask(sessions = [], tasks = []) {
   }
 
   return result.sort((a, b) => b.minutes - a.minutes).slice(0, 10)
+}
+
+/**
+ * Calculates session distribution breakdown distinguishing timer types:
+ * Pomodoro Focus, Focus Stopwatch, Breaks, Normal Stopwatch.
+ */
+export function calculateSessionBreakdown(sessions = []) {
+  const safeSessions = Array.isArray(sessions) ? sessions.filter(Boolean) : []
+  let pomodoroMinutes = 0
+  let pomodoroCount = 0
+  let focusStopwatchMinutes = 0
+  let focusStopwatchCount = 0
+  let breakMinutes = 0
+  let breakCount = 0
+  let normalStopwatchMinutes = 0
+  let normalStopwatchCount = 0
+
+  for (const s of safeSessions) {
+    const mins = getSessionDurationMinutes(s)
+    const t = s.sessionType
+    if (t === 'focus_stopwatch') {
+      focusStopwatchMinutes += mins
+      focusStopwatchCount++
+    } else if (t === 'normal_stopwatch') {
+      normalStopwatchMinutes += mins
+      normalStopwatchCount++
+    } else if (t === 'short_break' || t === 'long_break' || t === 'break') {
+      breakMinutes += mins
+      breakCount++
+    } else if (t === 'focus' || t === 'focus_session' || t === 'pomodoro_focus') {
+      pomodoroMinutes += mins
+      pomodoroCount++
+    }
+  }
+
+  return {
+    pomodoro: { minutes: Math.round(pomodoroMinutes * 10) / 10, count: pomodoroCount },
+    focusStopwatch: { minutes: Math.round(focusStopwatchMinutes * 10) / 10, count: focusStopwatchCount },
+    breaks: { minutes: Math.round(breakMinutes * 10) / 10, count: breakCount },
+    normalStopwatch: { minutes: Math.round(normalStopwatchMinutes * 10) / 10, count: normalStopwatchCount },
+  }
 }
 
