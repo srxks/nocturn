@@ -393,7 +393,7 @@ export default function Tasks() {
   const isMyDay = activeListId === 'my-day'
 
   return (
-    <div className="w-full space-y-6 sm:space-y-8">
+    <div className="w-full space-y-4 sm:space-y-6 lg:space-y-8">
       {/* Page Header with Bulk Task Action Menu */}
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-1">
@@ -1031,7 +1031,7 @@ export default function Tasks() {
           type="button"
           onClick={() => setIsMobileQuickAddOpen(true)}
           aria-label="Quick add task"
-          className="lg:hidden fixed bottom-20 right-4 sm:right-6 z-30 w-13 h-13 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white shadow-[0_8px_24px_rgba(var(--color-nocturn-accent-rgb),0.4)] flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer"
+          className="lg:hidden fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] right-4 sm:right-6 z-30 w-13 h-13 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white shadow-[0_8px_24px_rgba(var(--color-nocturn-accent-rgb),0.4)] flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer"
         >
           <Plus className="w-6 h-6 stroke-[2.5]" />
         </button>

@@ -693,7 +693,7 @@ export default function PlanMyDay() {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15 }}
-      className="w-full max-w-4xl mx-auto space-y-6 sm:space-y-8"
+      className="w-full max-w-4xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8"
     >
       {/* Header Section */}
       <header className="space-y-1">

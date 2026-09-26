@@ -121,10 +121,10 @@ export default function VocabSessionConfigModal({
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none min-w-0 flex-1 pr-2">
                   <div
                     onClick={() => toggleDifficulty('easy')}
-                    className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-colors cursor-pointer ${
+                    className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
                       config.easy.enabled
                         ? 'bg-emerald-500 border-emerald-400 text-black'
                         : 'bg-white/[0.05] border-white/20 text-transparent'
@@ -132,11 +132,11 @@ export default function VocabSessionConfigModal({
                   >
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
                       Easy
                     </span>
-                    <span className="text-[11px] text-nocturn-muted">High-frequency foundational words</span>
+                    <span className="text-[11px] text-nocturn-muted block truncate">High-frequency foundational words</span>
                   </div>
                 </label>
 
@@ -180,10 +180,10 @@ export default function VocabSessionConfigModal({
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none min-w-0 flex-1 pr-2">
                   <div
                     onClick={() => toggleDifficulty('medium')}
-                    className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-colors cursor-pointer ${
+                    className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
                       config.medium.enabled
                         ? 'bg-amber-400 border-amber-300 text-black'
                         : 'bg-white/[0.05] border-white/20 text-transparent'
@@ -191,11 +191,11 @@ export default function VocabSessionConfigModal({
                   >
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
                       Medium
                     </span>
-                    <span className="text-[11px] text-nocturn-muted">Core GRE academic vocabulary</span>
+                    <span className="text-[11px] text-nocturn-muted block truncate">Core GRE academic vocabulary</span>
                   </div>
                 </label>
 
@@ -239,10 +239,10 @@ export default function VocabSessionConfigModal({
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none min-w-0 flex-1 pr-2">
                   <div
                     onClick={() => toggleDifficulty('hard')}
-                    className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-colors cursor-pointer ${
+                    className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
                       config.hard.enabled
                         ? 'bg-rose-500 border-rose-400 text-white'
                         : 'bg-white/[0.05] border-white/20 text-transparent'
@@ -250,11 +250,11 @@ export default function VocabSessionConfigModal({
                   >
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <span className="text-xs font-bold text-rose-400 uppercase tracking-wider block">
                       Hard
                     </span>
-                    <span className="text-[11px] text-nocturn-muted">Advanced & nuanced GRE terms</span>
+                    <span className="text-[11px] text-nocturn-muted block truncate">Advanced & nuanced GRE terms</span>
                   </div>
                 </label>
 

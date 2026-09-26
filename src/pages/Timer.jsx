@@ -151,9 +151,9 @@ export default function Timer() {
   const isCompleted = remainingSeconds === 0 && !isRunning && !isPaused
 
   return (
-    <div className="w-full max-w-6xl mx-auto py-4 px-3 sm:px-6 space-y-6">
+    <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6">
       {/* Top Header with Timer Settings gear button & Zen mode */}
-      <header className="relative w-full text-center flex items-center justify-between px-2 pb-4 border-b border-white/[0.06]">
+      <header className="relative w-full text-center flex items-center justify-between px-1 pb-3 sm:pb-4 border-b border-white/[0.06]">
         <button
           type="button"
           onClick={() => setIsFocusModeOpen(true)}
@@ -183,11 +183,11 @@ export default function Timer() {
       </header>
 
       {/* Main Timer Display */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 lg:gap-8 items-start">
           {/* Left Main Column: Ring, Controls, Rhythm Presets */}
-          <div className="flex flex-col items-center justify-center space-y-6 sm:space-y-7 w-full max-w-md lg:max-w-none mx-auto">
+          <div className="flex flex-col items-center justify-center space-y-4 sm:space-y-6 w-full max-w-md lg:max-w-none mx-auto">
             {/* Preset Rhythm Selector (Always accessible) */}
-            <div className="flex items-center gap-1.5 p-1 bg-[#11131a]/80 backdrop-blur-xl border border-white/[0.08] rounded-2xl overflow-x-auto max-w-full no-scrollbar shadow-sm">
+            <div className="w-full flex items-center gap-1.5 p-1 bg-[#11131a]/80 backdrop-blur-xl border border-white/[0.08] rounded-2xl overflow-x-auto no-scrollbar shadow-sm">
               {TIMER_PRESETS.map((preset) => {
                 const isSelected = selectedPreset === preset.id
                 const isQueued = pendingPreset?.id === preset.id

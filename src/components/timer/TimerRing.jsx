@@ -44,7 +44,7 @@ export default function TimerRing({
   const ringStrokeColor = isBreak ? '#10B981' : 'var(--color-nocturn-accent, #8B5CF6)'
 
   return (
-    <div className="relative w-full max-w-[280px] sm:max-w-[320px] aspect-square mx-auto flex items-center justify-center select-none">
+    <div className="relative w-full max-w-[240px] xs:max-w-[270px] sm:max-w-[310px] aspect-square mx-auto flex items-center justify-center select-none">
       {/* Calm ambient glow: idle breathing (scale 1 <-> 1.02, 4s loop), or running tick pulse, break color shift */}
       <motion.div
         animate={

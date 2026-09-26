@@ -139,30 +139,24 @@ export default function BottomNav() {
                 key={item.id}
                 to={item.path}
                 aria-current={active ? 'page' : undefined}
-                className="relative flex-1 min-w-0 flex flex-col items-center justify-center py-1 px-1 rounded-xl cursor-pointer"
+                className={`relative flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-xl transition-all duration-150 cursor-pointer ${
+                  active
+                    ? 'text-white font-medium'
+                    : 'text-nocturn-muted hover:text-white active:scale-95'
+                }`}
               >
-                {/* Active Indicator Moving Pill */}
                 {active && (
-                  <motion.div
-                    layoutId="mobileNavIndicator"
-                    className="absolute inset-0 bg-nocturn-accent/15 rounded-xl border border-nocturn-accent/25 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.25)]"
-                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                  />
+                  <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.7)]" />
                 )}
-
-                {/* Icon with Spring Lift on Active */}
-                <motion.div
-                  animate={{ y: active ? -2 : 0 }}
-                  transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-                  className={`relative z-10 transition-colors ${
-                    active ? 'text-nocturn-accent' : 'text-nocturn-muted'
+                <div
+                  className={`p-1 rounded-xl transition-colors ${
+                    active ? 'bg-nocturn-accent/15 text-nocturn-accent-bright' : 'text-nocturn-muted'
                   }`}
                 >
                   <Icon className="w-5 h-5 stroke-[2]" />
-                </motion.div>
-
+                </div>
                 <span
-                  className={`relative z-10 text-[10.5px] truncate tracking-tight transition-colors ${
+                  className={`text-[10px] truncate tracking-tight ${
                     active ? 'text-white font-semibold' : 'text-nocturn-muted'
                   }`}
                 >
@@ -178,28 +172,24 @@ export default function BottomNav() {
             onClick={() => setIsMoreOpen((prev) => !prev)}
             aria-expanded={isMoreOpen}
             aria-label="More navigation options"
-            className="relative flex-1 min-w-0 flex flex-col items-center justify-center py-1 px-1 rounded-xl cursor-pointer"
+            className={`relative flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-xl transition-all duration-150 cursor-pointer ${
+              isSecondaryActive || isMoreOpen
+                ? 'text-white font-medium'
+                : 'text-nocturn-muted hover:text-white active:scale-95'
+            }`}
           >
             {(isSecondaryActive || isMoreOpen) && (
-              <motion.div
-                layoutId="mobileNavIndicator"
-                className="absolute inset-0 bg-nocturn-accent/15 rounded-xl border border-nocturn-accent/25 shadow-[0_0_12px_rgba(var(--color-nocturn-accent-rgb),0.25)]"
-                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-              />
+              <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.7)]" />
             )}
-
-            <motion.div
-              animate={{ y: isSecondaryActive || isMoreOpen ? -2 : 0 }}
-              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-              className={`relative z-10 transition-colors ${
-                isSecondaryActive || isMoreOpen ? 'text-nocturn-accent' : 'text-nocturn-muted'
+            <div
+              className={`p-1 rounded-xl transition-colors ${
+                isSecondaryActive || isMoreOpen ? 'bg-nocturn-accent/15 text-nocturn-accent-bright' : 'text-nocturn-muted'
               }`}
             >
               <MoreHorizontal className="w-5 h-5 stroke-[2]" />
-            </motion.div>
-
+            </div>
             <span
-              className={`relative z-10 text-[10.5px] truncate tracking-tight ${
+              className={`text-[10px] truncate tracking-tight ${
                 isSecondaryActive || isMoreOpen ? 'text-white font-semibold' : 'text-nocturn-muted'
               }`}
             >

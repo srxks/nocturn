@@ -36,7 +36,7 @@ export default function AppShell() {
           <TopBar />
         </div>
 
-        <main className="w-full max-w-7xl xl:max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-10 xl:px-12 pt-4 sm:pt-6 lg:pt-8 pb-28 lg:pb-12 flex-1 flex flex-col">
+        <main className="w-full max-w-7xl xl:max-w-[1440px] mx-auto px-3.5 sm:px-6 lg:px-10 xl:px-12 pt-3 sm:pt-6 lg:pt-8 pb-24 sm:pb-28 lg:pb-12 flex-1 flex flex-col">
           <motion.div
             key={location.pathname}
             variants={pageEnter}

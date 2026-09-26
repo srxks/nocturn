@@ -128,10 +128,17 @@
     height: 56px;
   }
 
-  /* If bulk bar active, hide mini-timer completely on mobile */
+  /* If bulk bar active, hide mini-timer and slide mobile bottom nav out of view */
   body[data-bulk-active="true"] .mini-timer {
     opacity: 0 !important;
     pointer-events: none !important;
+  }
+
+  body[data-bulk-active="true"] nav[aria-label="Mobile Navigation"] {
+    transform: translateY(140%) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease !important;
   }
 }
 

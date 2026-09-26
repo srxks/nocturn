@@ -92,7 +92,7 @@ export default function BulkActionBar({
   }
 
   return (
-    <div className="fixed bottom-[calc(64px+env(safe-area-inset-bottom,0px)+12px)] lg:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-2xl select-none">
+    <div className="fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] lg:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.25rem)] sm:w-[94%] max-w-2xl select-none">
       <motion.div
         initial={{ y: 80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -123,7 +123,7 @@ export default function BulkActionBar({
             <button
               type="button"
               onClick={onSelectAll}
-              className="text-[11px] text-nocturn-accent hover:underline cursor-pointer ml-1 hidden md:inline"
+              className="text-[11px] text-nocturn-accent hover:underline cursor-pointer ml-1 font-medium"
             >
               All ({totalTasksCount})
             </button>
