@@ -1,78 +1,177 @@
-import { useState, useMemo } from 'react'
-import { motion } from 'framer-motion'
-import { X, Sparkles, Plus, Minus, RotateCcw, Play, Check } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { X, Sparkles, Plus, Minus, RotateCcw, Play, Check, AlertCircle, Save } from 'lucide-react'
+import { useAuth } from '../../context/useAuth'
+import { useToast } from '../../context/useToast'
+import {
+  DEFAULT_VOCAB_SESSION_CONFIG,
+  getVocabSessionConfig,
+  saveVocabSessionConfig,
+  getAvailableWordsCountByDifficulty,
+} from '../../services/vocabService'
 
 export default function VocabSessionConfigModal({
   isOpen,
   onClose,
   onStartSession,
-  initialConfig = {
-    easy: { enabled: true, count: 3 },
-    medium: { enabled: true, count: 4 },
-    hard: { enabled: true, count: 3 },
-  },
+  onSaveConfig,
+  initialConfig = null,
 }) {
-  const [config, setConfig] = useState(initialConfig)
+  const { user } = useAuth()
+  const { addToast } = useToast()
 
-  const toggleDifficulty = (tier) => {
-    setConfig((prev) => ({
-      ...prev,
-      [tier]: {
-        ...prev[tier],
-        enabled: !prev[tier].enabled,
-      },
-    }))
-  }
+  const [savedConfig, setSavedConfig] = useState(() => initialConfig || { ...DEFAULT_VOCAB_SESSION_CONFIG })
+  const [counts, setCounts] = useState(() => initialConfig || { ...DEFAULT_VOCAB_SESSION_CONFIG })
+  const [availablePool, setAvailablePool] = useState({ easy: 20, medium: 20, hard: 20 })
+  const [isSaving, setIsSaving] = useState(false)
 
+  // Load saved config & available counts when modal opens
+  useEffect(() => {
+    if (!isOpen) return
+
+    let isMounted = true
+    async function loadData() {
+      try {
+        const [config, pool] = await Promise.all([
+          getVocabSessionConfig(user?.id),
+          getAvailableWordsCountByDifficulty(user?.id),
+        ])
+        if (isMounted) {
+          const resolved = initialConfig || config || { ...DEFAULT_VOCAB_SESSION_CONFIG }
+          setSavedConfig(resolved)
+          setCounts(resolved)
+          if (pool) setAvailablePool(pool)
+        }
+      } catch (err) {
+        console.warn('[VocabSessionConfigModal] Load error:', err)
+      }
+    }
+
+    loadData()
+    return () => {
+      isMounted = false
+    }
+  }, [isOpen, user?.id, initialConfig])
+
+  // Independent numeric stepper (-1 / +1)
   const updateCount = (tier, delta) => {
-    setConfig((prev) => {
-      const current = prev[tier].count || 1
-      const updated = Math.min(20, Math.max(1, current + delta))
+    setCounts((prev) => {
+      const current = prev[tier] !== undefined ? prev[tier] : 0
+      const updated = Math.max(0, current + delta)
       return {
         ...prev,
-        [tier]: {
-          ...prev[tier],
-          count: updated,
-        },
+        [tier]: updated,
       }
     })
   }
 
+  // Direct typed numeric input: normalizes, rejects negative, NaN, fractions
   const setCountDirect = (tier, rawValue) => {
-    const val = parseInt(rawValue, 10)
-    setConfig((prev) => ({
+    if (rawValue === '') {
+      setCounts((prev) => ({ ...prev, [tier]: 0 }))
+      return
+    }
+    const parsed = parseInt(rawValue, 10)
+    const normalized = isNaN(parsed) ? 0 : Math.max(0, Math.floor(parsed))
+    setCounts((prev) => ({
       ...prev,
-      [tier]: {
-        ...prev[tier],
-        count: isNaN(val) ? 0 : Math.min(20, Math.max(0, val)),
-      },
+      [tier]: normalized,
     }))
   }
 
+  // Live session word total = Easy + Medium + Hard
+  const totalWords = useMemo(() => {
+    const e = Math.max(0, parseInt(counts.easy, 10) || 0)
+    const m = Math.max(0, parseInt(counts.medium, 10) || 0)
+    const h = Math.max(0, parseInt(counts.hard, 10) || 0)
+    return e + m + h
+  }, [counts])
+
+  // Check if any count exceeds the available eligible pool
+  const poolWarnings = useMemo(() => {
+    const warnings = []
+    if (counts.easy > availablePool.easy) {
+      warnings.push(`Easy: requested ${counts.easy}, available ${availablePool.easy}`)
+    }
+    if (counts.medium > availablePool.medium) {
+      warnings.push(`Medium: requested ${counts.medium}, available ${availablePool.medium}`)
+    }
+    if (counts.hard > availablePool.hard) {
+      warnings.push(`Hard: requested ${counts.hard}, available ${availablePool.hard}`)
+    }
+    return warnings
+  }, [counts, availablePool])
+
+  const hasUnsavedChanges = useMemo(() => {
+    return (
+      counts.easy !== savedConfig.easy ||
+      counts.medium !== savedConfig.medium ||
+      counts.hard !== savedConfig.hard
+    )
+  }, [counts, savedConfig])
+
+  // Action: Reset configuration to default
   const handleReset = () => {
-    setConfig({
-      easy: { enabled: true, count: 3 },
-      medium: { enabled: true, count: 4 },
-      hard: { enabled: true, count: 3 },
-    })
+    setCounts({ ...DEFAULT_VOCAB_SESSION_CONFIG })
   }
 
-  const totalWords = useMemo(() => {
-    let sum = 0
-    if (config.easy.enabled) sum += config.easy.count || 0
-    if (config.medium.enabled) sum += config.medium.count || 0
-    if (config.hard.enabled) sum += config.hard.count || 0
-    return sum
-  }, [config])
+  // Action: Cancel (discards unsaved edits and closes modal)
+  const handleCancel = () => {
+    setCounts(savedConfig)
+    onClose()
+  }
 
-  const handleStart = () => {
+  // Action: Save Configuration (SAVING MUST NEVER START LEARNING)
+  const handleSave = async () => {
+    try {
+      setIsSaving(true)
+      const cleanConfig = {
+        easy: Math.max(0, parseInt(counts.easy, 10) || 0),
+        medium: Math.max(0, parseInt(counts.medium, 10) || 0),
+        hard: Math.max(0, parseInt(counts.hard, 10) || 0),
+      }
+
+      await saveVocabSessionConfig(user?.id, cleanConfig)
+      setSavedConfig(cleanConfig)
+      addToast('Saved study session configuration', { type: 'success', duration: 2500 })
+
+      if (onSaveConfig) {
+        onSaveConfig(cleanConfig)
+      }
+      onClose()
+    } catch (err) {
+      console.error('[VocabSessionConfigModal] Save error:', err)
+      addToast('Failed to save configuration', { type: 'error', duration: 3000 })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Action: Start Learning (Starts session using the configuration)
+  const handleStartLearning = async () => {
     if (totalWords <= 0) return
-    onStartSession({
-      easy: config.easy.enabled ? config.easy.count : 0,
-      medium: config.medium.enabled ? config.medium.count : 0,
-      hard: config.hard.enabled ? config.hard.count : 0,
+
+    const cleanConfig = {
+      easy: Math.max(0, parseInt(counts.easy, 10) || 0),
+      medium: Math.max(0, parseInt(counts.medium, 10) || 0),
+      hard: Math.max(0, parseInt(counts.hard, 10) || 0),
       total: totalWords,
-    })
+    }
+
+    // Auto-save changes if modified
+    if (hasUnsavedChanges) {
+      try {
+        await saveVocabSessionConfig(user?.id, cleanConfig)
+        setSavedConfig(cleanConfig)
+        if (onSaveConfig) onSaveConfig(cleanConfig)
+      } catch (err) {
+        console.warn('[VocabSessionConfigModal] Auto-save error on start:', err)
+      }
+    }
+
+    if (onStartSession) {
+      onStartSession(cleanConfig)
+    }
     onClose()
   }
 
@@ -81,27 +180,27 @@ export default function VocabSessionConfigModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        initial={{ opacity: 0, scale: 0.96, y: 14 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 16 }}
+        exit={{ opacity: 0, scale: 0.96, y: 14 }}
         transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-md bg-[#12141c] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="w-full max-w-md bg-[#12141c] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
       >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between gap-3 bg-nocturn-card/60">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent-bright">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent-bright shrink-0">
               <Sparkles className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-base font-bold text-white tracking-tight">Configure Study Session</h2>
-              <p className="text-xs text-nocturn-muted">Select difficulty distribution and word counts</p>
+              <p className="text-xs text-nocturn-muted truncate">Set independent difficulty counts</p>
             </div>
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-nocturn-muted hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            onClick={handleCancel}
+            className="p-1.5 rounded-lg text-nocturn-muted hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
             aria-label="Close configuration"
           >
             <X className="w-4 h-4" />
@@ -115,55 +214,51 @@ export default function VocabSessionConfigModal({
             {/* EASY TIER */}
             <div
               className={`p-3.5 rounded-xl border transition-all ${
-                config.easy.enabled
+                counts.easy > 0
                   ? 'bg-emerald-500/[0.06] border-emerald-500/30'
-                  : 'bg-white/[0.02] border-white/[0.06] opacity-60'
+                  : 'bg-white/[0.02] border-white/[0.06] opacity-75'
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none min-w-0 flex-1 pr-2">
-                  <div
-                    onClick={() => toggleDifficulty('easy')}
-                    className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
-                      config.easy.enabled
-                        ? 'bg-emerald-500 border-emerald-400 text-black'
-                        : 'bg-white/[0.05] border-white/20 text-transparent'
-                    }`}
-                  >
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  </div>
-                  <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 pr-2">
+                  <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
                       Easy
                     </span>
-                    <span className="text-[11px] text-nocturn-muted block truncate">High-frequency foundational words</span>
+                    <span className="text-[10px] text-nocturn-muted font-mono">
+                      (Available: {availablePool.easy})
+                    </span>
                   </div>
-                </label>
+                  <span className="text-[11px] text-nocturn-muted block truncate">
+                    High-frequency foundational words
+                  </span>
+                </div>
 
                 {/* Count Stepper */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
-                    disabled={!config.easy.enabled || config.easy.count <= 1}
+                    aria-label="Decrease easy words"
+                    disabled={counts.easy <= 0}
                     onClick={() => updateCount('easy', -1)}
-                    className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-30 cursor-pointer"
+                    className="w-8 h-8 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
                   <input
                     type="number"
-                    min="1"
-                    max="20"
-                    disabled={!config.easy.enabled}
-                    value={config.easy.count || ''}
+                    min="0"
+                    max="100"
+                    aria-label="Easy word count"
+                    value={counts.easy}
                     onChange={(e) => setCountDirect('easy', e.target.value)}
-                    className="w-10 text-center font-mono font-bold text-xs bg-nocturn-surface border border-white/10 rounded-lg py-1 text-white outline-none focus:border-emerald-400 disabled:opacity-40"
+                    className="w-12 text-center font-mono font-bold text-sm bg-nocturn-surface border border-white/10 rounded-lg py-1 text-white outline-none focus:border-emerald-400 transition-colors"
                   />
                   <button
                     type="button"
-                    disabled={!config.easy.enabled || config.easy.count >= 20}
+                    aria-label="Increase easy words"
                     onClick={() => updateCount('easy', 1)}
-                    className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-30 cursor-pointer"
+                    className="w-8 h-8 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white cursor-pointer transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -174,55 +269,51 @@ export default function VocabSessionConfigModal({
             {/* MEDIUM TIER */}
             <div
               className={`p-3.5 rounded-xl border transition-all ${
-                config.medium.enabled
+                counts.medium > 0
                   ? 'bg-amber-500/[0.06] border-amber-500/30'
-                  : 'bg-white/[0.02] border-white/[0.06] opacity-60'
+                  : 'bg-white/[0.02] border-white/[0.06] opacity-75'
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none min-w-0 flex-1 pr-2">
-                  <div
-                    onClick={() => toggleDifficulty('medium')}
-                    className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
-                      config.medium.enabled
-                        ? 'bg-amber-400 border-amber-300 text-black'
-                        : 'bg-white/[0.05] border-white/20 text-transparent'
-                    }`}
-                  >
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  </div>
-                  <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 pr-2">
+                  <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
                       Medium
                     </span>
-                    <span className="text-[11px] text-nocturn-muted block truncate">Core GRE academic vocabulary</span>
+                    <span className="text-[10px] text-nocturn-muted font-mono">
+                      (Available: {availablePool.medium})
+                    </span>
                   </div>
-                </label>
+                  <span className="text-[11px] text-nocturn-muted block truncate">
+                    Core GRE academic vocabulary
+                  </span>
+                </div>
 
                 {/* Count Stepper */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
-                    disabled={!config.medium.enabled || config.medium.count <= 1}
+                    aria-label="Decrease medium words"
+                    disabled={counts.medium <= 0}
                     onClick={() => updateCount('medium', -1)}
-                    className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-30 cursor-pointer"
+                    className="w-8 h-8 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
                   <input
                     type="number"
-                    min="1"
-                    max="20"
-                    disabled={!config.medium.enabled}
-                    value={config.medium.count || ''}
+                    min="0"
+                    max="100"
+                    aria-label="Medium word count"
+                    value={counts.medium}
                     onChange={(e) => setCountDirect('medium', e.target.value)}
-                    className="w-10 text-center font-mono font-bold text-xs bg-nocturn-surface border border-white/10 rounded-lg py-1 text-white outline-none focus:border-amber-400 disabled:opacity-40"
+                    className="w-12 text-center font-mono font-bold text-sm bg-nocturn-surface border border-white/10 rounded-lg py-1 text-white outline-none focus:border-amber-400 transition-colors"
                   />
                   <button
                     type="button"
-                    disabled={!config.medium.enabled || config.medium.count >= 20}
+                    aria-label="Increase medium words"
                     onClick={() => updateCount('medium', 1)}
-                    className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-30 cursor-pointer"
+                    className="w-8 h-8 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white cursor-pointer transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -233,55 +324,51 @@ export default function VocabSessionConfigModal({
             {/* HARD TIER */}
             <div
               className={`p-3.5 rounded-xl border transition-all ${
-                config.hard.enabled
+                counts.hard > 0
                   ? 'bg-rose-500/[0.06] border-rose-500/30'
-                  : 'bg-white/[0.02] border-white/[0.06] opacity-60'
+                  : 'bg-white/[0.02] border-white/[0.06] opacity-75'
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none min-w-0 flex-1 pr-2">
-                  <div
-                    onClick={() => toggleDifficulty('hard')}
-                    className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
-                      config.hard.enabled
-                        ? 'bg-rose-500 border-rose-400 text-white'
-                        : 'bg-white/[0.05] border-white/20 text-transparent'
-                    }`}
-                  >
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  </div>
-                  <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 pr-2">
+                  <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-rose-400 uppercase tracking-wider block">
                       Hard
                     </span>
-                    <span className="text-[11px] text-nocturn-muted block truncate">Advanced & nuanced GRE terms</span>
+                    <span className="text-[10px] text-nocturn-muted font-mono">
+                      (Available: {availablePool.hard})
+                    </span>
                   </div>
-                </label>
+                  <span className="text-[11px] text-nocturn-muted block truncate">
+                    Advanced & nuanced GRE terms
+                  </span>
+                </div>
 
                 {/* Count Stepper */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
-                    disabled={!config.hard.enabled || config.hard.count <= 1}
+                    aria-label="Decrease hard words"
+                    disabled={counts.hard <= 0}
                     onClick={() => updateCount('hard', -1)}
-                    className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-30 cursor-pointer"
+                    className="w-8 h-8 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
                   <input
                     type="number"
-                    min="1"
-                    max="20"
-                    disabled={!config.hard.enabled}
-                    value={config.hard.count || ''}
+                    min="0"
+                    max="100"
+                    aria-label="Hard word count"
+                    value={counts.hard}
                     onChange={(e) => setCountDirect('hard', e.target.value)}
-                    className="w-10 text-center font-mono font-bold text-xs bg-nocturn-surface border border-white/10 rounded-lg py-1 text-white outline-none focus:border-rose-400 disabled:opacity-40"
+                    className="w-12 text-center font-mono font-bold text-sm bg-nocturn-surface border border-white/10 rounded-lg py-1 text-white outline-none focus:border-rose-400 transition-colors"
                   />
                   <button
                     type="button"
-                    disabled={!config.hard.enabled || config.hard.count >= 20}
+                    aria-label="Increase hard words"
                     onClick={() => updateCount('hard', 1)}
-                    className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-30 cursor-pointer"
+                    className="w-8 h-8 rounded-lg bg-white/[0.05] hover:bg-white/10 border border-white/10 flex items-center justify-center text-white cursor-pointer transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -290,17 +377,45 @@ export default function VocabSessionConfigModal({
             </div>
           </div>
 
+          {/* Word Pool Warning Banner if requested > available */}
+          {poolWarnings.length > 0 && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-2.5 text-xs text-amber-300">
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-semibold block">Requested count exceeds available pool:</span>
+                {poolWarnings.map((msg, i) => (
+                  <span key={i} className="block text-[11px] text-amber-200/90 font-mono">
+                    • {msg}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Instant Total Banner */}
-          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-between">
+          <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-between">
             <span className="text-xs font-medium text-nocturn-muted">Session Word Total:</span>
-            <span className="text-sm font-mono font-bold text-nocturn-accent-bright bg-nocturn-accent/15 px-2.5 py-0.5 rounded-lg border border-nocturn-accent/30">
+            <span
+              className={`text-sm font-mono font-bold px-3 py-1 rounded-lg border transition-all ${
+                totalWords > 0
+                  ? 'text-nocturn-accent-bright bg-nocturn-accent/15 border-nocturn-accent/30'
+                  : 'text-nocturn-muted bg-white/[0.03] border-white/10'
+              }`}
+            >
               {totalWords} {totalWords === 1 ? 'Word' : 'Words'}
             </span>
           </div>
+
+          {/* Unsaved Changes Indicator */}
+          {hasUnsavedChanges && (
+            <p className="text-[11px] text-amber-400/90 text-center font-medium">
+              You have unsaved changes. Save to preserve for future sessions.
+            </p>
+          )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="p-4 sm:p-5 border-t border-white/[0.08] bg-[#11131a] flex items-center justify-between gap-2.5">
+        {/* Footer Actions: Save Configuration, Cancel, Reset, Start Learning */}
+        <div className="p-4 sm:p-5 border-t border-white/[0.08] bg-[#11131a] flex flex-wrap items-center justify-between gap-2.5">
           <button
             type="button"
             onClick={handleReset}
@@ -310,18 +425,31 @@ export default function VocabSessionConfigModal({
             <span>Reset</span>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap ml-auto">
             <button
               type="button"
-              onClick={onClose}
-              className="px-3.5 py-2 rounded-xl text-xs font-medium text-nocturn-muted hover:text-white transition-colors cursor-pointer"
+              onClick={handleCancel}
+              className="px-3 py-2 rounded-xl text-xs font-medium text-nocturn-muted hover:text-white transition-colors cursor-pointer"
             >
               Cancel
             </button>
+
+            {/* Save Configuration (Never starts learning) */}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white border border-white/15 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+            >
+              <Save className="w-3.5 h-3.5 text-nocturn-accent" />
+              <span>{isSaving ? 'Saving...' : 'Save Configuration'}</span>
+            </button>
+
+            {/* Start Learning (Disabled when total is 0) */}
             <button
               type="button"
               disabled={totalWords <= 0}
-              onClick={handleStart}
+              onClick={handleStartLearning}
               className="px-4 py-2 rounded-xl bg-nocturn-accent hover:bg-nocturn-accent-bright text-white text-xs font-bold transition-all shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.35)] flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
             >
               <Play className="w-3.5 h-3.5 fill-current" />

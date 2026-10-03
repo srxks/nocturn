@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { BrowserRouter } from 'react-router-dom'
-import { MotionConfig } from 'framer-motion'
 import AppRoutes from './AppRoutes'
 import { AuthProvider } from './context/AuthContext'
+import { AnimationProvider } from './context/AnimationContext'
 import { ThemeProvider } from './context/ThemeProvider'
 import { TimerSettingsProvider } from './context/TimerSettingsProvider'
 import { TimerSessionProvider } from './context/TimerSessionProvider'
@@ -17,10 +17,10 @@ function App() {
   }, [])
 
   return (
-    <MotionConfig reducedMotion="user">
-      <BrowserRouter>
-        <ToastProvider>
-          <AuthProvider>
+    <BrowserRouter>
+      <ToastProvider>
+        <AuthProvider>
+          <AnimationProvider>
             <ThemeProvider>
               <TimerSettingsProvider>
                 <TimerSessionProvider>
@@ -31,10 +31,10 @@ function App() {
                 </TimerSessionProvider>
               </TimerSettingsProvider>
             </ThemeProvider>
-          </AuthProvider>
-        </ToastProvider>
-      </BrowserRouter>
-    </MotionConfig>
+          </AnimationProvider>
+        </AuthProvider>
+      </ToastProvider>
+    </BrowserRouter>
   )
 }
 

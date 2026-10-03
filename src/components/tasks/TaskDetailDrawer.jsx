@@ -66,7 +66,7 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
   useEffect(() => {
     if (hasTask) {
       document.body.dataset.drawerOpen = 'true'
-      if (!isDesktopInline) {
+      if (!isDesktopInline && isMobile) {
         const originalOverflow = document.body.style.overflow
         document.body.style.overflow = 'hidden'
         return () => {
@@ -80,7 +80,7 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
     return () => {
       document.body.dataset.drawerOpen = 'false'
     }
-  }, [hasTask, isDesktopInline])
+  }, [hasTask, isDesktopInline, isMobile])
 
   useEffect(() => {
     return () => {

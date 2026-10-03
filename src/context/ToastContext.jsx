@@ -15,7 +15,15 @@ export function ToastProvider({ children }) {
     const action = isOptionsObj ? (typeOrOptions.action || null) : (maybeAction || null)
 
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
-    setToasts((prev) => [...prev, { id, message, type, action }])
+    setToasts((prev) => {
+      const isPresetOrMode = message.startsWith('Applied ') || message.startsWith('Selected ')
+      const filtered = prev.filter((t) => {
+        if (t.message === message) return false
+        if (isPresetOrMode && (t.message.startsWith('Applied ') || t.message.startsWith('Selected '))) return false
+        return true
+      })
+      return [...filtered, { id, message, type, action }]
+    })
 
     if (duration > 0) {
       setTimeout(() => {

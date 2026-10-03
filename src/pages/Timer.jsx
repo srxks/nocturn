@@ -37,6 +37,8 @@ export default function Timer() {
     elapsedSeconds,
     currentSession,
     completedFocusCount,
+    status,
+    isCompleted: isSessionCompleted,
     taskName,
     setTaskName,
     taskId,
@@ -65,11 +67,14 @@ export default function Timer() {
   const [isFocusModeOpen, setIsFocusModeOpen] = useState(() => Boolean(location.state?.focusMode))
   const [prevFocusModeProp, setPrevFocusModeProp] = useState(location.state?.focusMode)
 
-  const activePresetId = isNormalStopwatch
-    ? 'normal_stopwatch'
-    : isFocusStopwatch
-    ? 'focus_stopwatch'
-    : selectedPreset
+  const activePresetId = useMemo(() => {
+    if (isNormalStopwatch) return 'normal_stopwatch'
+    if (isFocusStopwatch) return 'focus_stopwatch'
+    const found = TIMER_PRESETS.find(
+      (p) => !p.type && p.duration === settings?.focusDuration && p.sessions === settings?.sessions
+    )
+    return found ? found.id : selectedPreset
+  }, [isNormalStopwatch, isFocusStopwatch, settings?.focusDuration, settings?.sessions, selectedPreset])
 
   if (location.state?.focusMode !== prevFocusModeProp) {
     setPrevFocusModeProp(location.state?.focusMode)
@@ -177,7 +182,7 @@ export default function Timer() {
     ? 'SHORT BREAK'
     : 'LONG BREAK'
 
-  const isCompleted = !isStopwatch && remainingSeconds === 0 && !isRunning && !isPaused
+  const isCompleted = isSessionCompleted || (!isStopwatch && (status === 'completed' || (remainingSeconds === 0 && !isRunning && !isPaused && status !== 'idle')))
   const isLongBreak = completedFocusCount > 0 && completedFocusCount % (Number(settings?.sessions) || 4) === 0
 
   return (
@@ -204,7 +209,7 @@ export default function Timer() {
             <p className="text-xs font-medium text-nocturn-muted">Open-Ended Deep Work Session</p>
           ) : (
             <p className="text-xs font-medium text-nocturn-muted">
-              Session {currentSession} of {settings.sessions}
+              Session {currentSession} of {settings?.sessions || 4}
               {mode !== 'focus' && ` • Rest & Recharge`}
             </p>
           )}
@@ -461,7 +466,7 @@ export default function Timer() {
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] text-center">
                 <span className="text-xl font-bold font-mono text-white block">
-                  {Math.max(0, currentSession - 1)} / {settings.sessions}
+                  {completedFocusCount % (Number(settings?.sessions) || 4)} / {settings?.sessions || 4}
                 </span>
                 <span className="text-[10px] text-nocturn-muted uppercase tracking-wider font-semibold">
                   Blocks Done
@@ -469,7 +474,7 @@ export default function Timer() {
               </div>
               <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] text-center">
                 <span className="text-xl font-bold font-mono text-nocturn-accent block">
-                  {Math.round((Math.max(0, currentSession - 1) * (totalSeconds || 1500)) / 60)}m
+                  {Math.round(((completedFocusCount % (Number(settings?.sessions) || 4)) * (totalSeconds || 1500)) / 60)}m
                 </span>
                 <span className="text-[10px] text-nocturn-muted uppercase tracking-wider font-semibold">
                   Focused

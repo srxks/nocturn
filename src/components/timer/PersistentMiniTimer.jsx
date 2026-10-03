@@ -165,7 +165,6 @@ export default function PersistentMiniTimer() {
   return (
     <AnimatePresence>
       <motion.div
-        layout
         initial={{ y: 80, opacity: 0 }}
         animate={{
           y: 0,

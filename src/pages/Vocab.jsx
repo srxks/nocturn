@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -20,7 +20,11 @@ import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
 import VocabWordModal from '../components/vocab/VocabWordModal'
 import VocabSessionConfigModal from '../components/vocab/VocabSessionConfigModal'
-import { getWordsByDifficultyDistribution } from '../services/vocabService'
+import {
+  getWordsByDifficultyDistribution,
+  getVocabSessionConfig,
+  DEFAULT_VOCAB_SESSION_CONFIG,
+} from '../services/vocabService'
 import { Card, Badge, Button, Progress } from '../components/ui'
 
 export default function Vocab() {
@@ -45,16 +49,48 @@ export default function Vocab() {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
   const [isConfirmDeleteAllOpen, setIsConfirmDeleteAllOpen] = useState(false)
   const [isDeletingAll, setIsDeletingAll] = useState(false)
+  const [sessionConfig, setSessionConfig] = useState(() => ({ ...DEFAULT_VOCAB_SESSION_CONFIG }))
 
-  const handleStartCustomSession = async (sessionConfig) => {
+  // Load saved study session configuration per user
+  useEffect(() => {
+    let isMounted = true
+    async function loadConfig() {
+      try {
+        const cfg = await getVocabSessionConfig(user?.id)
+        if (isMounted && cfg) {
+          setSessionConfig(cfg)
+        }
+      } catch (err) {
+        console.warn('[Vocab] Failed to load vocab session config:', err)
+      }
+    }
+    loadConfig()
+
+    const handleConfigUpdate = (e) => {
+      if (e?.detail) {
+        setSessionConfig(e.detail)
+      }
+    }
+    window.addEventListener('nocturn:vocab-config-updated', handleConfigUpdate)
+    return () => {
+      isMounted = false
+      window.removeEventListener('nocturn:vocab-config-updated', handleConfigUpdate)
+    }
+  }, [user?.id])
+
+  const totalConfiguredWords =
+    (sessionConfig?.easy || 0) + (sessionConfig?.medium || 0) + (sessionConfig?.hard || 0)
+
+  const handleStartCustomSession = async (customConfig) => {
     try {
+      const cfg = customConfig || sessionConfig
       const words = await getWordsByDifficultyDistribution({
-        easy: sessionConfig.easy,
-        medium: sessionConfig.medium,
-        hard: sessionConfig.hard,
+        easy: cfg.easy,
+        medium: cfg.medium,
+        hard: cfg.hard,
         userId: user?.id,
       })
-      navigate('/vocab/learn', { state: { customWords: words, config: sessionConfig } })
+      navigate('/vocab/learn', { state: { customWords: words, config: cfg } })
     } catch (err) {
       console.error('Failed to configure custom vocab session:', err)
       navigate('/vocab/learn')
@@ -72,14 +108,21 @@ export default function Vocab() {
   }
 
   const handleStartLearn = async () => {
-    if (allWords.length === 0) {
-      try {
-        await generateNewWords()
-        navigate('/vocab/learn')
-      } catch {
-        // Error handled by hook state
-      }
-    } else {
+    if (totalConfiguredWords <= 0) {
+      setIsConfigModalOpen(true)
+      return
+    }
+
+    try {
+      const words = await getWordsByDifficultyDistribution({
+        easy: sessionConfig.easy,
+        medium: sessionConfig.medium,
+        hard: sessionConfig.hard,
+        userId: user?.id,
+      })
+      navigate('/vocab/learn', { state: { customWords: words, config: sessionConfig } })
+    } catch (err) {
+      console.error('Failed to start vocab session with configured counts:', err)
       navigate('/vocab/learn')
     }
   }
@@ -259,12 +302,12 @@ export default function Vocab() {
 
             <div>
               <h2 className="text-xl font-semibold text-white tracking-tight">
-                Learn {effectiveDailyTarget} Words
+                Learn {totalConfiguredWords > 0 ? totalConfiguredWords : effectiveDailyTarget} Words
               </h2>
               <p className="text-nocturn-muted text-xs sm:text-sm mt-1">
                 {allWords.length === 0
                   ? 'Your library is empty. Generate words or add your own to start.'
-                  : `Daily vocabulary set for today (${dailyWords.length} words available).`}
+                  : `Configured: ${sessionConfig.easy} Easy • ${sessionConfig.medium} Medium • ${sessionConfig.hard} Hard (${totalConfiguredWords} total)`}
               </p>
             </div>
 
@@ -273,13 +316,13 @@ export default function Vocab() {
               <div className="flex items-center justify-between text-xs font-medium">
                 <span className="text-nocturn-muted">Today's Progress</span>
                 <span className="text-white font-mono font-semibold">
-                  {learnedTodayCount} / {effectiveDailyTarget} Words
+                  {learnedTodayCount} / {totalConfiguredWords > 0 ? totalConfiguredWords : effectiveDailyTarget} Words
                 </span>
               </div>
               <Progress
                 value={
-                  effectiveDailyTarget > 0
-                    ? Math.min(100, (learnedTodayCount / effectiveDailyTarget) * 100)
+                  totalConfiguredWords > 0
+                    ? Math.min(100, (learnedTodayCount / totalConfiguredWords) * 100)
                     : 0
                 }
               />
@@ -348,15 +391,17 @@ export default function Vocab() {
                 <Button
                   variant="primary"
                   onClick={handleStartLearn}
-                  disabled={isGenerating}
+                  disabled={isGenerating || totalConfiguredWords === 0}
                   className="flex-1 justify-center"
                   icon={ArrowRight}
                 >
-                  {isGenerating
+                  {totalConfiguredWords === 0
+                    ? 'Configure Words to Start'
+                    : isGenerating
                     ? 'Generating with Gemini...'
                     : learnedTodayCount > 0
-                    ? `Continue (${Math.min(currentLearningIndex + 1, Math.max(dailyWords.length, 1))} of ${dailyWords.length})`
-                    : `Start Learning (${dailyWords.length} words)`}
+                    ? `Continue (${Math.min(currentLearningIndex + 1, Math.max(totalConfiguredWords, 1))} of ${totalConfiguredWords})`
+                    : `Start Learning (${totalConfiguredWords} words)`}
                 </Button>
                 <Button
                   variant="secondary"
@@ -555,6 +600,8 @@ export default function Vocab() {
         isOpen={isConfigModalOpen}
         onClose={() => setIsConfigModalOpen(false)}
         onStartSession={handleStartCustomSession}
+        onSaveConfig={(newConfig) => setSessionConfig(newConfig)}
+        initialConfig={sessionConfig}
       />
     </motion.div>
   )

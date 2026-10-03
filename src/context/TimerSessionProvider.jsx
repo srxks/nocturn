@@ -127,6 +127,9 @@ export function TimerSessionProvider({ children }) {
     [settings]
   )
 
+  const cycleLength = Math.max(1, Number(settings?.sessions) || 4)
+  const currentSession = (completedFocusCount % cycleLength) + 1
+
   const targetDuration = isStopwatch ? 0 : getModeDurationSeconds(mode)
   const [totalSeconds, setTotalSeconds] = useState(targetDuration)
   const [remainingSeconds, setRemainingSeconds] = useState(targetDuration)
@@ -137,6 +140,16 @@ export function TimerSessionProvider({ children }) {
   const effectiveElapsedSeconds = isStopwatch
     ? (status === 'idle' ? 0 : stopwatchElapsed)
     : (status === 'idle' ? 0 : elapsedSeconds)
+
+  // Synchronize duration when idle whenever mode or settings change
+  useEffect(() => {
+    if (status === 'idle' && !isStopwatch) {
+      const dur = getModeDurationSeconds(mode)
+      setTotalSeconds(dur)
+      setRemainingSeconds(dur)
+      setElapsedSeconds(0)
+    }
+  }, [status, isStopwatch, mode, getModeDurationSeconds])
 
   // ── NATURAL COMPLETION: STOPS AND WAITS AT 0:00 (NO AUTO-CHAINING) ──
   const handleNaturalCompletion = useCallback(async () => {
@@ -244,7 +257,7 @@ export function TimerSessionProvider({ children }) {
           actionId: crypto.randomUUID(),
           status: 'completed',
           mode: currentMode,
-          currentSession: currentCount + 1,
+          currentSession: (newCount % cycleLength) + 1,
           endAt: null,
           totalSeconds: currentTotal,
           lastActionAt: new Date(nowMs).toISOString(),
@@ -299,7 +312,7 @@ export function TimerSessionProvider({ children }) {
         startedAt: new Date(nowMs).toISOString(),
         expectedEndAt: new Date(nextEndAt).toISOString(),
         status: 'active',
-        currentSession: completedFocusCount + 1,
+        currentSession,
       }
       await recordActiveSession(sessionObj)
       updateActiveSession(sessionObj)
@@ -309,7 +322,7 @@ export function TimerSessionProvider({ children }) {
           actionId: crypto.randomUUID(),
           status: 'running',
           mode: nextMode,
-          currentSession: completedFocusCount + 1,
+          currentSession,
           endAt: nextEndAt,
           totalSeconds: breakSecs,
           lastActionAt: new Date(nowMs).toISOString(),
@@ -338,7 +351,7 @@ export function TimerSessionProvider({ children }) {
         startedAt: new Date(nowMs).toISOString(),
         expectedEndAt: new Date(nextEndAt).toISOString(),
         status: 'active',
-        currentSession: completedFocusCount + 1,
+        currentSession,
       }
       await recordActiveSession(sessionObj)
       updateActiveSession(sessionObj)
@@ -348,7 +361,7 @@ export function TimerSessionProvider({ children }) {
           actionId: crypto.randomUUID(),
           status: 'running',
           mode: 'focus',
-          currentSession: completedFocusCount + 1,
+          currentSession,
           endAt: nextEndAt,
           totalSeconds: focusSecs,
           lastActionAt: new Date(nowMs).toISOString(),
@@ -424,7 +437,7 @@ export function TimerSessionProvider({ children }) {
       startedAt: new Date(nowMs).toISOString(),
       expectedEndAt: new Date(targetEndAt).toISOString(),
       status: 'active',
-      currentSession: completedFocusCount + 1,
+      currentSession,
     }
     updateActiveSession(sessionObj)
     await recordActiveSession(sessionObj)
@@ -815,15 +828,23 @@ export function TimerSessionProvider({ children }) {
     const short = preset.breakDuration || preset.short || 5
     const long = preset.longDuration || preset.long || 15
     const sess = preset.sessions || 4
+    const durSecs = focus * 60
 
     await updateSettings({
       focusDuration: focus,
       shortBreakDuration: short,
       longBreakDuration: long,
       sessions: sess,
+      timerState: {
+        actionId: crypto.randomUUID(),
+        status: 'idle',
+        mode: 'focus',
+        endAt: null,
+        totalSeconds: durSecs,
+        lastActionAt: new Date().toISOString(),
+      },
     })
 
-    const durSecs = focus * 60
     setMode('focus')
     setStatus('idle')
     setEndAt(null)
@@ -845,22 +866,45 @@ export function TimerSessionProvider({ children }) {
       // ignore
     }
 
-    if (updateTimerState) {
-      await updateTimerState({
-        actionId: crypto.randomUUID(),
-        status: 'idle',
-        mode: 'focus',
-        endAt: null,
-        totalSeconds: durSecs,
-        lastActionAt: new Date().toISOString(),
-      })
-    }
-
     addToast(`Applied ${preset.name || preset.label || 'preset'} (${focus}/${short}/${long} min)`, {
       type: 'success',
       duration: 3000,
     })
   }
+
+  // ── TERMINATE TIMER (EXPLICIT CANCELLATION / NOT LOGGED AS COMPLETED) ──
+  const terminateTimer = useCallback(async () => {
+    if (isStopwatch) {
+      if (mode === 'focus_stopwatch') {
+        await discardFocusStopwatch()
+      } else {
+        await resetStopwatch()
+      }
+      return
+    }
+
+    const resetDur = getModeDurationSeconds(mode)
+    setStatus('idle')
+    setEndAt(null)
+    setTotalSeconds(resetDur)
+    setRemainingSeconds(resetDur)
+    setElapsedSeconds(0)
+    hasWarned5mRef.current = false
+
+    await clearActiveSession()
+    updateActiveSession(null)
+
+    if (updateTimerState) {
+      await updateTimerState({
+        actionId: crypto.randomUUID(),
+        status: 'idle',
+        mode,
+        endAt: null,
+        totalSeconds: resetDur,
+        lastActionAt: new Date().toISOString(),
+      })
+    }
+  }, [isStopwatch, mode, getModeDurationSeconds, discardFocusStopwatch, resetStopwatch, updateTimerState])
 
   // ── SINGLE TICKER LOOP (250ms anti-drift) ──
   useEffect(() => {
@@ -890,6 +934,7 @@ export function TimerSessionProvider({ children }) {
           }
 
           if (remaining <= 0) {
+            clearInterval(interval)
             handleNaturalCompletion()
           }
         }, 250)
@@ -980,6 +1025,7 @@ export function TimerSessionProvider({ children }) {
           setRemainingSeconds(remaining)
           setElapsedSeconds(Math.max(0, configuredTotal - remaining))
         } else if (persisted.status === 'active' && persisted.expectedEndAt) {
+          updateActiveSession(persisted)
           const endMs = new Date(persisted.expectedEndAt).getTime()
           const nowMs = Date.now()
           const remaining = Math.max(0, Math.round((endMs - nowMs) / 1000))
@@ -1146,7 +1192,8 @@ export function TimerSessionProvider({ children }) {
     remainingSeconds: effectiveRemainingSeconds,
     totalSeconds: effectiveTotalSeconds,
     elapsedSeconds: effectiveElapsedSeconds,
-    currentSession: completedFocusCount + 1,
+    cycleLength,
+    currentSession,
     completedFocusCount,
     taskName,
     setTaskName,
@@ -1163,7 +1210,7 @@ export function TimerSessionProvider({ children }) {
     resetTimer,
     skipTimer,
     skipSession: skipTimer,
-    terminateTimer: isStopwatch ? (mode === 'focus_stopwatch' ? finishFocusStopwatch : stopStopwatch) : resetTimer,
+    terminateTimer,
     applyPreset,
     startPlanSession: startTimer,
     completionModalData,

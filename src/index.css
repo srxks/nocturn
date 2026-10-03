@@ -78,7 +78,7 @@
   /* Elevation Layers */
   --elev-1: 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.4);
   --elev-2: 0 1px 0 rgba(255, 255, 255, 0.06), 0 20px 48px rgba(0, 0, 0, 0.55);
-  --elev-focus: 0 0 0 1px var(--accent), 0 0 32px var(--glow);
+  --elev-focus: 0 0 0 1px var(--accent), 0 0 16px var(--accent-glow);
 }
 
 /* Preset Themes Token Contract */
@@ -217,6 +217,13 @@ body {
   box-shadow: var(--elev-focus);
 }
 
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation-duration: 0.01ms !important;
@@ -224,6 +231,23 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+html[data-animations="off"] *,
+html[data-animations="off"] *::before,
+html[data-animations="off"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0ms !important;
+  scroll-behavior: auto !important;
+}
+
+html[data-animations="reduced"] *,
+html[data-animations="reduced"] *::before,
+html[data-animations="reduced"] *::after {
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
 }
 
 /* Typography Ramp (Quiet Luxury) */

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, ensureSeedData } from '../db/db'
 import { TimerSettingsContext } from './TimerSettingsContext'
@@ -53,26 +53,36 @@ export function TimerSettingsProvider({ children }) {
     }
   }, [])
 
-  const settings = dbSettings || DEFAULT_SETTINGS
+  const [localSettings, setLocalSettings] = useState(null)
+  const settings = localSettings || dbSettings || DEFAULT_SETTINGS
+  const settingsRef = useRef(settings)
+
+  useEffect(() => {
+    if (dbSettings) {
+      settingsRef.current = dbSettings
+      setLocalSettings(dbSettings)
+    }
+  }, [dbSettings])
 
   // Immediate local update + cloud sync for configuration (preserves live timerState & adapts active duration)
   const updateSettings = async (newConfig) => {
     const now = new Date().toISOString()
+    const current = settingsRef.current || settings
     let newTimerState =
       newConfig.timerState !== undefined
         ? newConfig.timerState
-        : settings.timerState
-        ? { ...settings.timerState }
+        : current.timerState
+        ? { ...current.timerState }
         : null
 
     if (newTimerState && newConfig.timerState === undefined) {
       const mode = newTimerState.mode || 'focus'
       const newDurationMins =
         mode === 'focus'
-          ? (newConfig.focusDuration ?? settings.focusDuration)
+          ? (newConfig.focusDuration ?? current.focusDuration)
           : mode === 'shortBreak'
-          ? (newConfig.shortBreakDuration ?? settings.shortBreakDuration)
-          : (newConfig.longBreakDuration ?? settings.longBreakDuration)
+          ? (newConfig.shortBreakDuration ?? current.shortBreakDuration)
+          : (newConfig.longBreakDuration ?? current.longBreakDuration)
 
       const safeDurationMins = Number(newDurationMins)
       if (Number.isFinite(safeDurationMins) && safeDurationMins > 0) {
@@ -99,12 +109,15 @@ export function TimerSettingsProvider({ children }) {
     }
 
     const updated = sanitizeTimerSettings({
-      ...settings,
+      ...current,
       ...newConfig,
       timerState: newTimerState,
       id: 'default',
       updatedAt: now,
     })
+
+    settingsRef.current = updated
+    setLocalSettings(updated)
     await db.timerSettings.put(updated)
 
     if (user?.id && !isRealtimeWrite()) {
@@ -120,12 +133,21 @@ export function TimerSettingsProvider({ children }) {
   // Update live timer state (running, paused, expectedEndAt, etc.) without clobbering configuration
   const updateTimerState = async (timerState) => {
     const now = new Date().toISOString()
+    const current = settingsRef.current || settings
     const updated = sanitizeTimerSettings({
-      ...settings,
-      timerState,
+      ...current,
+      timerState: timerState
+        ? {
+            ...(current.timerState || {}),
+            ...timerState,
+          }
+        : null,
       id: 'default',
       updatedAt: now,
     })
+
+    settingsRef.current = updated
+    setLocalSettings(updated)
     await db.timerSettings.put(updated)
 
     if (user?.id && !isRealtimeWrite()) {

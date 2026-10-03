@@ -97,13 +97,15 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
     <form onSubmit={handleSubmit} className="w-full space-y-2.5 relative">
       {/* 52px Full-width glass input, radius 14 */}
       <div
-        className={`relative h-[52px] rounded-[14px] border transition-all duration-200 flex items-center px-4 shadow-sm ${
+        className={`relative h-[52px] rounded-[14px] border transition-all duration-200 flex items-center pl-4 pr-12 shadow-sm ${
           isFocused
-            ? 'border-nocturn-accent/60 bg-[#11131a] ring-2 ring-nocturn-accent/20'
+            ? 'border-nocturn-accent bg-[#11131a]'
             : 'border-white/[0.08] hover:border-white/[0.15] bg-[#11131a]/80 backdrop-blur-xl'
         }`}
         style={{
-          boxShadow: isFocused ? 'var(--elev-focus)' : 'var(--elev-1)',
+          boxShadow: isFocused
+            ? '0 0 0 1px var(--color-nocturn-accent), 0 0 16px rgba(var(--color-nocturn-accent-rgb, 99, 102, 241), 0.22)'
+            : 'var(--elev-1)',
         }}
       >
         <input
@@ -118,7 +120,8 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
           }}
           placeholder="Add a task with date, time, #tag, or p1-p3..."
           aria-label="Add a task"
-          className="w-full h-full bg-transparent text-sm sm:text-[14.5px] text-white placeholder-nocturn-muted/60 focus:outline-none pr-10 z-10"
+          style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
+          className="w-full h-full bg-transparent text-sm sm:text-[14.5px] text-white placeholder-nocturn-muted/60 focus:outline-none focus:ring-0 focus:shadow-none focus:border-none border-none outline-none shadow-none z-10"
         />
 
         {/* Enter / Submit Button */}

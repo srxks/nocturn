@@ -11,6 +11,7 @@ import { enqueueMutation, purgePendingVocabMutations } from './syncQueue.js'
 import { recordTombstone } from './conflictService.js'
 import { toUuid } from '../lib/idUtils.js'
 import { GRE_VOCAB_DATASET } from '../data/greVocabDataset.js'
+import { upsertUserSettings } from '../lib/themes.js'
 
 /**
  * Synchronous, offline-first helper to retrieve the active user ID without
@@ -559,4 +560,136 @@ export async function getWordsByDifficultyDistribution({
   }
 
   return selectedWords
+}
+
+export const DEFAULT_VOCAB_SESSION_CONFIG = {
+  easy: 3,
+  medium: 4,
+  hard: 3,
+}
+
+export function normalizeVocabSessionConfig(raw) {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_VOCAB_SESSION_CONFIG }
+  return {
+    easy: Math.max(0, parseInt(raw.easy, 10) || 0),
+    medium: Math.max(0, parseInt(raw.medium, 10) || 0),
+    hard: Math.max(0, parseInt(raw.hard, 10) || 0),
+  }
+}
+
+export async function getVocabSessionConfig(userId = null) {
+  const sessionUserId = getActiveUserId(userId)
+  const storageKey = sessionUserId
+    ? `nocturn_vocab_session_config_${sessionUserId}`
+    : 'nocturn_vocab_session_config'
+
+  // 1. Try local storage first for instant synchronous feedback
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem(storageKey) || localStorage.getItem('nocturn_vocab_session_config')
+      if (saved) {
+        return normalizeVocabSessionConfig(JSON.parse(saved))
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Try Dexie userSettings
+  try {
+    if (db && db.userSettings) {
+      const prefs = await db.userSettings.get('preferences')
+      if (prefs?.vocabSessionConfig) {
+        return normalizeVocabSessionConfig(prefs.vocabSessionConfig)
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return { ...DEFAULT_VOCAB_SESSION_CONFIG }
+}
+
+export async function saveVocabSessionConfig(userId = null, config = {}) {
+  const sessionUserId = getActiveUserId(userId)
+  const cleanConfig = normalizeVocabSessionConfig(config)
+  const storageKey = sessionUserId
+    ? `nocturn_vocab_session_config_${sessionUserId}`
+    : 'nocturn_vocab_session_config'
+
+  // 1. Persist to localStorage
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(storageKey, JSON.stringify(cleanConfig))
+      localStorage.setItem('nocturn_vocab_session_config', JSON.stringify(cleanConfig))
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Persist to Dexie userSettings
+  const nowIso = new Date().toISOString()
+  try {
+    if (db && db.userSettings) {
+      const existing = (await db.userSettings.get('preferences')) || {}
+      await db.userSettings.put({
+        ...existing,
+        id: 'preferences',
+        userId: sessionUserId || existing.userId || null,
+        vocabSessionConfig: cleanConfig,
+        updatedAt: nowIso,
+      })
+    }
+  } catch (dexieErr) {
+    console.warn('[vocabService] Dexie save error:', dexieErr)
+  }
+
+  // 3. Sync to Supabase if authenticated
+  if (sessionUserId) {
+    try {
+      const res = await upsertUserSettings(sessionUserId, { vocabSessionConfig: cleanConfig })
+      if (!res) {
+        enqueueMutation('upsert', 'user_settings', {
+          id: toUuid(`settings-${sessionUserId}`),
+          user_id: sessionUserId,
+          settings: { vocabSessionConfig: cleanConfig },
+          updated_at: nowIso,
+        })
+      }
+    } catch {
+      enqueueMutation('upsert', 'user_settings', {
+        id: toUuid(`settings-${sessionUserId}`),
+        user_id: sessionUserId,
+        settings: { vocabSessionConfig: cleanConfig },
+        updated_at: nowIso,
+      })
+    }
+  }
+
+  // 4. Notify app components of updated configuration
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('nocturn:vocab-config-updated', { detail: cleanConfig })
+    )
+  }
+
+  return cleanConfig
+}
+
+export async function getAvailableWordsCountByDifficulty(userId = null) {
+  const sessionUserId = getActiveUserId(userId)
+  const allLocal = await getAllLearnedWords(sessionUserId)
+  const existingWordsLower = new Set(allLocal.map((w) => (w.word || '').trim().toLowerCase()))
+
+  const counts = { easy: 0, medium: 0, hard: 0 }
+  for (const diff of ['easy', 'medium', 'hard']) {
+    const localCount = allLocal.filter(
+      (w) => (w.difficulty || 'Medium').toLowerCase() === diff
+    ).length
+    const unseededDatasetCount = GRE_VOCAB_DATASET.filter(
+      (w) => w.difficulty.toLowerCase() === diff && !existingWordsLower.has(w.word.trim().toLowerCase())
+    ).length
+    counts[diff] = localCount + unseededDatasetCount
+  }
+  return counts
 }
