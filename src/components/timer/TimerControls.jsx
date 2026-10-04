@@ -192,7 +192,7 @@ export default function TimerControls({
   // ── COUNTDOWN / POMODORO CONTROLS ──
   return (
     <div className="flex flex-col items-center gap-3 pt-2">
-      <div className="flex items-center justify-center gap-4 sm:gap-6">
+      <div className="flex items-center justify-center gap-3 sm:gap-4">
         {/* Reset Button */}
         <motion.button
           whileHover={{ scale: 1.05 }}
@@ -242,6 +242,24 @@ export default function TimerControls({
               </motion.div>
             )}
           </AnimatePresence>
+        </motion.button>
+
+        {/* End Session Button (Terminates current session intentionally) */}
+        <motion.button
+          whileHover={isRunning || isPaused ? { scale: 1.05 } : {}}
+          whileTap={isRunning || isPaused ? { scale: 0.92 } : {}}
+          type="button"
+          onClick={onTerminate}
+          disabled={!isRunning && !isPaused}
+          title="End session"
+          aria-label="End session"
+          className={`w-11 h-11 rounded-full border flex items-center justify-center transition-colors ${
+            isRunning || isPaused
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-300 hover:bg-rose-500/20 cursor-pointer shadow-[0_0_12px_rgba(244,63,94,0.15)]'
+              : 'bg-white/[0.02] border-white/[0.05] text-white/20 cursor-not-allowed opacity-40'
+          }`}
+        >
+          <Square className="w-4 h-4 fill-current" />
         </motion.button>
 
         {/* Skip / Next Button */}
@@ -319,17 +337,20 @@ export default function TimerControls({
         </motion.div>
       )}
 
-      {/* Dedicated End Session Action */}
+      {/* Dedicated End Session Action Pill */}
       {(isRunning || isPaused) && onTerminate && (
         <motion.button
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.96 }}
           type="button"
           onClick={onTerminate}
-          title="End session and save completed progress"
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition-all cursor-pointer"
+          title="End session"
+          aria-label="End session"
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition-all cursor-pointer shadow-[0_0_12px_rgba(244,63,94,0.15)]"
         >
-          <Square className="w-3 h-3 fill-current" />
+          <Square className="w-3.5 h-3.5 fill-current" />
           <span>End Session</span>
         </motion.button>
       )}

@@ -345,6 +345,19 @@ export default function FocusModeOverlay({
           ) : (
             // Countdown Controls
             <>
+              {/* Reset Button */}
+              <motion.button
+                whileTap={{ scale: 0.94 }}
+                type="button"
+                onClick={onReset}
+                title="Reset timer"
+                aria-label="Reset timer"
+                className="w-11 h-11 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-nocturn-muted hover:text-white flex items-center justify-center transition-colors cursor-pointer border border-white/[0.08] backdrop-blur-xl"
+              >
+                <RotateCcw className="w-4 h-4 stroke-[2]" />
+              </motion.button>
+
+              {/* Play / Pause Button */}
               {isRunning ? (
                 <motion.button
                   whileTap={{ scale: 0.94 }}
@@ -367,6 +380,21 @@ export default function FocusModeOverlay({
                 </motion.button>
               )}
 
+              {/* End Session Button */}
+              {(isRunning || isPaused) && onTerminate && (
+                <motion.button
+                  whileTap={{ scale: 0.94 }}
+                  type="button"
+                  onClick={onTerminate}
+                  title="End session"
+                  aria-label="End session"
+                  className="w-11 h-11 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 flex items-center justify-center transition-colors cursor-pointer backdrop-blur-xl"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                </motion.button>
+              )}
+
+              {/* Skip Button */}
               <motion.button
                 whileTap={{ scale: 0.94 }}
                 type="button"
@@ -377,19 +405,6 @@ export default function FocusModeOverlay({
               >
                 <SkipForward className="w-4 h-4 stroke-[2]" />
               </motion.button>
-
-              {(isRunning || isPaused) && onTerminate && (
-                <motion.button
-                  whileTap={{ scale: 0.94 }}
-                  type="button"
-                  onClick={onTerminate}
-                  title="End session"
-                  aria-label="End session"
-                  className="w-11 h-11 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/25 flex items-center justify-center transition-colors cursor-pointer backdrop-blur-xl"
-                >
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                </motion.button>
-              )}
             </>
           )}
         </div>

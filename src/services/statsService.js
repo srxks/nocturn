@@ -209,10 +209,10 @@ export function calculateProductivityStats(
   return {
     totalFocusMinutes,
     totalFocusHours,
-    totalFocusSessionsCount: focusSessions.length,
+    totalFocusSessionsCount: focusSessions.filter((s) => s.completed !== false).length,
     totalCompletedTasks,
     streak,
-    periodSessionsCount: filteredSessions.length,
+    periodSessionsCount: filteredSessions.filter((s) => s.completed !== false).length,
     periodTasksCount: filteredTasks.length,
     periodMinutes,
     periodHours,

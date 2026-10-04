@@ -883,6 +883,10 @@ export function TimerSessionProvider({ children }) {
       return
     }
 
+    const nowMs = Date.now()
+    const currentRemaining = endAt ? Math.max(0, Math.round((endAt - nowMs) / 1000)) : remainingSeconds
+    const elapsedSecs = Math.max(0, totalSeconds - currentRemaining)
+
     const resetDur = getModeDurationSeconds(mode)
     setStatus('idle')
     setEndAt(null)
@@ -901,10 +905,59 @@ export function TimerSessionProvider({ children }) {
         mode,
         endAt: null,
         totalSeconds: resetDur,
-        lastActionAt: new Date().toISOString(),
+        lastActionAt: new Date(nowMs).toISOString(),
       })
     }
-  }, [isStopwatch, mode, getModeDurationSeconds, discardFocusStopwatch, resetStopwatch, updateTimerState])
+
+    if (mode === 'focus') {
+      if (elapsedSecs >= 60) {
+        const focusMins = Math.round((elapsedSecs / 60) * 10) / 10
+        const displayMins = Math.round(elapsedSecs / 60)
+        const sessionStartedAt =
+          activeSessionRef.current?.startedAt ||
+          new Date(nowMs - elapsedSecs * 1000).toISOString()
+
+        await recordPomodoroSession({
+          taskId: taskId || null,
+          duration: focusMins,
+          durationSeconds: elapsedSecs,
+          sessionType: 'focus',
+          startedAt: sessionStartedAt,
+          taskTitle: taskName || 'Focus Session',
+          sessionId: `focus-${sessionStartedAt}`,
+          completed: false,
+        }).catch(console.warn)
+
+        addToast(`Focus session ended — ${displayMins}m focused`, {
+          type: 'info',
+          duration: 3500,
+        })
+      } else {
+        addToast('Focus session ended', {
+          type: 'info',
+          duration: 3000,
+        })
+      }
+    } else {
+      addToast('Break ended', {
+        type: 'info',
+        duration: 3000,
+      })
+    }
+  }, [
+    isStopwatch,
+    mode,
+    endAt,
+    remainingSeconds,
+    totalSeconds,
+    taskId,
+    taskName,
+    getModeDurationSeconds,
+    discardFocusStopwatch,
+    resetStopwatch,
+    updateTimerState,
+    addToast,
+  ])
 
   // ── SINGLE TICKER LOOP (250ms anti-drift) ──
   useEffect(() => {

@@ -8,6 +8,7 @@ import {
   Target,
   Maximize2,
   Sparkles,
+  Square,
 } from 'lucide-react'
 import TimerRing from '../components/timer/TimerRing'
 import TimerControls from '../components/timer/TimerControls'
@@ -66,6 +67,7 @@ export default function Timer() {
   const [pendingSwitchPreset, setPendingSwitchPreset] = useState(null)
   const [isFocusModeOpen, setIsFocusModeOpen] = useState(() => Boolean(location.state?.focusMode))
   const [prevFocusModeProp, setPrevFocusModeProp] = useState(location.state?.focusMode)
+  const [showEndSessionConfirm, setShowEndSessionConfirm] = useState(false)
 
   const activePresetId = useMemo(() => {
     if (isNormalStopwatch) return 'normal_stopwatch'
@@ -149,6 +151,16 @@ export default function Timer() {
   const handleTogglePlayPause = useCallback(() => {
     togglePlayPause()
   }, [togglePlayPause])
+
+  const handleRequestEndSession = useCallback(() => {
+    if (status !== 'running' && status !== 'paused') return
+    setShowEndSessionConfirm(true)
+  }, [status])
+
+  const handleConfirmEndSession = useCallback(async () => {
+    setShowEndSessionConfirm(false)
+    await terminateTimer()
+  }, [terminateTimer])
 
   // ONLY EXCEPTION: Spacebar toggles Play/Pause on the /timer route (and only when not inside an input/textarea)
   useEffect(() => {
@@ -395,7 +407,7 @@ export default function Timer() {
             onTogglePlayPause={handleTogglePlayPause}
             onReset={resetTimer}
             onSkip={skipTimer}
-            onTerminate={terminateTimer}
+            onTerminate={handleRequestEndSession}
             onFinishFocus={finishFocusStopwatch}
             onDiscardFocus={discardFocusStopwatch}
             onStartBreak={() => startBreak(isLongBreak)}
@@ -503,7 +515,7 @@ export default function Timer() {
         onStart={handleTogglePlayPause}
         onPause={handleTogglePlayPause}
         onResume={handleTogglePlayPause}
-        onTerminate={terminateTimer}
+        onTerminate={handleRequestEndSession}
         onSkip={skipTimer}
         onFinishFocus={finishFocusStopwatch}
         onDiscardFocus={discardFocusStopwatch}
@@ -570,6 +582,41 @@ export default function Timer() {
                 className="w-full py-2 px-4 rounded-xl text-nocturn-muted hover:text-white text-xs font-medium transition-colors text-center cursor-pointer"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* End Session Confirmation Modal */}
+      {showEndSessionConfirm && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto">
+          <div className="bg-[#12141c] border border-rose-500/25 rounded-2xl p-5 sm:p-6 shadow-2xl max-w-sm w-full space-y-4 text-center animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400 mx-auto">
+              <Square className="w-5 h-5 fill-current" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base sm:text-lg font-bold text-white">
+                {mode === 'focus' ? 'End Focus Session?' : 'End Break Session?'}
+              </h3>
+              <p className="text-xs sm:text-sm text-nocturn-muted leading-relaxed">
+                Your current session will end and won't count as a completed session.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowEndSessionConfirm(false)}
+                className="py-2.5 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white border border-white/10 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmEndSession}
+                className="py-2.5 px-4 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold shadow-md shadow-rose-950/50 transition-colors cursor-pointer"
+              >
+                End Session
               </button>
             </div>
           </div>
