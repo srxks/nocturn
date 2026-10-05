@@ -68,7 +68,9 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
 
     // Determine target day: natural language override takes precedence if present
     let targetDay = day === 'none' ? null : day
-    if (parsed.day) {
+    if (parsed.dateKey) {
+      targetDay = parsed.dateKey
+    } else if (parsed.day) {
       targetDay = parsed.day
     }
 
@@ -76,8 +78,15 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
     const finalPriority = parsed.priority || 'medium'
     const finalReminder = parsed.time || null
 
+    const extraFields = {
+      deadline: parsed.isDeadline ? (parsed.deadlineKey || parsed.dateKey) : null,
+      estimatedDuration: parsed.duration,
+      labels: parsed.labels || [],
+      recurrence: parsed.recurrence || 'none',
+    }
+
     playClickSound()
-    onAddTask(finalTitle, targetDay, finalInMyDay, finalPriority, finalReminder)
+    onAddTask(finalTitle, targetDay, finalInMyDay, finalPriority, finalReminder, extraFields)
 
     setTitle('')
     if (defaultDay === 'none') {
@@ -183,21 +192,26 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
               <motion.span
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30"
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
+                  naturalParsed.isDeadline
+                    ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                    : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+                }`}
               >
                 <Calendar className="w-3 h-3" />
-                {naturalParsed.day}
+                {naturalParsed.isDeadline ? 'Deadline: ' : 'Due: '}{naturalParsed.day}
+                {naturalParsed.formattedTime ? ` at ${naturalParsed.formattedTime}` : ''}
               </motion.span>
             )}
 
-            {naturalParsed.time && (
+            {!naturalParsed.day && naturalParsed.time && (
               <motion.span
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
               >
                 <Clock className="w-3 h-3" />
-                {naturalParsed.time}
+                At {naturalParsed.formattedTime || naturalParsed.time}
               </motion.span>
             )}
 

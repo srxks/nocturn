@@ -16,7 +16,12 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
-import { getTodayDateKey, saveDailyVocabLog, getWordsByDifficultyDistribution } from '../services/vocabService'
+import {
+  getTodayDateKey,
+  saveDailyVocabLog,
+  getWordsByDifficultyDistribution,
+  generateAndSaveTodayLearningSession,
+} from '../services/vocabService'
 import { speakWord } from '../services/soundService'
 import VocabWordModal from '../components/vocab/VocabWordModal'
 import VocabSessionConfigModal from '../components/vocab/VocabSessionConfigModal'
@@ -49,10 +54,29 @@ export default function VocabLearn() {
   const [sessionConfig, setSessionConfig] = useState(() => location.state?.config || null)
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
 
+  // Asynchronously ensure session words are loaded if not in location.state
+  useEffect(() => {
+    if (!customWords || customWords.length === 0) {
+      if (todayVocabLog?.words && Array.isArray(todayVocabLog.words) && todayVocabLog.words.length > 0) {
+        setCustomWords(todayVocabLog.words)
+        if (todayVocabLog.config) setSessionConfig(todayVocabLog.config)
+      } else {
+        generateAndSaveTodayLearningSession(user?.id, sessionConfig).then((words) => {
+          if (words && words.length > 0) {
+            setCustomWords(words)
+          }
+        }).catch(console.error)
+      }
+    }
+  }, [customWords, todayVocabLog, user?.id, sessionConfig])
+
   const effectiveWords = useMemo(() => {
     if (customWords && customWords.length > 0) return customWords
+    if (todayVocabLog?.words && Array.isArray(todayVocabLog.words) && todayVocabLog.words.length > 0) {
+      return todayVocabLog.words
+    }
     return dailyWords
-  }, [customWords, dailyWords])
+  }, [customWords, todayVocabLog, dailyWords])
 
   const [currentIndex, setCurrentIndex] = useState(() => {
     try {
@@ -142,6 +166,8 @@ export default function VocabLearn() {
         date: todayKey,
         userId: user?.id || null,
         wordIds: effectiveWords.map((w) => w.id),
+        words: effectiveWords,
+        config: sessionConfig,
         currentIndex: nextIdx,
         completedWordIds: currentCompletedIds,
         completed: false,
@@ -160,6 +186,8 @@ export default function VocabLearn() {
         date: todayKey,
         userId: user?.id || null,
         wordIds: effectiveWords.map((w) => w.id),
+        words: effectiveWords,
+        config: sessionConfig,
         currentIndex: effectiveWords.length - 1,
         completedWordIds: effectiveWords.map((w) => w.id),
         completed: true,
@@ -170,12 +198,7 @@ export default function VocabLearn() {
 
   const handleStartNewSession = async (cfg) => {
     try {
-      const words = await getWordsByDifficultyDistribution({
-        easy: cfg.easy,
-        medium: cfg.medium,
-        hard: cfg.hard,
-        userId: user?.id,
-      })
+      const words = await generateAndSaveTodayLearningSession(user?.id, cfg)
       setCustomWords(words)
       setSessionConfig(cfg)
       setCurrentIndex(0)
@@ -198,7 +221,9 @@ export default function VocabLearn() {
       await saveDailyVocabLog({
         date: todayKey,
         userId: user?.id || null,
-        wordIds: dailyWords.map((w) => w.id),
+        wordIds: effectiveWords.map((w) => w.id),
+        words: effectiveWords,
+        config: sessionConfig,
         currentIndex: prevIdx,
         completedWordIds: todayVocabLog?.completedWordIds || [],
         completed: false,
@@ -226,8 +251,8 @@ export default function VocabLearn() {
     )
   }
 
-  // Empty Library State (User has no words at all)
-  if (allWords.length === 0 && dailyWords.length === 0) {
+  // Empty Library State (User has no words to study)
+  if (effectiveWords.length === 0) {
     return (
       <div className="max-w-xl mx-auto space-y-6 py-8">
         <button

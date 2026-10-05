@@ -181,7 +181,57 @@ export async function ensureSeedData() {
     if (corruptListIds.length > 0) {
       await db.lists.bulkDelete(corruptListIds)
     }
+
+    // Deduplicate any historic or sync duplicate focus sessions
+    await deduplicatePomodoroSessions()
   } catch (err) {
     console.error('Failed to initialize Nocturn database defaults:', err)
   }
 }
+
+/**
+ * Deduplicates pomodoro/focus sessions in local Dexie to guarantee idempotency.
+ */
+export async function deduplicatePomodoroSessions() {
+  try {
+    if (!db || !db.pomodoroSessions) return
+    const all = await db.pomodoroSessions.toArray()
+    if (!all || all.length <= 1) return
+
+    const seenTimes = new Map()
+    const duplicateIds = []
+
+    for (const session of all) {
+      if (!session || !session.id) continue
+      const startTime = session.startedAt || session.completedAt
+      if (!startTime) continue
+      const timeMs = new Date(startTime).getTime()
+      if (isNaN(timeMs)) continue
+
+      const userKey = session.userId || 'local'
+      let foundDuplicate = false
+
+      for (const [key] of seenTimes.entries()) {
+        const [existingUser, existingTimeStr] = key.split('::')
+        const existingMs = Number(existingTimeStr)
+        if (existingUser === userKey && Math.abs(timeMs - existingMs) <= 3000) {
+          duplicateIds.push(session.id)
+          foundDuplicate = true
+          break
+        }
+      }
+
+      if (!foundDuplicate) {
+        seenTimes.set(`${userKey}::${timeMs}`, session.id)
+      }
+    }
+
+    if (duplicateIds.length > 0) {
+      await db.pomodoroSessions.bulkDelete(duplicateIds)
+      console.info(`[NocturnDB] Cleaned up ${duplicateIds.length} duplicate focus session(s).`)
+    }
+  } catch (err) {
+    console.warn('[NocturnDB] Deduplication error:', err)
+  }
+}
+

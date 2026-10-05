@@ -89,6 +89,8 @@ function AppRoutes() {
             <Route path="/plan-my-day" element={<Navigate to="/plan" replace />} />
             <Route path="/statistics" element={<Statistics />} />
             <Route path="/stats" element={<Navigate to="/statistics" replace />} />
+            <Route path="/analytics" element={<Navigate to="/statistics" replace />} />
+            <Route path="/productivity" element={<Navigate to="/statistics" replace />} />
             <Route path="/vocab" element={<Vocab />} />
             <Route path="/vocab/learn" element={<VocabLearn />} />
             <Route path="/vocab/review" element={<VocabReview />} />

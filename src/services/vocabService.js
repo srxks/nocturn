@@ -488,84 +488,10 @@ export function generateQuizOptions(targetWord, allWordsPool = []) {
   return rawChoices.sort(() => 0.5 - Math.random())
 }
 
-/**
- * Retrieves words distributed across difficulty levels (Easy, Medium, Hard).
- * Automatically seeds authentic GRE words from GRE_VOCAB_DATASET if local database
- * has fewer available words than requested for a given difficulty.
- */
-export async function getWordsByDifficultyDistribution({
-  easy = 0,
-  medium = 0,
-  hard = 0,
-  userId = null,
-} = {}) {
-  const sessionUserId = getActiveUserId(userId)
-  const today = getTodayDateKey()
-  const allLocal = await getAllLearnedWords(sessionUserId)
-
-  const requests = [
-    { difficulty: 'Easy', count: Math.max(0, parseInt(easy, 10) || 0) },
-    { difficulty: 'Medium', count: Math.max(0, parseInt(medium, 10) || 0) },
-    { difficulty: 'Hard', count: Math.max(0, parseInt(hard, 10) || 0) },
-  ]
-
-  const selectedWords = []
-  const existingWordsLower = new Set(allLocal.map((w) => (w.word || '').trim().toLowerCase()))
-
-  for (const req of requests) {
-    if (req.count <= 0) continue
-
-    // Find local words matching this difficulty tier
-    let matchingLocal = allLocal.filter(
-      (w) => (w.difficulty || 'Medium').toLowerCase() === req.difficulty.toLowerCase()
-    )
-
-    // Sort: unmastered first (correct_count < 5), then fewest correct reviews
-    matchingLocal.sort((a, b) => {
-      const aDone = (a.correct_count || 0) >= 5
-      const bDone = (b.correct_count || 0) >= 5
-      if (aDone !== bDone) return aDone ? 1 : -1
-      return (a.correct_count || 0) - (b.correct_count || 0)
-    })
-
-    // If local has fewer than requested, seed from GRE_VOCAB_DATASET
-    if (matchingLocal.length < req.count) {
-      const needed = req.count - matchingLocal.length
-      const datasetCandidates = GRE_VOCAB_DATASET.filter(
-        (item) =>
-          item.difficulty.toLowerCase() === req.difficulty.toLowerCase() &&
-          !existingWordsLower.has(item.word.trim().toLowerCase())
-      )
-
-      for (let i = 0; i < Math.min(needed, datasetCandidates.length); i++) {
-        const candidate = datasetCandidates[i]
-        existingWordsLower.add(candidate.word.trim().toLowerCase())
-        try {
-          const saved = await saveLearnedWord({
-            ...candidate,
-            userId: sessionUserId,
-            date_added: today,
-            correct_count: 0,
-          })
-          matchingLocal.push(saved)
-        } catch (err) {
-          console.warn('[vocabService] Seed word error:', err)
-        }
-      }
-    }
-
-    // Pick requested number of words
-    const chosen = matchingLocal.slice(0, req.count)
-    selectedWords.push(...chosen)
-  }
-
-  return selectedWords
-}
-
 export const DEFAULT_VOCAB_SESSION_CONFIG = {
-  easy: 3,
-  medium: 4,
-  hard: 3,
+  easy: 1,
+  medium: 3,
+  hard: 1,
 }
 
 export function normalizeVocabSessionConfig(raw) {
@@ -575,6 +501,146 @@ export function normalizeVocabSessionConfig(raw) {
     medium: Math.max(0, parseInt(raw.medium, 10) || 0),
     hard: Math.max(0, parseInt(raw.hard, 10) || 0),
   }
+}
+
+/**
+ * Retrieves eligible NEW vocabulary words according to the user's saved configuration.
+ *
+ * Rules:
+ * 1. Read the user's saved configuration counts for Easy, Medium, Hard.
+ * 2. Exclude words already learned by this user.
+ * 3. Exclude words currently in the review queue.
+ * 4. Exclude MASTERED words.
+ * 5. Exclude words already selected in this session.
+ * 6. Randomly sample the requested number from each difficulty pool WITHOUT replacement.
+ *    - DO NOT use alphabetical database order.
+ *    - DO NOT take the first N rows.
+ * 7. Shuffle the combined final session into a random presentation order.
+ * 8. Returns the randomized array of words.
+ *    - Does NOT mark words as learned.
+ *    - Does NOT modify vocabulary mastery.
+ *    - Does NOT create review records.
+ */
+export async function getWordsByDifficultyDistribution({
+  easy = 0,
+  medium = 0,
+  hard = 0,
+  userId = null,
+} = {}) {
+  const sessionUserId = getActiveUserId(userId)
+  const today = getTodayDateKey()
+  const allLearned = await getAllLearnedWords(sessionUserId)
+
+  // 1. Build exclusion set: normalized words already learned, being reviewed, or mastered
+  const excludedWordsSet = new Set()
+  for (const w of allLearned) {
+    if (!w || !w.word) continue
+    const norm = w.word.trim().toLowerCase()
+    excludedWordsSet.add(norm)
+  }
+
+  const requestedTiers = [
+    { difficulty: 'Easy', count: Math.max(0, parseInt(easy, 10) || 0) },
+    { difficulty: 'Medium', count: Math.max(0, parseInt(medium, 10) || 0) },
+    { difficulty: 'Hard', count: Math.max(0, parseInt(hard, 10) || 0) },
+  ]
+
+  const selectedWordsSet = new Set()
+  const combinedSelected = []
+
+  for (const req of requestedTiers) {
+    if (req.count <= 0) continue
+
+    // Query eligible unlearned words from GRE_VOCAB_DATASET
+    const eligiblePool = GRE_VOCAB_DATASET.filter((item) => {
+      if ((item.difficulty || '').toLowerCase() !== req.difficulty.toLowerCase()) return false
+      const norm = (item.word || '').trim().toLowerCase()
+      if (!norm) return false
+      if (excludedWordsSet.has(norm)) return false
+      if (selectedWordsSet.has(norm)) return false
+      return true
+    })
+
+    // Randomly sample req.count items without replacement (Fisher-Yates shuffle, NOT alphabetical, NOT first N)
+    const shuffledPool = [...eligiblePool]
+    for (let i = shuffledPool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const temp = shuffledPool[i]
+      shuffledPool[i] = shuffledPool[j]
+      shuffledPool[j] = temp
+    }
+
+    const sampled = shuffledPool.slice(0, req.count)
+    for (const w of sampled) {
+      selectedWordsSet.add((w.word || '').trim().toLowerCase())
+      combinedSelected.push({
+        id: toUuid(`vocab-${sessionUserId || 'guest'}-${w.word.trim().toLowerCase()}`),
+        userId: sessionUserId,
+        word: w.word.trim(),
+        definition: w.definition,
+        example_sentence: w.example_sentence || '',
+        part_of_speech: w.part_of_speech || 'noun',
+        difficulty: req.difficulty,
+        synonyms: w.synonyms || [],
+        correct_count: 0,
+        date_added: today,
+      })
+    }
+  }
+
+  // Shuffle the combined final session into a random presentation order!
+  for (let i = combinedSelected.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const temp = combinedSelected[i]
+    combinedSelected[i] = combinedSelected[j]
+    combinedSelected[j] = temp
+  }
+
+  return combinedSelected
+}
+
+/**
+ * Generates and initializes today's active study session according to the user's
+ * saved configuration. Shuffles the presentation order and persists to dailyVocabLogs.
+ */
+export async function generateAndSaveTodayLearningSession(userId = null, config = null) {
+  const sessionUserId = getActiveUserId(userId)
+  const today = getTodayDateKey()
+  const cfg = config || (await getVocabSessionConfig(sessionUserId))
+  const cleanConfig = normalizeVocabSessionConfig(cfg)
+
+  const sessionWords = await getWordsByDifficultyDistribution({
+    easy: cleanConfig.easy,
+    medium: cleanConfig.medium,
+    hard: cleanConfig.hard,
+    userId: sessionUserId,
+  })
+
+  // Save session to dailyVocabLogs
+  if (db && db.dailyVocabLogs) {
+    await db.dailyVocabLogs.put({
+      date: today,
+      userId: sessionUserId,
+      config: cleanConfig,
+      words: sessionWords,
+      wordIds: sessionWords.map((w) => w.id),
+      currentIndex: 0,
+      completedWordIds: [],
+      completed: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+  }
+
+  // Reset session progress indicators for today
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem(`nocturn_vocab_learn_completed_${sessionUserId || 'guest'}_${today}`)
+    localStorage.removeItem(`nocturn_vocab_learn_completed_guest_${today}`)
+    localStorage.setItem(`nocturn_vocab_learn_idx_${sessionUserId || 'guest'}_${today}`, '0')
+    localStorage.setItem(`nocturn_vocab_learn_ids_${sessionUserId || 'guest'}_${today}`, JSON.stringify([]))
+  }
+
+  return sessionWords
 }
 
 export async function getVocabSessionConfig(userId = null) {
@@ -666,7 +732,31 @@ export async function saveVocabSessionConfig(userId = null, config = {}) {
     }
   }
 
-  // 4. Notify app components of updated configuration
+  // 4. Reset today's session log and completion flags so the new configuration determines the next session immediately!
+  const today = getTodayDateKey()
+  try {
+    if (db && db.dailyVocabLogs) {
+      await db.dailyVocabLogs.delete(today)
+    }
+    if (typeof localStorage !== 'undefined') {
+      const keysToRemove = [
+        `nocturn_vocab_learn_completed_${userId || 'guest'}_${today}`,
+        `nocturn_vocab_learn_completed_${sessionUserId || 'guest'}_${today}`,
+        `nocturn_vocab_learn_completed_guest_${today}`,
+        `nocturn_vocab_learn_idx_${userId || 'guest'}_${today}`,
+        `nocturn_vocab_learn_idx_${sessionUserId || 'guest'}_${today}`,
+        `nocturn_vocab_learn_idx_guest_${today}`,
+        `nocturn_vocab_learn_ids_${userId || 'guest'}_${today}`,
+        `nocturn_vocab_learn_ids_${sessionUserId || 'guest'}_${today}`,
+        `nocturn_vocab_learn_ids_guest_${today}`,
+      ]
+      keysToRemove.forEach((k) => localStorage.removeItem(k))
+    }
+  } catch {
+    // ignore
+  }
+
+  // 5. Notify app components of updated configuration
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
       new CustomEvent('nocturn:vocab-config-updated', { detail: cleanConfig })
@@ -683,13 +773,10 @@ export async function getAvailableWordsCountByDifficulty(userId = null) {
 
   const counts = { easy: 0, medium: 0, hard: 0 }
   for (const diff of ['easy', 'medium', 'hard']) {
-    const localCount = allLocal.filter(
-      (w) => (w.difficulty || 'Medium').toLowerCase() === diff
+    const unlearnedDatasetCount = GRE_VOCAB_DATASET.filter(
+      (w) => (w.difficulty || 'Medium').toLowerCase() === diff && !existingWordsLower.has((w.word || '').trim().toLowerCase())
     ).length
-    const unseededDatasetCount = GRE_VOCAB_DATASET.filter(
-      (w) => w.difficulty.toLowerCase() === diff && !existingWordsLower.has(w.word.trim().toLowerCase())
-    ).length
-    counts[diff] = localCount + unseededDatasetCount
+    counts[diff] = unlearnedDatasetCount
   }
   return counts
 }

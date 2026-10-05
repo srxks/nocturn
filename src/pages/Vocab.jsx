@@ -23,6 +23,7 @@ import VocabSessionConfigModal from '../components/vocab/VocabSessionConfigModal
 import {
   getWordsByDifficultyDistribution,
   getVocabSessionConfig,
+  generateAndSaveTodayLearningSession,
   DEFAULT_VOCAB_SESSION_CONFIG,
 } from '../services/vocabService'
 import { Card, Badge, Button, Progress } from '../components/ui'
@@ -37,6 +38,7 @@ export default function Vocab() {
     effectiveDailyTarget,
     isDailyCompleted,
     currentLearningIndex,
+    todayVocabLog,
     reviewCount,
     isGenerating,
     generationError,
@@ -84,12 +86,7 @@ export default function Vocab() {
   const handleStartCustomSession = async (customConfig) => {
     try {
       const cfg = customConfig || sessionConfig
-      const words = await getWordsByDifficultyDistribution({
-        easy: cfg.easy,
-        medium: cfg.medium,
-        hard: cfg.hard,
-        userId: user?.id,
-      })
+      const words = await generateAndSaveTodayLearningSession(user?.id, cfg)
       navigate('/vocab/learn', { state: { customWords: words, config: cfg } })
     } catch (err) {
       console.error('Failed to configure custom vocab session:', err)
@@ -114,12 +111,20 @@ export default function Vocab() {
     }
 
     try {
-      const words = await getWordsByDifficultyDistribution({
-        easy: sessionConfig.easy,
-        medium: sessionConfig.medium,
-        hard: sessionConfig.hard,
-        userId: user?.id,
-      })
+      // If today's session has already been completed, allow reviewing it
+      if (isDailyCompleted && todayVocabLog?.words?.length > 0) {
+        navigate('/vocab/learn', { state: { customWords: todayVocabLog.words, config: sessionConfig } })
+        return
+      }
+
+      // If today's session is in progress, continue with existing session words
+      if (learnedTodayCount > 0 && todayVocabLog?.words?.length > 0) {
+        navigate('/vocab/learn', { state: { customWords: todayVocabLog.words, config: sessionConfig } })
+        return
+      }
+
+      // Otherwise, generate a fresh randomized session from currently saved configuration
+      const words = await generateAndSaveTodayLearningSession(user?.id, sessionConfig)
       navigate('/vocab/learn', { state: { customWords: words, config: sessionConfig } })
     } catch (err) {
       console.error('Failed to start vocab session with configured counts:', err)
@@ -301,22 +306,23 @@ export default function Vocab() {
             </div>
 
             <div>
-              <h2 className="text-xl font-semibold text-white tracking-tight">
-                Learn {totalConfiguredWords > 0 ? totalConfiguredWords : effectiveDailyTarget} Words
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight uppercase">
+                LEARN {totalConfiguredWords} WORDS
               </h2>
-              <p className="text-nocturn-muted text-xs sm:text-sm mt-1">
-                {allWords.length === 0
-                  ? 'Your library is empty. Generate words or add your own to start.'
-                  : `Configured: ${sessionConfig.easy} Easy • ${sessionConfig.medium} Medium • ${sessionConfig.hard} Hard (${totalConfiguredWords} total)`}
-              </p>
+              <div className="text-xs sm:text-sm mt-1.5">
+                <span className="text-nocturn-muted font-medium">Configured: </span>
+                <span className="text-white/90 font-medium">
+                  {sessionConfig.easy} Easy · {sessionConfig.medium} Medium · {sessionConfig.hard} Hard
+                </span>
+              </div>
             </div>
 
             {/* Progress Section */}
             <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2.5">
               <div className="flex items-center justify-between text-xs font-medium">
-                <span className="text-nocturn-muted">Today's Progress</span>
+                <span className="text-nocturn-muted">Today's Progress:</span>
                 <span className="text-white font-mono font-semibold">
-                  {learnedTodayCount} / {totalConfiguredWords > 0 ? totalConfiguredWords : effectiveDailyTarget} Words
+                  {learnedTodayCount} / {totalConfiguredWords} Words
                 </span>
               </div>
               <Progress
@@ -329,99 +335,60 @@ export default function Vocab() {
             </div>
           </div>
 
-          <div className="pt-6">
-            {isDailyCompleted ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate('/vocab/learn')}
-                  className="w-full justify-center"
-                  icon={ArrowRight}
-                >
-                  Review Set
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsConfigModalOpen(true)}
-                  className="w-full justify-center"
-                  icon={SlidersHorizontal}
-                >
-                  Custom Set
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={handleGenerateNewWords}
-                  disabled={isGenerating}
-                  className="w-full justify-center"
-                  icon={isGenerating ? RefreshCw : Sparkles}
-                >
-                  {isGenerating ? 'Generating...' : 'AI Generate'}
-                </Button>
-              </div>
-            ) : allWords.length === 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <Button
-                  variant="primary"
-                  onClick={() => setIsConfigModalOpen(true)}
-                  className="w-full justify-center"
-                  icon={Play}
-                >
-                  Configure & Start
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleGenerateNewWords}
-                  disabled={isGenerating}
-                  className="w-full justify-center"
-                  icon={isGenerating ? RefreshCw : Sparkles}
-                >
-                  {isGenerating ? 'Generating...' : 'AI Generate'}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="w-full justify-center"
-                  icon={Plus}
-                >
-                  Add Word
-                </Button>
-              </div>
-            ) : (
-              <div className="flex flex-col sm:flex-row gap-2.5">
-                <Button
-                  variant="primary"
-                  onClick={handleStartLearn}
-                  disabled={isGenerating || totalConfiguredWords === 0}
-                  className="flex-1 justify-center"
-                  icon={ArrowRight}
-                >
-                  {totalConfiguredWords === 0
-                    ? 'Configure Words to Start'
-                    : isGenerating
-                    ? 'Generating with Gemini...'
-                    : learnedTodayCount > 0
-                    ? `Continue (${Math.min(currentLearningIndex + 1, Math.max(totalConfiguredWords, 1))} of ${totalConfiguredWords})`
-                    : `Start Learning (${totalConfiguredWords} words)`}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsConfigModalOpen(true)}
-                  icon={SlidersHorizontal}
-                  title="Configure word count and difficulty"
-                >
-                  <span>Configure</span>
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleGenerateNewWords}
-                  disabled={isGenerating}
-                  icon={isGenerating ? RefreshCw : Sparkles}
-                  title="Generate brand new words with AI"
-                >
-                  <span className="hidden sm:inline">AI Generate</span>
-                </Button>
-              </div>
-            )}
+          <div className="pt-6 space-y-3">
+            {/* Primary Action Button */}
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleStartLearn}
+              disabled={isGenerating || totalConfiguredWords === 0}
+              className="w-full justify-center text-sm font-semibold shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.35)]"
+              icon={isDailyCompleted ? ArrowRight : Play}
+            >
+              {totalConfiguredWords === 0
+                ? 'Configure Words to Start'
+                : isDailyCompleted
+                ? 'Review Set'
+                : learnedTodayCount > 0
+                ? 'Continue Learning'
+                : `Start Learning (${totalConfiguredWords} Words)`}
+            </Button>
+
+            {/* Secondary Controls: [Configure] [Review Set] [AI Generate] */}
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsConfigModalOpen(true)}
+                icon={SlidersHorizontal}
+                className="w-full justify-center text-xs"
+                title="Configure word counts by difficulty"
+              >
+                <span>Configure</span>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate('/vocab/learn')}
+                disabled={allWords.length === 0 && !todayVocabLog?.words?.length}
+                icon={BookOpen}
+                className="w-full justify-center text-xs"
+                title="Review current study set"
+              >
+                <span>Review Set</span>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleGenerateNewWords}
+                disabled={isGenerating}
+                icon={isGenerating ? RefreshCw : Sparkles}
+                className={`w-full justify-center text-xs ${isGenerating ? '[&_svg]:animate-spin' : ''}`}
+                title="Generate words with AI"
+              >
+                <span>{isGenerating ? 'AI...' : 'AI Generate'}</span>
+              </Button>
+            </div>
           </div>
         </Card>
 

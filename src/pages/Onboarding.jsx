@@ -4,18 +4,82 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles,
   Check,
-  User,
   Target,
-  Palette,
+  Timer,
+  Clock,
+  Zap,
+  Flame,
+  ArrowRight,
+  ShieldCheck,
 } from 'lucide-react'
-import { useTheme } from '../context/useTheme'
 import { useAuth } from '../context/useAuth'
+import { db } from '../db/db'
 
-const FOCUS_GOALS = [
-  { id: '2h', label: '2 Hours', subtitle: 'Gentle & Sustainable', hours: 2 },
-  { id: '4h', label: '4 Hours', subtitle: 'Standard Deep Work', hours: 4, recommended: true },
-  { id: '6h', label: '6 Hours', subtitle: 'Serious Sprint', hours: 6 },
-  { id: '8h', label: '8 Hours', subtitle: 'Intense Focus', hours: 8 },
+const FOCUS_STYLES = [
+  {
+    id: 'pomodoro',
+    name: 'Pomodoro',
+    duration: '25m / 5m',
+    description: 'Classic rhythm with regular short pauses. Best for sustained daily productivity.',
+    icon: Timer,
+    recommended: true,
+  },
+  {
+    id: '52-17',
+    name: '52 / 17 Rhythm',
+    duration: '52m / 17m',
+    description: 'Scientifically calibrated work sprints with full cognitive recovery.',
+    icon: Flame,
+  },
+  {
+    id: 'ultradian',
+    name: '90m Ultradian',
+    duration: '90m / 20m',
+    description: 'Extended deep immersion for complex coding, research, and writing.',
+    icon: Clock,
+  },
+  {
+    id: 'quick',
+    name: '15m Sprint',
+    duration: '15m / 3m',
+    description: 'Quick bursts to overcome friction and defeat procrastination.',
+    icon: Zap,
+  },
+  {
+    id: 'focus_stopwatch',
+    name: 'Focus Stopwatch',
+    duration: 'Open-ended',
+    description: 'Track uninterrupted deep work without the pressure of a countdown.',
+    icon: Target,
+  },
+]
+
+const DAILY_GOALS = [
+  {
+    id: '1h',
+    label: '1 - 2 Hours',
+    sessions: '2 - 3 Sessions',
+    subtitle: 'Gentle, sustainable daily pace',
+  },
+  {
+    id: '2h',
+    label: '2 Hours',
+    sessions: '4 Sessions',
+    subtitle: 'Balanced daily execution standard',
+    recommended: true,
+  },
+  {
+    id: '4h',
+    label: '4 Hours',
+    sessions: '8 Sessions',
+    subtitle: 'Dedicated high-performance deep work',
+  },
+  {
+    id: '6h',
+    label: '6+ Hours',
+    sessions: '12+ Sessions',
+    subtitle: 'Intensive study, sprints, or deadline prep',
+  },
 ]
 
 export default function Onboarding() {
@@ -23,10 +87,9 @@ export default function Onboarding() {
   const [searchParams] = useSearchParams()
   const isReplay = searchParams.get('replay') === 'true'
 
-  const { activeTheme, presetThemes, applyTheme } = useTheme()
   const { user, continueAsGuest } = useAuth()
 
-  // Guard: if user has already completed onboarding (or is authenticated) and this isn't a replay, redirect to tasks
+  // Guard: if user has already completed onboarding and this isn't a replay, redirect
   useEffect(() => {
     if (!isReplay) {
       const isCompleted =
@@ -39,72 +102,76 @@ export default function Onboarding() {
   }, [user, isReplay, navigate])
 
   const [step, setStep] = useState(0)
-  const [userName, setUserName] = useState(() => localStorage.getItem('nocturn_user_name') || '')
-  const [focusGoal, setFocusGoal] = useState('4h')
+  const [focusStyle, setFocusStyle] = useState(() => {
+    return (
+      (typeof localStorage !== 'undefined'
+        ? localStorage.getItem('nocturn_timer_preset')
+        : null) || 'pomodoro'
+    )
+  })
+  const [focusGoal, setFocusGoal] = useState(() => {
+    return (
+      (typeof localStorage !== 'undefined'
+        ? localStorage.getItem('nocturn_daily_goal')
+        : null) || '2h'
+    )
+  })
 
-  const totalSteps = 5
+  const totalSteps = 4
+
+  const finalizeOnboarding = () => {
+    try {
+      localStorage.setItem('nocturn_onboarding_completed', 'true')
+      localStorage.setItem('nocturn_timer_preset', focusStyle)
+      localStorage.setItem('nocturn_daily_goal', focusGoal)
+
+      // Also persist to Dexie local user settings if DB exists
+      if (db?.userSettings) {
+        db.userSettings.put({
+          id: user?.id || 'guest-local-user',
+          userId: user?.id || 'guest-local-user',
+          onboardingCompleted: true,
+          focusStyle,
+          dailyGoal: focusGoal,
+          updatedAt: new Date().toISOString(),
+        }).catch(() => {})
+      }
+    } catch {
+      // ignore
+    }
+
+    if (!user) {
+      continueAsGuest()
+    }
+
+    navigate('/tasks?view=myday', { replace: true })
+  }
 
   const handleNext = () => {
-    if (step === 1 && userName.trim()) {
-      localStorage.setItem('nocturn_user_name', userName.trim())
-    }
     if (step < totalSteps - 1) {
       setStep((prev) => prev + 1)
     } else {
-      localStorage.setItem('nocturn_onboarding_completed', 'true')
-      if (!user) {
-        continueAsGuest()
-      }
-      navigate('/tasks?view=myday')
+      finalizeOnboarding()
     }
   }
 
   const handleSkip = () => {
-    localStorage.setItem('nocturn_onboarding_completed', 'true')
-    if (!user) {
-      continueAsGuest()
-    }
-    navigate('/tasks?view=myday')
+    finalizeOnboarding()
   }
 
+  const selectedStyleObj = FOCUS_STYLES.find((s) => s.id === focusStyle) || FOCUS_STYLES[0]
+  const selectedGoalObj = DAILY_GOALS.find((g) => g.id === focusGoal) || DAILY_GOALS[1]
+
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full flex flex-col justify-between p-6 sm:p-10 md:p-12 lg:p-16 bg-[#07080A] text-white selection:bg-nocturn-accent selection:text-black overflow-hidden relative pt-[calc(1.5rem+env(safe-area-inset-top,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
-      {/* Full-Viewport Ambient Glows */}
-      <div className="absolute -bottom-24 -left-24 w-96 sm:w-[500px] h-96 sm:h-[500px] bg-teal-500/10 rounded-full blur-[130px] pointer-events-none" />
-      <div className="absolute -top-24 -right-24 w-96 sm:w-[500px] h-96 sm:h-[500px] bg-indigo-500/10 rounded-full blur-[130px] pointer-events-none" />
+    <div className="min-h-screen min-h-[100dvh] w-full flex flex-col justify-between p-5 sm:p-8 md:p-12 bg-[#07080A] text-white selection:bg-nocturn-accent selection:text-black overflow-hidden relative pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
+      {/* Background Ambient Glows */}
+      <div className="absolute -bottom-24 -left-24 w-80 sm:w-[450px] h-80 sm:h-[450px] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute -top-24 -right-24 w-80 sm:w-[450px] h-80 sm:h-[450px] bg-cyan-500/10 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Thin Flowing Curved Lines Artwork emerging from lower-left across full viewport */}
-      <svg
-        className="absolute inset-0 w-full h-full pointer-events-none select-none opacity-20"
-        viewBox="0 0 1440 900"
-        fill="none"
-        preserveAspectRatio="xMidYMid slice"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        <path
-          d="M-60,950 C200,850 420,680 670,520 C920,360 1170,250 1520,180"
-          stroke="rgba(255,255,255,0.22)"
-          strokeWidth="1.4"
-          strokeDasharray="6 8"
-        />
-        <path
-          d="M-30,1000 C240,900 480,720 740,550 C1000,380 1240,280 1570,220"
-          stroke="rgba(255,255,255,0.15)"
-          strokeWidth="1.1"
-        />
-        <path
-          d="M0,1050 C300,940 560,760 830,580 C1100,400 1340,300 1620,250"
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth="0.8"
-          strokeDasharray="8 12"
-        />
-      </svg>
-
-      {/* Top Header: Brand & Skip */}
+      {/* Top Header: Brand & Skip Button */}
       <header className="relative z-10 w-full max-w-2xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb,99,102,241),0.8)]" />
+          <div className="w-2.5 h-2.5 rounded-full bg-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.8)]" />
           <span className="text-xs font-bold uppercase tracking-widest text-white/90">
             Nocturn
           </span>
@@ -113,123 +180,196 @@ export default function Onboarding() {
         <button
           type="button"
           onClick={handleSkip}
-          className="text-xs font-medium text-nocturn-muted hover:text-white px-3.5 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition-all cursor-pointer"
+          className="text-xs font-medium text-nocturn-muted hover:text-white px-3 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition-all cursor-pointer"
         >
-          {isReplay ? 'Close' : 'Skip'}
+          {isReplay ? 'Close' : 'Skip Setup'}
         </button>
       </header>
 
       {/* Center Main Step Content */}
-      <main className="relative z-10 w-full max-w-2xl mx-auto my-auto py-8">
+      <main className="relative z-10 w-full max-w-2xl mx-auto my-auto py-6 sm:py-8">
         <AnimatePresence mode="wait">
-          {/* Step 0: Welcome */}
+          {/* SCREEN 1: Welcome to Nocturn */}
           {step === 0 && (
             <motion.div
               key="step-0"
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -16 }}
-              transition={{ duration: 0.22 }}
-              className="space-y-4"
+              transition={{ duration: 0.2 }}
+              className="space-y-6"
             >
-              <div className="text-4xl sm:text-5xl mb-2">🙂</div>
+              <div className="w-12 h-12 rounded-2xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent shadow-[0_0_16px_rgba(var(--color-nocturn-accent-rgb),0.3)]">
+                <Sparkles className="w-6 h-6 stroke-[2]" />
+              </div>
 
-              <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-white leading-tight">
-                Welcome
-              </h1>
+              <div className="space-y-2">
+                <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
+                  Welcome to Nocturn
+                </h1>
+                <p className="text-base sm:text-xl text-nocturn-muted leading-relaxed font-normal pt-1 max-w-lg">
+                  Calm, high-performance focus designed without noise, friction, or clutter.
+                </p>
+              </div>
 
-              <p className="text-lg sm:text-2xl text-nocturn-muted leading-relaxed font-normal pt-1 max-w-lg">
-                Manage your tasks<br />
-                without the noise.
-              </p>
+              <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                    <ShieldCheck className="w-4 h-4 text-nocturn-accent" />
+                    <span>Offline-First</span>
+                  </div>
+                  <p className="text-[11px] text-nocturn-dim">Instant local execution with optional cloud sync.</p>
+                </div>
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                    <Timer className="w-4 h-4 text-emerald-400" />
+                    <span>Scientific Focus</span>
+                  </div>
+                  <p className="text-[11px] text-nocturn-dim">Pomodoro, 52/17, Ultradian, and open flow stopwatches.</p>
+                </div>
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                    <Target className="w-4 h-4 text-cyan-400" />
+                    <span>Pure Execution</span>
+                  </div>
+                  <p className="text-[11px] text-nocturn-dim">Natural task scheduling, GRE vocab, and zero clutter.</p>
+                </div>
+              </div>
             </motion.div>
           )}
 
-          {/* Step 1: Personalize Name */}
+          {/* SCREEN 2: Choose Your Focus Style */}
           {step === 1 && (
             <motion.div
               key="step-1"
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -16 }}
-              transition={{ duration: 0.22 }}
-              className="space-y-5"
+              transition={{ duration: 0.2 }}
+              className="space-y-4"
             >
-              <div className="space-y-2">
-                <div className="w-10 h-10 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent mb-3">
-                  <User className="w-5 h-5" />
-                </div>
-                <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-                  What should we call you?
+              <div className="space-y-1.5">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+                  Choose Your Focus Style
                 </h1>
-                <p className="text-sm sm:text-base text-nocturn-muted leading-relaxed">
-                  Personalize your daily greetings and focus summaries.
+                <p className="text-xs sm:text-sm text-nocturn-muted">
+                  Select your default cadence. You can change this anytime from the Focus Timer.
                 </p>
               </div>
 
-              <div className="pt-3">
-                <input
-                  type="text"
-                  autoFocus
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  placeholder="Enter your name or nickname"
-                  className="w-full bg-[#111318] border border-white/[0.12] rounded-2xl text-base p-4 text-white placeholder:text-nocturn-muted/60 focus:border-nocturn-accent focus:ring-2 focus:ring-nocturn-accent/20 outline-none transition-all"
-                />
+              <div className="space-y-2 pt-2 max-h-[50vh] overflow-y-auto pr-1">
+                {FOCUS_STYLES.map((style) => {
+                  const isSelected = focusStyle === style.id
+                  const Icon = style.icon
+                  return (
+                    <motion.button
+                      key={style.id}
+                      type="button"
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      onClick={() => setFocusStyle(style.id)}
+                      className={`w-full p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        isSelected
+                          ? 'bg-nocturn-accent/15 border-nocturn-accent ring-1 ring-nocturn-accent/40 shadow-sm'
+                          : 'bg-white/[0.02] border-white/[0.06] hover:border-white/15'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                            isSelected
+                              ? 'bg-nocturn-accent text-black font-bold'
+                              : 'bg-white/[0.04] text-nocturn-muted'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-white truncate">
+                              {style.name}
+                            </span>
+                            <span className="text-[10px] font-mono text-nocturn-dim bg-white/[0.04] px-1.5 py-0.2 rounded border border-white/[0.06]">
+                              {style.duration}
+                            </span>
+                            {style.recommended && (
+                              <span className="text-[10px] font-semibold text-nocturn-accent bg-nocturn-accent/20 px-1.5 py-0.2 rounded-full">
+                                Standard
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-nocturn-muted truncate mt-0.5">
+                            {style.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      {isSelected && (
+                        <div className="w-5 h-5 rounded-full bg-nocturn-accent text-black flex items-center justify-center shrink-0 shadow-sm">
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </div>
+                      )}
+                    </motion.button>
+                  )
+                })}
               </div>
             </motion.div>
           )}
 
-          {/* Step 2: Daily Focus Goal */}
+          {/* SCREEN 3: Set Your Daily Goal */}
           {step === 2 && (
             <motion.div
               key="step-2"
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -16 }}
-              transition={{ duration: 0.22 }}
-              className="space-y-5"
+              transition={{ duration: 0.2 }}
+              className="space-y-4"
             >
-              <div className="space-y-2">
-                <div className="w-10 h-10 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent mb-3">
-                  <Target className="w-5 h-5" />
-                </div>
-                <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-                  Daily Focus Goal
+              <div className="space-y-1.5">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+                  Set Your Daily Target
                 </h1>
-                <p className="text-sm sm:text-base text-nocturn-muted leading-relaxed">
-                  How much uninterrupted focus time do you aim for each day?
+                <p className="text-xs sm:text-sm text-nocturn-muted">
+                  How much uninterrupted focus time do you aim to complete each day?
                 </p>
               </div>
 
-              <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {FOCUS_GOALS.map((goal) => {
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                {DAILY_GOALS.map((goal) => {
                   const isSelected = focusGoal === goal.id
                   return (
                     <motion.button
                       key={goal.id}
                       type="button"
-                      whileHover={{ y: -2, scale: 1.01 }}
-                      whileTap={{ scale: 0.98 }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
                       onClick={() => setFocusGoal(goal.id)}
-                      className={`p-4 rounded-2xl border text-left transition-colors cursor-pointer ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                         isSelected
-                          ? 'bg-nocturn-accent/15 border-nocturn-accent text-white shadow-sm ring-1 ring-nocturn-accent/30'
-                          : 'bg-white/[0.02] border-white/[0.06] hover:border-white/[0.14] text-nocturn-muted'
+                          ? 'bg-nocturn-accent/15 border-nocturn-accent ring-1 ring-nocturn-accent/40 shadow-sm'
+                          : 'bg-white/[0.02] border-white/[0.06] hover:border-white/15'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`text-base font-bold ${isSelected ? 'text-white' : 'text-white/90'}`}>
+                        <span className="text-base font-bold text-white">
                           {goal.label}
                         </span>
                         {goal.recommended && (
-                          <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-nocturn-accent/20 text-nocturn-accent">
+                          <span className="text-[10px] font-semibold text-nocturn-accent bg-nocturn-accent/20 px-2 py-0.5 rounded-full">
                             Ideal
                           </span>
                         )}
+                        {isSelected && !goal.recommended && (
+                          <div className="w-4 h-4 rounded-full bg-nocturn-accent text-black flex items-center justify-center">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                        )}
                       </div>
-                      <span className="text-xs text-nocturn-muted block mt-1">
+                      <span className="text-xs font-mono text-nocturn-dim block mt-1">
+                        {goal.sessions}
+                      </span>
+                      <span className="text-[11px] text-nocturn-muted block mt-1">
                         {goal.subtitle}
                       </span>
                     </motion.button>
@@ -239,95 +379,50 @@ export default function Onboarding() {
             </motion.div>
           )}
 
-          {/* Step 3: Aesthetic / Themes */}
+          {/* SCREEN 4: You're all set! */}
           {step === 3 && (
             <motion.div
               key="step-3"
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -16 }}
-              transition={{ duration: 0.22 }}
+              transition={{ duration: 0.2 }}
               className="space-y-5"
             >
-              <div className="space-y-2">
-                <div className="w-10 h-10 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent mb-3">
-                  <Palette className="w-5 h-5" />
-                </div>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_16px_rgba(16,185,129,0.3)]">
+                <Check className="w-6 h-6 stroke-[3]" />
+              </div>
+
+              <div className="space-y-1.5">
                 <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-                  Workspace Aesthetic
+                  You're all set.
                 </h1>
-                <p className="text-sm sm:text-base text-nocturn-muted leading-relaxed">
-                  Choose a calm color palette. You can customize this anytime in Settings.
+                <p className="text-sm sm:text-base text-nocturn-muted">
+                  Your workspace is ready. You can modify these anytime in Settings.
                 </p>
               </div>
 
-              <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[46vh] overflow-y-auto pr-1">
-                {presetThemes.map((preset) => {
-                  const isSelected = activeTheme?.id === preset.id
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => applyTheme(preset)}
-                      className={`p-3 rounded-2xl border flex items-center justify-between transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-white/[0.08] border-nocturn-accent shadow-sm ring-1 ring-nocturn-accent/40'
-                          : 'bg-white/[0.02] border-white/[0.06] hover:border-white/15'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div
-                          className="w-4.5 h-4.5 rounded-full border border-white/20 shadow-sm shrink-0"
-                          style={{ backgroundColor: preset.colors?.accent || '#6366F1' }}
-                        />
-                        <span className="text-xs font-semibold text-white truncate">
-                          {preset.name}
-                        </span>
-                      </div>
-                      {isSelected && (
-                        <Check className="w-4 h-4 text-nocturn-accent shrink-0" />
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </motion.div>
-          )}
-
-          {/* Step 4: Ready */}
-          {step === 4 && (
-            <motion.div
-              key="step-4"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -16 }}
-              transition={{ duration: 0.22 }}
-              className="space-y-5"
-            >
-              <div className="space-y-2">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-3">
-                  <Sparkles className="w-5 h-5" />
+              <div className="space-y-2 pt-2 text-xs sm:text-sm">
+                <div className="p-3.5 rounded-xl bg-white/[0.025] border border-white/[0.08] flex items-center justify-between">
+                  <span className="text-nocturn-muted">Focus Style</span>
+                  <span className="text-white font-semibold flex items-center gap-1.5">
+                    {selectedStyleObj.name} ({selectedStyleObj.duration})
+                  </span>
                 </div>
-                <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-                  You're ready to focus.
-                </h1>
-                <p className="text-sm sm:text-base text-nocturn-muted leading-relaxed">
-                  Your preferences are saved locally and will sync smoothly across devices.
-                </p>
-              </div>
 
-              <div className="pt-2 space-y-2.5 text-sm">
-                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-between">
-                  <span className="text-nocturn-muted">Display Name</span>
-                  <span className="text-white font-medium">{userName || 'Productive Thinker'}</span>
-                </div>
-                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-between">
+                <div className="p-3.5 rounded-xl bg-white/[0.025] border border-white/[0.08] flex items-center justify-between">
                   <span className="text-nocturn-muted">Daily Target</span>
-                  <span className="text-white font-medium">{focusGoal.toUpperCase()} Deep Work</span>
+                  <span className="text-white font-semibold">
+                    {selectedGoalObj.label} ({selectedGoalObj.sessions})
+                  </span>
                 </div>
-                <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-between">
-                  <span className="text-nocturn-muted">Active Theme</span>
-                  <span className="text-white font-medium">{activeTheme?.name || 'Nocturn Obsidian'}</span>
+
+                <div className="p-3.5 rounded-xl bg-white/[0.025] border border-white/[0.08] flex items-center justify-between">
+                  <span className="text-nocturn-muted">Database Engine</span>
+                  <span className="text-emerald-400 font-mono text-xs flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Offline IndexedDB Active
+                  </span>
                 </div>
               </div>
             </motion.div>
@@ -335,16 +430,16 @@ export default function Onboarding() {
         </AnimatePresence>
       </main>
 
-      {/* Bottom Navigation: Stepper Dots & Compact Action Pill */}
-      <footer className="relative z-10 w-full max-w-2xl mx-auto flex items-center justify-between pt-6 border-t border-white/[0.08]">
-        {/* Stepper Dots */}
+      {/* Bottom Footer: Stepper Dots & Action Button */}
+      <footer className="relative z-10 w-full max-w-2xl mx-auto flex items-center justify-between pt-4 border-t border-white/[0.08]">
+        {/* Stepper Dots (1..4) */}
         <div className="flex items-center gap-2">
           {Array.from({ length: totalSteps }).map((_, i) => (
             <div
               key={i}
               className={`h-1.5 rounded-full transition-all duration-300 ${
                 i === step
-                  ? 'w-7 bg-nocturn-accent'
+                  ? 'w-7 bg-nocturn-accent shadow-[0_0_8px_rgba(var(--color-nocturn-accent-rgb),0.5)]'
                   : i < step
                   ? 'w-2 bg-white/40'
                   : 'w-2 bg-white/15'
@@ -353,16 +448,16 @@ export default function Onboarding() {
           ))}
         </div>
 
-        {/* Compact Pill Button */}
+        {/* Action Button */}
         <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.96 }}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
           type="button"
           onClick={handleNext}
-          className="px-6 py-2.5 rounded-full bg-white/[0.04] hover:bg-white text-white hover:text-black border border-white/15 text-sm font-semibold transition-all duration-150 flex items-center gap-2.5 cursor-pointer shadow-sm group"
+          className="px-6 py-2.5 rounded-xl bg-white text-black hover:bg-nocturn-accent font-semibold text-xs sm:text-sm transition-all duration-150 flex items-center gap-2 cursor-pointer shadow-md"
         >
-          <span>{step === totalSteps - 1 ? 'Enter Nocturn' : 'Next'}</span>
-          <span className="text-sm tracking-tight text-white/70 group-hover:text-black transition-colors">»</span>
+          <span>{step === totalSteps - 1 ? 'Enter Nocturn' : 'Continue'}</span>
+          <ArrowRight className="w-4 h-4 stroke-[2.5]" />
         </motion.button>
       </footer>
     </div>

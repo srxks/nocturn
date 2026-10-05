@@ -249,6 +249,7 @@ export default function TimerControls({
           whileHover={isRunning || isPaused ? { scale: 1.05 } : {}}
           whileTap={isRunning || isPaused ? { scale: 0.92 } : {}}
           type="button"
+          data-testid="timer-end-session-btn"
           onClick={onTerminate}
           disabled={!isRunning && !isPaused}
           title="End session"

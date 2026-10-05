@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Calendar as CalendarIcon, ExternalLink, Check, Plus } from 'lucide-react'
 import { formatDateKey, openGoogleCalendarForDate, getEventsForDate } from '../../services/calendarService'
@@ -11,6 +12,7 @@ export default function SelectedDayPanel({
   onAddTaskForDate,
   onSelectTask,
 }) {
+  const navigate = useNavigate()
   const [isAdding, setIsAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const inputRef = useRef(null)
@@ -101,6 +103,7 @@ export default function SelectedDayPanel({
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             type="button"
+            data-testid="add-for-this-date-btn"
             onClick={() => setIsAdding((prev) => !prev)}
             className="text-xs font-medium text-nocturn-accent hover:text-nocturn-accent-bright inline-flex items-center gap-1.5 cursor-pointer py-1 px-2 rounded-lg hover:bg-white/[0.04] transition-colors"
           >
@@ -129,26 +132,37 @@ export default function SelectedDayPanel({
                 placeholder="What needs to be done on this date?"
                 className="w-full bg-transparent text-sm text-white placeholder-nocturn-muted focus:outline-none"
               />
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setIsAdding(false)
-                    setNewTitle('')
+                    navigate(`/tasks?view=all&date=${dateKey}`, { state: { defaultDueDate: dateKey } })
                   }}
-                  className="px-3 py-1 text-xs text-nocturn-muted hover:text-white rounded-lg hover:bg-white/[0.04] transition-colors cursor-pointer"
+                  className="text-xs text-nocturn-accent hover:text-nocturn-accent-bright hover:underline cursor-pointer"
                 >
-                  Cancel
+                  Open in Tasks →
                 </button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.96 }}
-                  type="submit"
-                  disabled={!newTitle.trim()}
-                  className="px-3.5 py-1 text-xs font-semibold text-nocturn-accent-bright bg-nocturn-accent/20 hover:bg-nocturn-accent/30 border border-nocturn-accent/40 rounded-lg transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
-                >
-                  Add Task
-                </motion.button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAdding(false)
+                      setNewTitle('')
+                    }}
+                    className="px-3 py-1 text-xs text-nocturn-muted hover:text-white rounded-lg hover:bg-white/[0.04] transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.96 }}
+                    type="submit"
+                    disabled={!newTitle.trim()}
+                    className="px-3.5 py-1 text-xs font-semibold text-nocturn-accent-bright bg-nocturn-accent/20 hover:bg-nocturn-accent/30 border border-nocturn-accent/40 rounded-lg transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                  >
+                    Add Task
+                  </motion.button>
+                </div>
               </div>
             </motion.form>
           )}

@@ -81,6 +81,8 @@ export default function TaskItemRow({
 
   return (
     <div
+      data-testid="task-item-row"
+      data-task-title={task.title}
       onClick={() => onSelectTask(task)}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}

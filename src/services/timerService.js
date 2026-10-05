@@ -1,6 +1,7 @@
 import { db } from '../db/db'
 import { supabase, isSupabaseConfigured, isGuestUserId } from '../lib/supabaseClient'
 import { recordPomodoroHistoryRemote } from '../lib/timer'
+import { toUuid } from '../lib/idUtils'
 
 /**
  * Retrieves timer settings from local Dexie IndexedDB
@@ -166,7 +167,8 @@ export async function recordPomodoroSession({
       sessionUserId = session?.user?.id || null
     }
 
-    const sessionRecordId = sessionId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
+    const rawSessionId = sessionId || `session-${now.getTime()}`
+    const sessionRecordId = toUuid(`focus-${sessionUserId || 'local'}-${rawSessionId}`)
 
     const sessionObj = {
       id: sessionRecordId,
@@ -183,9 +185,18 @@ export async function recordPomodoroSession({
     // 1. Local Dexie write ALWAYS happens first!
     await db.pomodoroSessions.put(sessionObj)
 
-    // 2. Remote synchronization happens in background without blocking
+    // 2. Remote synchronization happens in background using the exact identical recordId
     if (sessionUserId && !isGuestUserId(sessionUserId)) {
-      recordPomodoroHistoryRemote(validDurationMinutes, sessionType, taskId, taskTitle, sessionUserId, sessionId, completed).catch((err) => {
+      recordPomodoroHistoryRemote(
+        validDurationMinutes,
+        sessionType,
+        taskId,
+        taskTitle,
+        sessionUserId,
+        rawSessionId,
+        completed,
+        sessionRecordId
+      ).catch((err) => {
         console.warn('[timerService] Remote pomodoro history sync deferred:', err)
       })
     }

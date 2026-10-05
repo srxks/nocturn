@@ -168,7 +168,9 @@ export function TimerSessionProvider({ children }) {
       const sessionStartedAt =
         activeSessionRef.current?.startedAt ||
         new Date(nowMs - currentTotal * 1000).toISOString()
-      const sessionId = `focus-${sessionStartedAt}`
+      const sessionId =
+        activeSessionRef.current?.sessionId ||
+        `session-${new Date(sessionStartedAt).getTime()}`
 
       try {
         const lastFinalized = localStorage.getItem('nocturn_last_completed_session')
@@ -619,7 +621,7 @@ export function TimerSessionProvider({ children }) {
 
     if (runningSecs >= 1) {
       const focusMins = Math.round((runningSecs / 60) * 10) / 10
-      const sessionId = `focus-stopwatch-${nowMs}`
+      const sessionId = activeSessionRef.current?.sessionId || `focus-stopwatch-${nowMs}`
       const sessionStartedAt = new Date(nowMs - runningSecs * 1000).toISOString()
 
       await recordPomodoroSession({
@@ -734,6 +736,9 @@ export function TimerSessionProvider({ children }) {
         const sessionStartedAt =
           activeSessionRef.current?.startedAt ||
           new Date(Date.now() - currentElapsed * 1000).toISOString()
+        const sessionId =
+          activeSessionRef.current?.sessionId ||
+          `session-${new Date(sessionStartedAt).getTime()}`
         await recordPomodoroSession({
           taskId,
           duration: focusMins,
@@ -741,7 +746,7 @@ export function TimerSessionProvider({ children }) {
           sessionType: 'focus',
           startedAt: sessionStartedAt,
           taskTitle: taskName,
-          sessionId: `focus-${sessionStartedAt}`,
+          sessionId,
           completed: false,
         }).catch(console.warn)
       }
@@ -916,6 +921,9 @@ export function TimerSessionProvider({ children }) {
         const sessionStartedAt =
           activeSessionRef.current?.startedAt ||
           new Date(nowMs - elapsedSecs * 1000).toISOString()
+        const sessionId =
+          activeSessionRef.current?.sessionId ||
+          `session-${new Date(sessionStartedAt).getTime()}`
 
         await recordPomodoroSession({
           taskId: taskId || null,
@@ -924,7 +932,7 @@ export function TimerSessionProvider({ children }) {
           sessionType: 'focus',
           startedAt: sessionStartedAt,
           taskTitle: taskName || 'Focus Session',
-          sessionId: `focus-${sessionStartedAt}`,
+          sessionId,
           completed: false,
         }).catch(console.warn)
 

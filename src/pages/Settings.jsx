@@ -15,6 +15,7 @@ import {
   LogOut,
   Keyboard,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react'
 import PreferenceCard from '../components/settings/PreferenceCard'
 import VocabSettingsCard from '../components/settings/VocabSettingsCard'
@@ -313,6 +314,32 @@ export default function Settings() {
               />
             </div>
           </div>
+
+          {/* Replay Onboarding Card */}
+          <Card className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 border border-white/[0.08] rounded-2xl">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-nocturn-accent/15 border border-nocturn-accent/30 flex items-center justify-center text-nocturn-accent shrink-0">
+                <Sparkles className="w-5 h-5 stroke-[2]" />
+              </div>
+              <div>
+                <span className="text-sm font-semibold text-white block">
+                  Welcome & Onboarding Walkthrough
+                </span>
+                <span className="text-xs text-nocturn-muted block mt-0.5">
+                  Revisit the 4-step focus style and daily goal selection setup anytime.
+                </span>
+              </div>
+            </div>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate('/onboarding?replay=true')}
+              icon={RotateCcw}
+            >
+              Replay Onboarding
+            </Button>
+          </Card>
 
           {/* About Application Card */}
           <div className="space-y-3 pt-2">

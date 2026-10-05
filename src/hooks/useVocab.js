@@ -52,12 +52,14 @@ export function useVocab() {
   }, [todayKey])
 
   // 3. Selection of words for today's daily learning set
-  // Stable and deterministic: honors today's log if present, else selects deterministically
+  // Honors today's active session log (randomized and shuffled according to user configuration)
   const dailyWords = useMemo(() => {
-    if (allWords.length === 0) return []
+    // If today's log has words stored, return those exact words (already randomized and shuffled)
+    if (todayVocabLog?.words && Array.isArray(todayVocabLog.words) && todayVocabLog.words.length > 0) {
+      return todayVocabLog.words
+    }
 
-    // If a daily set was already recorded for today in dailyVocabLogs, honor those exact words
-    if (todayVocabLog?.wordIds?.length > 0) {
+    if (todayVocabLog?.wordIds?.length > 0 && allWords.length > 0) {
       const wordsMap = new Map(allWords.map((w) => [w.id, w]))
       const matched = []
       for (const id of todayVocabLog.wordIds) {
@@ -65,34 +67,14 @@ export function useVocab() {
           matched.push(wordsMap.get(id))
         }
       }
-      if (matched.length > 0) {
-        // If daily limit was decreased: limit view to requested count without deleting
-        if (matched.length > dailyLimit) {
-          return matched.slice(0, dailyLimit)
-        }
-        return matched
-      }
+      if (matched.length > 0) return matched
     }
 
-    const wordsAddedToday = allWords.filter((w) => w.date_added === todayKey)
-    const unlearned = allWords
-      .filter((w) => (w.correct_count || 0) < 5 && w.date_added !== todayKey)
-      .sort((a, b) => {
-        if ((a.correct_count || 0) !== (b.correct_count || 0)) {
-          return (a.correct_count || 0) - (b.correct_count || 0)
-        }
-        return (a.word || '').localeCompare(b.word || '')
-      })
-
-    const needed = Math.max(0, dailyLimit - wordsAddedToday.length)
-    const selected = [...wordsAddedToday, ...unlearned.slice(0, needed)]
-
-    return selected.slice(0, dailyLimit)
-  }, [allWords, todayVocabLog, dailyLimit, todayKey])
+    return []
+  }, [allWords, todayVocabLog])
 
   // Session Resumption Metrics
   const isDailyCompleted = useMemo(() => {
-    if (allWords.length === 0 || dailyWords.length === 0) return false
     if (todayVocabLog?.completed === true) return true
     try {
       if (typeof localStorage !== 'undefined' && localStorage.getItem(sessionCompleteKey) === 'true') {
@@ -102,7 +84,7 @@ export function useVocab() {
       // ignore
     }
     return false
-  }, [allWords.length, dailyWords.length, todayVocabLog, sessionCompleteKey])
+  }, [todayVocabLog, sessionCompleteKey])
 
   const currentLearningIndex = useMemo(() => {
     if (dailyWords.length === 0) return 0
@@ -121,7 +103,7 @@ export function useVocab() {
   }, [dailyWords.length, sessionLearnKey, todayVocabLog])
 
   const learnedTodayCount = useMemo(() => {
-    if (allWords.length === 0 || dailyWords.length === 0) return 0
+    if (dailyWords.length === 0) return 0
     if (isDailyCompleted) return dailyWords.length
 
     let completedSet = new Set()
@@ -142,7 +124,7 @@ export function useVocab() {
 
     const count = dailyWords.filter((w) => completedSet.has(w.id)).length
     return Math.max(count, Math.min(currentLearningIndex, dailyWords.length))
-  }, [allWords.length, dailyWords, isDailyCompleted, todayVocabLog, sessionCompletedIdsKey, currentLearningIndex])
+  }, [dailyWords, isDailyCompleted, todayVocabLog, sessionCompletedIdsKey, currentLearningIndex])
 
   const totalUserWords = allWords.length
   const effectiveDailyTarget = totalUserWords > 0 ? Math.min(dailyLimit, Math.max(dailyWords.length, 1)) : dailyLimit
@@ -256,28 +238,6 @@ export function useVocab() {
     [dailyLimit, todayVocabLog, allWords, todayKey, generateNewWords]
   )
 
-  // Automatic daily set generation when online and today's set is incomplete
-  const autoGenAttemptedRef = useRef(false)
-  useEffect(() => {
-    if (autoGenAttemptedRef.current) return
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return
-    if (isGenerating) return
-
-    const existingToday = (todayVocabLog?.wordIds || []).length
-    if (existingToday < dailyLimit && allWords.length > 0) {
-      const autoKey = `nocturn_vocab_autogen_${userId || 'guest'}_${todayKey}_${dailyLimit}`
-      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(autoKey)) return
-      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(autoKey, '1')
-
-      autoGenAttemptedRef.current = true
-      const timer = setTimeout(() => {
-        fetchOrGenerateDailyWords().catch(() => {
-          if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(autoKey)
-        })
-      }, 0)
-      return () => clearTimeout(timer)
-    }
-  }, [dailyLimit, todayVocabLog, allWords.length, isGenerating, fetchOrGenerateDailyWords, todayKey, userId])
 
   // 6. Mark Word Learned Action
   const markWordLearned = useCallback(

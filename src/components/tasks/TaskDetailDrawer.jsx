@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { getTaskDeadlineConfig } from '../../utils/deadlineUtils'
 import { requestNotificationPermission } from '../../services/notificationService'
+import { formatDateKey } from '../../services/calendarService'
 
 const TaskDetailDrawer = memo(function TaskDetailDrawer({
   task,
@@ -133,6 +134,10 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
   if (!task) return null
 
   const deadlineConfig = getTaskDeadlineConfig(task)
+  const todayKey = formatDateKey(new Date())
+  const tomorrowObj = new Date()
+  tomorrowObj.setDate(tomorrowObj.getDate() + 1)
+  const tomorrowKey = formatDateKey(tomorrowObj)
 
   const handleFocus = () => {
     navigate('/timer', { state: { taskName: task.title } })
@@ -314,26 +319,68 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
             </select>
           </div>
 
-          {/* Due Date Selector */}
-          <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
-            <span className="text-nocturn-muted font-medium flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-nocturn-accent" /> Due Date
-            </span>
-            <div className="flex items-center gap-2">
-              {task.dueDate && (
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${deadlineConfig.badgeClass}`}>
-                  {deadlineConfig.label}
+          {/* Primary Date Model: Due Date (When user intends to do the task) */}
+          <div className="space-y-2 p-3.5 rounded-xl bg-white/[0.025] border border-white/[0.08]">
+            <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+              <div>
+                <span className="text-white font-medium flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-nocturn-accent" /> Due Date
                 </span>
+                <p className="text-[11px] text-nocturn-dim mt-0.5">When you plan to work on this task</p>
+              </div>
+              {task.dueDate && (
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${deadlineConfig.badgeClass}`}>
+                    {deadlineConfig.label}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateTask(task.id, { dueDate: null })}
+                    className="p-1 text-nocturn-muted hover:text-rose-400 transition-colors cursor-pointer"
+                    title="Clear due date"
+                    aria-label="Clear due date"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               )}
-              <input
-                type="date"
-                value={task.dueDate || ''}
-                onChange={(e) => {
-                  const val = e.target.value || null
-                  onUpdateTask(task.id, { dueDate: val })
-                }}
-                className="bg-nocturn-surface text-white text-xs px-2.5 py-1.5 rounded-xl border border-nocturn-border outline-none focus:border-nocturn-accent font-mono cursor-pointer"
-              />
+            </div>
+
+            {/* Presets: Today / Tomorrow / Custom Pick */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+              <button
+                type="button"
+                onClick={() => onUpdateTask(task.id, { dueDate: todayKey })}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  task.dueDate === todayKey
+                    ? 'bg-nocturn-accent text-black font-semibold shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.35)]'
+                    : 'bg-nocturn-surface text-nocturn-muted border border-nocturn-border hover:text-white'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateTask(task.id, { dueDate: tomorrowKey })}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  task.dueDate === tomorrowKey
+                    ? 'bg-nocturn-accent text-black font-semibold shadow-[0_0_10px_rgba(var(--color-nocturn-accent-rgb),0.35)]'
+                    : 'bg-nocturn-surface text-nocturn-muted border border-nocturn-border hover:text-white'
+                }`}
+              >
+                Tomorrow
+              </button>
+              <div className="relative inline-flex items-center">
+                <input
+                  type="date"
+                  value={task.dueDate || ''}
+                  onChange={(e) => {
+                    const val = e.target.value || null
+                    onUpdateTask(task.id, { dueDate: val })
+                  }}
+                  className="bg-nocturn-surface text-white text-xs px-2.5 py-1.5 rounded-lg border border-nocturn-border outline-none focus:border-nocturn-accent font-mono cursor-pointer"
+                />
+              </div>
             </div>
           </div>
 
@@ -418,29 +465,45 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
             </select>
           </div>
 
-          {/* Strict Deadline Selector (Distinct from Scheduled Due Date) */}
-          <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
-            <span className="text-nocturn-muted font-medium flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-400" /> Deadline
-            </span>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={task.deadline || ''}
-                onChange={(e) => {
-                  const val = e.target.value || null
-                  onUpdateTask(task.id, { deadline: val })
-                }}
-                className="bg-nocturn-surface text-white text-xs px-2.5 py-1.5 rounded-xl border border-nocturn-border outline-none focus:border-rose-400 font-mono cursor-pointer"
-              />
-              {task.deadline && (
+          {/* Advanced / Strict Deadline (Optional hard cutoff) */}
+          <div className="space-y-2 p-3.5 rounded-xl bg-white/[0.015] border border-white/[0.06]">
+            <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+              <div>
+                <span className="text-white/90 font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-400" /> Deadline
+                  <span className="text-[10px] text-nocturn-muted uppercase tracking-wider font-normal bg-white/[0.06] px-1.5 py-0.5 rounded">Optional</span>
+                </span>
+                <p className="text-[11px] text-nocturn-dim mt-0.5">Strict cutoff only if task cannot be done after this</p>
+              </div>
+
+              {task.deadline ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={task.deadline || ''}
+                    onChange={(e) => {
+                      const val = e.target.value || null
+                      onUpdateTask(task.id, { deadline: val })
+                    }}
+                    className="bg-nocturn-surface text-rose-300 text-xs px-2.5 py-1.5 rounded-lg border border-rose-500/30 outline-none focus:border-rose-400 font-mono cursor-pointer"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onUpdateTask(task.id, { deadline: null })}
+                    className="p-1 text-nocturn-muted hover:text-rose-400 transition-colors cursor-pointer"
+                    title="Remove strict deadline"
+                    aria-label="Remove strict deadline"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => onUpdateTask(task.id, { deadline: null })}
-                  className="p-1 text-nocturn-muted hover:text-rose-400 cursor-pointer"
-                  title="Clear deadline"
+                  onClick={() => onUpdateTask(task.id, { deadline: task.dueDate || todayKey })}
+                  className="px-2.5 py-1 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 rounded-lg transition-colors cursor-pointer"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  + Add Deadline
                 </button>
               )}
             </div>

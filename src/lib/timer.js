@@ -203,7 +203,8 @@ export async function recordPomodoroHistoryRemote(
   _taskTitle,
   userId,
   sessionId = null,
-  completed = true
+  completed = true,
+  exactRecordId = null
 ) {
   if (!isSupabaseConfigured || !supabase || isGuestUserId(userId)) return null
 
@@ -215,9 +216,9 @@ export async function recordPomodoroHistoryRemote(
     const startTime = new Date(nowMs - durationSeconds * 1000).toISOString()
     const endTime = new Date(nowMs).toISOString()
 
-    const recordId = sessionId
+    const recordId = exactRecordId || (sessionId
       ? toUuid(`focus-${userId}-${sessionId}`)
-      : crypto.randomUUID()
+      : crypto.randomUUID())
 
     const row = {
       id: recordId,

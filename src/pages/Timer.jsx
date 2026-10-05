@@ -613,6 +613,7 @@ export default function Timer() {
               </button>
               <button
                 type="button"
+                data-testid="confirm-end-session-btn"
                 onClick={handleConfirmEndSession}
                 className="py-2.5 px-4 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold shadow-md shadow-rose-950/50 transition-colors cursor-pointer"
               >

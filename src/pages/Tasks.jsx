@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import TaskListNav from '../components/tasks/TaskListNav'
 import TaskItemRow from '../components/tasks/TaskItemRow'
@@ -101,8 +101,10 @@ function TaskGroupSection({
 
 export default function Tasks() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
   const rawView = searchParams.get('view')
   const listParam = searchParams.get('list')
+  const dateParam = searchParams.get('date') || searchParams.get('dueDate') || location.state?.defaultDueDate || null
 
   const {
     isLoading,
@@ -494,7 +496,9 @@ export default function Tasks() {
             <AddTask
               onAddTask={handleAddTask}
               defaultDay={
-                activeListId === 'my-day'
+                dateParam
+                  ? dateParam
+                  : activeListId === 'my-day'
                   ? 'today'
                   : activeListId === 'upcoming'
                   ? 'tomorrow'
@@ -1043,7 +1047,9 @@ export default function Tasks() {
         onClose={() => setIsMobileQuickAddOpen(false)}
         onAddTask={handleAddTask}
         defaultDay={
-          activeListId === 'my-day'
+          dateParam
+            ? dateParam
+            : activeListId === 'my-day'
             ? 'today'
             : activeListId === 'upcoming'
             ? 'tomorrow'

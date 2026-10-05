@@ -453,7 +453,24 @@ export async function syncWithCloud(userId) {
   try {
     const remoteFocusSessions = await fetchUserFocusSessions(userId)
     if (Array.isArray(remoteFocusSessions)) {
+      const localSessions = await db.pomodoroSessions.toArray()
       for (const rSession of remoteFocusSessions) {
+        // Find if session exists locally by id or close start_time
+        const match = localSessions.find((s) => {
+          if (!s) return false
+          if (s.id === rSession.id) return true
+          if (s.startedAt && rSession.start_time) {
+            const t1 = new Date(s.startedAt).getTime()
+            const t2 = new Date(rSession.start_time).getTime()
+            return Math.abs(t1 - t2) <= 3000
+          }
+          return false
+        })
+
+        if (match && match.id !== rSession.id) {
+          await db.pomodoroSessions.delete(match.id)
+        }
+
         await db.pomodoroSessions.put({
           id: rSession.id,
           userId: rSession.user_id,
@@ -461,6 +478,7 @@ export async function syncWithCloud(userId) {
           startedAt: rSession.start_time,
           completedAt: rSession.end_time,
           duration: Math.round((rSession.duration_seconds || 1500) / 60),
+          durationSeconds: rSession.duration_seconds || 1500,
           sessionType: 'focus',
           completed: rSession.completed,
           updatedAt: rSession.updated_at || rSession.created_at,

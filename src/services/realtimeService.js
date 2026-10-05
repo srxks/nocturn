@@ -355,6 +355,23 @@ const handleFocusSessions = withRealtimeGuard(async (payload, userId) => {
   try {
     const existing = await db.pomodoroSessions.get(newRow.id)
     if (!existing) {
+      // Check if we already have this session locally under a legacy string ID or close timestamp
+      const allSessions = await db.pomodoroSessions.toArray()
+      const match = allSessions.find((s) => {
+        if (!s) return false
+        if (s.id === newRow.id) return true
+        if (s.startedAt && newRow.start_time) {
+          const t1 = new Date(s.startedAt).getTime()
+          const t2 = new Date(newRow.start_time).getTime()
+          return Math.abs(t1 - t2) <= 3000
+        }
+        return false
+      })
+
+      if (match && match.id !== newRow.id) {
+        await db.pomodoroSessions.delete(match.id)
+      }
+
       await db.pomodoroSessions.put({
         id: newRow.id,
         userId: newRow.user_id,
@@ -362,7 +379,9 @@ const handleFocusSessions = withRealtimeGuard(async (payload, userId) => {
         startedAt: newRow.start_time,
         completedAt: newRow.end_time,
         duration: Math.round((newRow.duration_seconds || 1500) / 60),
+        durationSeconds: newRow.duration_seconds || 1500,
         sessionType: 'focus',
+        completed: Boolean(newRow.completed),
         updatedAt: newRow.updated_at || newRow.created_at,
       })
     }
