@@ -103,16 +103,16 @@ export default function TimerRing({
 
   return (
     <div className="relative w-full max-w-[240px] xs:max-w-[270px] sm:max-w-[310px] aspect-square mx-auto flex items-center justify-center select-none">
-      {/* Restrained Ambient Glow Halo */}
+      {/* Ambient Breathing Radial Halo */}
       <motion.div
         animate={haloAnimate}
         transition={haloTransition}
-        className={`absolute inset-6 rounded-full blur-3xl pointer-events-none ${
+        className={`absolute inset-4 rounded-full blur-3xl pointer-events-none transition-colors duration-700 ease-out ${
           isBreak
-            ? 'bg-emerald-500'
+            ? 'bg-emerald-500/30'
             : isNormalStopwatch
-            ? 'bg-slate-400'
-            : 'bg-nocturn-accent'
+            ? 'bg-slate-400/20'
+            : 'bg-nocturn-accent/30'
         }`}
       />
 

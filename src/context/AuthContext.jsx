@@ -274,6 +274,9 @@ export function AuthProvider({ children }) {
   }
 
   const signInWithGoogle = async () => {
+    if (import.meta.env.VITE_ENABLE_GOOGLE_OAUTH !== 'true') {
+      throw new Error('Google Sign-In is not currently enabled for this project. Please sign in with Email or use Guest Mode.')
+    }
     if (!isSupabaseConfigured || !supabase) {
       throw new Error('Supabase is not configured. Please set environment variables.')
     }

@@ -49,6 +49,7 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
   })
   const titleTimeoutRef = useRef(null)
   const notesTimeoutRef = useRef(null)
+  const subtaskInputRef = useRef(null)
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -140,14 +141,33 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
   const tomorrowKey = formatDateKey(tomorrowObj)
 
   const handleFocus = () => {
-    navigate('/timer', { state: { taskName: task.title } })
+    navigate('/timer', { state: { taskName: task.title, taskId: task.id } })
+  }
+
+  const commitSubtask = () => {
+    const trimmed = newSubtaskTitle.trim()
+    if (!trimmed) return
+    onAddSubtask(task.id, trimmed)
+    setNewSubtaskTitle('')
   }
 
   const handleSubtaskSubmit = (e) => {
     e.preventDefault()
-    if (!newSubtaskTitle.trim()) return
-    onAddSubtask(task.id, newSubtaskTitle.trim())
-    setNewSubtaskTitle('')
+    commitSubtask()
+    subtaskInputRef.current?.focus()
+  }
+
+  const handleSubtaskKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      commitSubtask()
+      subtaskInputRef.current?.focus()
+    }
+  }
+
+  const handleSubtaskBlur = () => {
+    // Auto-commit on blur so user never loses subtask text (BUG-05)
+    commitSubtask()
   }
 
   const drawerVariants = {
@@ -283,10 +303,13 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
           {/* Add Subtask Input Form */}
           <form onSubmit={handleSubtaskSubmit} className="flex items-center gap-2 pt-1">
             <input
+              ref={subtaskInputRef}
               type="text"
               value={newSubtaskTitle}
               onChange={(e) => setNewSubtaskTitle(e.target.value)}
-              placeholder="Add subtask step..."
+              onKeyDown={handleSubtaskKeyDown}
+              onBlur={handleSubtaskBlur}
+              placeholder="Add subtask step (Press Enter)..."
               className="w-full bg-nocturn-surface text-white text-xs px-2.5 py-1.5 rounded-lg border border-nocturn-border outline-none focus:border-nocturn-accent"
             />
             <button

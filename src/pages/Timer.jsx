@@ -15,6 +15,7 @@ import TimerControls from '../components/timer/TimerControls'
 import SessionDots from '../components/timer/SessionDots'
 import FocusModeOverlay from '../components/timer/FocusModeOverlay'
 import AmbientSoundWidget from '../components/timer/AmbientSoundWidget'
+import TimerSettingsDrawer from '../components/timer/TimerSettingsDrawer'
 import { useTimerSettings } from '../context/useTimerSettings'
 import { useTimerSession } from '../context/useTimerSession'
 import { useTasks } from '../context/useTasks'
@@ -68,6 +69,7 @@ export default function Timer() {
   const [isFocusModeOpen, setIsFocusModeOpen] = useState(() => Boolean(location.state?.focusMode))
   const [prevFocusModeProp, setPrevFocusModeProp] = useState(location.state?.focusMode)
   const [showEndSessionConfirm, setShowEndSessionConfirm] = useState(false)
+  const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false)
 
   const activePresetId = useMemo(() => {
     if (isNormalStopwatch) return 'normal_stopwatch'
@@ -226,13 +228,14 @@ export default function Timer() {
             </p>
           )}
         </div>
-        <Link
-          to="/timer-settings"
+        <button
+          type="button"
+          onClick={() => setIsSettingsDrawerOpen(true)}
           aria-label="Timer settings"
           className="p-2 rounded-xl text-nocturn-muted hover:text-nocturn-accent hover:bg-nocturn-surface/80 border border-transparent hover:border-nocturn-border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nocturn-accent cursor-pointer"
         >
           <Settings className="w-5 h-5 stroke-[2]" />
-        </Link>
+        </button>
       </header>
 
       {/* Main Timer Display */}
@@ -623,6 +626,12 @@ export default function Timer() {
           </div>
         </div>
       )}
+
+      {/* Slide-over Timer Settings Drawer */}
+      <TimerSettingsDrawer
+        isOpen={isSettingsDrawerOpen}
+        onClose={() => setIsSettingsDrawerOpen(false)}
+      />
     </div>
   )
 }

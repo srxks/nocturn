@@ -210,10 +210,11 @@ export default function TaskListNav({ onSelectView }) {
                     <button
                       type="button"
                       onClick={() => handleSelect(list.id)}
-                      className="flex-1 flex items-center gap-2.5 text-left truncate cursor-pointer py-1"
+                      title={list.name}
+                      className="flex-1 min-w-0 flex items-center gap-2.5 text-left cursor-pointer py-1"
                     >
                       <CheckSquare className="w-4 h-4 stroke-[2] shrink-0 text-nocturn-accent/80" />
-                      <span className="truncate">{list.name}</span>
+                      <span className="flex-1 min-w-0 truncate text-[13px] sm:text-[13.5px]">{list.name}</span>
                     </button>
 
                     <div className="flex items-center gap-1 shrink-0">

@@ -6,9 +6,9 @@
   --font-mono: 'JetBrains Mono', monospace;
 
   --color-canvas: var(--canvas, #07070a);
-  --color-card: var(--card, #11131a);
-  --color-surface: var(--surface, #161924);
-  --color-border-subtle: var(--border-subtle, rgba(255, 255, 255, 0.06));
+  --color-card: var(--card, #121520);
+  --color-surface: var(--surface, #171b28);
+  --color-border-subtle: var(--border-subtle, rgba(255, 255, 255, 0.07));
   --color-border-strong: var(--border-strong, rgba(255, 255, 255, 0.12));
   --color-text-primary: var(--text-primary, #F5F6FA);
   --color-text-secondary: var(--text-secondary, #9CA3B0);
@@ -16,8 +16,8 @@
 
   --color-nocturn-bg: var(--color-nocturn-bg, #07070a);
   --color-nocturn-bg-secondary: var(--color-nocturn-bg-secondary, #0c0e14);
-  --color-nocturn-card: var(--color-nocturn-card, #11131a);
-  --color-nocturn-surface: var(--color-nocturn-surface, #161924);
+  --color-nocturn-card: var(--color-nocturn-card, #121520);
+  --color-nocturn-surface: var(--color-nocturn-surface, #171b28);
   --color-nocturn-surface-hover: var(--color-nocturn-surface-hover, #1b1f2e);
   --color-nocturn-surface-active: var(--color-nocturn-surface-active, #22273a);
   --color-nocturn-elevated: var(--color-nocturn-elevated, #1c212f);
@@ -28,7 +28,7 @@
   --color-nocturn-text: var(--color-nocturn-text, #F5F6FA);
   --color-nocturn-muted: var(--color-nocturn-muted, #9CA3B0);
   --color-nocturn-dim: var(--color-nocturn-dim, #5B6172);
-  --color-nocturn-border: var(--color-nocturn-border, rgba(255, 255, 255, 0.08));
+  --color-nocturn-border: var(--color-nocturn-border, rgba(255, 255, 255, 0.07));
   --color-nocturn-border-subtle: var(--color-nocturn-border-subtle, rgba(255, 255, 255, 0.04));
 
   --color-success: #10B981;
@@ -54,9 +54,9 @@
 :root {
   color-scheme: dark;
   --canvas: #07070a;
-  --card: #11131a;
-  --surface: #161924;
-  --border-subtle: rgba(255, 255, 255, 0.06);
+  --card: #121520;
+  --surface: #171b28;
+  --border-subtle: rgba(255, 255, 255, 0.07);
   --border-strong: rgba(255, 255, 255, 0.12);
   --text-primary: #F5F6FA;
   --text-secondary: #9CA3B0;
@@ -76,8 +76,8 @@
   --color-nocturn-accent-rgb: 99, 102, 241;
 
   /* Elevation Layers */
-  --elev-1: 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.4);
-  --elev-2: 0 1px 0 rgba(255, 255, 255, 0.06), 0 20px 48px rgba(0, 0, 0, 0.55);
+  --elev-1: inset 0 1px 0 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.4);
+  --elev-2: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 20px 48px rgba(0, 0, 0, 0.55);
   --elev-focus: 0 0 0 1px var(--accent), 0 0 16px var(--accent-glow);
 }
 
@@ -296,7 +296,7 @@ html[data-animations="reduced"] *::after {
 
 /* Tactile Glass Panels */
 .glass-panel {
-  background: rgba(17, 19, 26, 0.72);
+  background: rgba(18, 21, 32, 0.75);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-subtle);
@@ -304,7 +304,7 @@ html[data-animations="reduced"] *::after {
 }
 
 .glass-panel-elevated {
-  background: rgba(22, 25, 36, 0.82);
+  background: rgba(23, 27, 40, 0.85);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--border-strong);
@@ -546,3 +546,21 @@ html[data-animations="reduced"] *::after {
   font-family: inherit;
 }
 
+
+/* Equalizer audio wave animations for ambient soundscape stems */
+@keyframes soundwave {
+  0%, 100% { height: 3px; }
+  50% { height: 12px; }
+}
+.animate-soundwave-1 {
+  animation: soundwave 0.85s ease-in-out infinite;
+}
+.animate-soundwave-2 {
+  animation: soundwave 1.15s ease-in-out infinite 0.2s;
+}
+.animate-soundwave-3 {
+  animation: soundwave 0.95s ease-in-out infinite 0.4s;
+}
+.animate-soundwave-4 {
+  animation: soundwave 1.25s ease-in-out infinite 0.1s;
+}

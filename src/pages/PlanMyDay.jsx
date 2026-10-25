@@ -580,6 +580,50 @@ export default function PlanMyDay() {
     }
   }
 
+  // Commit entire plan to My Day & Calendar
+  const handleCommitToDayAndCalendar = async () => {
+    if (!plan?.blocks || plan.blocks.length === 0) return
+    setIsApplying(true)
+    try {
+      const newlyAdded = new Set(appliedTaskTitles)
+      let addedCount = 0
+
+      if (plan.suggestedNewTasks && plan.suggestedNewTasks.length > 0) {
+        for (const item of plan.suggestedNewTasks) {
+          if (!newlyAdded.has(item.title)) {
+            try {
+              await addTask(item.title, 'tasks', todayKey, item.priority || 'medium')
+              newlyAdded.add(item.title)
+              addedCount++
+            } catch (err) {
+              console.warn('[PlanMyDay] Could not add task:', item.title, err)
+            }
+          }
+        }
+        setAppliedTaskTitles(newlyAdded)
+      }
+
+      await savePlanSchedule({
+        ...plan,
+        appliedTaskTitles: Array.from(newlyAdded),
+        userInstruction: prompt,
+      })
+
+      addToast(
+        addedCount > 0
+          ? `Committed to My Day & added ${addedCount} task${addedCount > 1 ? 's' : ''} to list!`
+          : 'Schedule committed to My Day & Calendar!',
+        'success',
+        3500
+      )
+    } catch (err) {
+      console.error('Failed to commit plan:', err)
+      addToast('Failed to commit schedule', 'error', 3000)
+    } finally {
+      setIsApplying(false)
+    }
+  }
+
   // Schedule Drift Detection: compares current time vs planned block schedule
   const driftInfo = useMemo(() => {
     if (!plan?.blocks || plan.blocks.length === 0) return null
@@ -742,81 +786,136 @@ export default function PlanMyDay() {
         </div>
       </div>
 
-      {/* Planning Prompt Card */}
-      <div className="relative overflow-hidden bg-nocturn-card border border-nocturn-border rounded-2xl p-5 sm:p-6 space-y-4 shadow-sm">
-        <FlowingLines variant="corner" opacity={0.06} />
-        <div className="relative z-10 space-y-2">
-          <label htmlFor="plan-prompt" className="text-xs sm:text-sm font-medium text-white flex items-center justify-between">
-            <span>What does your day look like?</span>
-            <span className="text-[11px] font-normal text-nocturn-muted">Natural language prompt</span>
-          </label>
-          <textarea
-            id="plan-prompt"
-            rows={4}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Tell me everything you need to accomplish today..."
-            className="w-full bg-nocturn-surface border border-nocturn-border rounded-xl text-sm p-3.5 text-white placeholder:text-nocturn-muted/60 leading-relaxed resize-y focus:border-nocturn-accent focus:ring-2 focus:ring-nocturn-accent/20 outline-none transition-all"
-          />
-        </div>
+      {/* Studio Two-Column Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Prompt Composer & Tasks In Context */}
+        <div className="space-y-5 lg:col-span-5">
+          {/* Planning Prompt Card */}
+          <div className="relative overflow-hidden bg-nocturn-card border border-nocturn-border rounded-2xl p-5 sm:p-6 space-y-4 shadow-sm">
+            <FlowingLines variant="corner" opacity={0.06} />
+            <div className="relative z-10 space-y-2">
+              <label htmlFor="plan-prompt" className="text-xs sm:text-sm font-medium text-white flex items-center justify-between">
+                <span>What does your day look like?</span>
+                <span className="text-[11px] font-normal text-nocturn-muted">Natural language prompt</span>
+              </label>
+              <textarea
+                id="plan-prompt"
+                rows={4}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Tell me everything you need to accomplish today..."
+                className="w-full bg-nocturn-surface border border-nocturn-border rounded-xl text-sm p-3.5 text-white placeholder:text-nocturn-muted/60 leading-relaxed resize-y focus:border-nocturn-accent focus:ring-2 focus:ring-nocturn-accent/20 outline-none transition-all"
+              />
+            </div>
 
-        {/* Quick Example Chips */}
-        <div className="space-y-1.5">
-          <span className="text-[11px] font-medium text-nocturn-muted block">Example prompts:</span>
-          <div className="flex flex-wrap gap-2">
-            {EXAMPLE_PROMPTS.map((ex, idx) => (
+            {/* Quick Example Chips */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-medium text-nocturn-muted block">Example prompts:</span>
+              <div className="flex flex-wrap gap-2">
+                {EXAMPLE_PROMPTS.map((ex, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setPrompt(ex)}
+                    className="text-left text-xs px-3 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-nocturn-muted hover:text-white border border-white/[0.06] hover:border-white/15 transition-all duration-150 cursor-pointer"
+                  >
+                    {ex.length > 60 ? ex.slice(0, 60) + '...' : ex}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <div className="pt-2 flex items-center justify-between gap-3">
+              {prompt.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setPrompt('')}
+                  className="text-xs text-nocturn-muted hover:text-white transition-colors cursor-pointer"
+                >
+                  Clear prompt
+                </button>
+              )}
               <button
-                key={idx}
                 type="button"
-                onClick={() => setPrompt(ex)}
-                className="text-left text-xs px-3 py-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] text-nocturn-muted hover:text-white border border-white/[0.06] hover:border-white/15 transition-all duration-150 cursor-pointer"
+                disabled={isGenerating || !prompt.trim()}
+                onClick={handleInitiateGeneratePlan}
+                className="ml-auto py-2.5 px-5 rounded-xl bg-nocturn-accent text-white font-medium text-sm hover:bg-nocturn-accent-bright transition-all duration-150 flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm active:scale-95"
               >
-                {ex.length > 60 ? ex.slice(0, 60) + '...' : ex}
+                {isGenerating ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Generating plan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Generate Plan</span>
+                  </>
+                )}
               </button>
-            ))}
+            </div>
+          </div>
+
+          {/* Context Tasks Card */}
+          <div className="bg-nocturn-card border border-nocturn-border rounded-2xl p-4 sm:p-5 space-y-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-nocturn-accent" />
+                <span>Tasks in Context ({existingActiveTasks.length})</span>
+              </h3>
+              <span className="text-[10px] text-nocturn-muted">Active for today</span>
+            </div>
+            {existingActiveTasks.length === 0 ? (
+              <p className="text-xs text-nocturn-muted">
+                No active tasks found for today. Enter your day above or add tasks in the Tasks view.
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-56 overflow-y-auto no-scrollbar pr-1">
+                {existingActiveTasks.map((t) => (
+                  <div
+                    key={t.id}
+                    className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-between text-xs gap-2"
+                  >
+                    <span className="text-white/90 truncate flex-1">{t.title}</span>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                        t.priority === 'high'
+                          ? 'bg-rose-500/15 text-rose-300'
+                          : t.priority === 'low'
+                          ? 'bg-blue-500/15 text-blue-300'
+                          : 'bg-white/5 text-nocturn-muted'
+                      }`}
+                    >
+                      {t.priority || 'medium'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Action Button */}
-        <div className="pt-2 flex items-center justify-between gap-3">
-          {prompt.trim() && (
-            <button
-              type="button"
-              onClick={() => setPrompt('')}
-              className="text-xs text-nocturn-muted hover:text-white transition-colors cursor-pointer"
-            >
-              Clear prompt
-            </button>
-          )}
-          <button
-            type="button"
-            disabled={isGenerating || !prompt.trim()}
-            onClick={handleInitiateGeneratePlan}
-            className="ml-auto py-2.5 px-5 rounded-xl bg-nocturn-accent text-white font-medium text-sm hover:bg-nocturn-accent-bright transition-all duration-150 flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm active:scale-95"
-          >
-            {isGenerating ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Generating plan...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                <span>Generate Plan</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+        {/* Right Column: Schedule Overview, Timeline & Actions */}
+        <div className="space-y-5 lg:col-span-7">
 
       {/* Error Alert */}
       {errorMsg && (
-        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs sm:text-sm flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-          <div className="space-y-1 flex-1">
-            <span className="font-semibold block">Planning Notice</span>
-            <span>{errorMsg}</span>
+        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs sm:text-sm flex items-start justify-between gap-3 shadow-sm">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+            <div className="space-y-1 flex-1">
+              <span className="font-semibold block">Planning Notice</span>
+              <span>{errorMsg}</span>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => handleInitiateGeneratePlan()}
+            className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 font-semibold text-xs border border-rose-500/40 transition-colors shrink-0 cursor-pointer"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -868,6 +967,19 @@ export default function PlanMyDay() {
               Structuring your day with realistic focus blocks, breaks, and commitments...
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Empty State when no plan yet */}
+      {!isGenerating && !plan && !isInitialLoading && (
+        <div className="p-8 sm:p-12 rounded-2xl bg-nocturn-card/50 border border-nocturn-border text-center space-y-3 shadow-sm">
+          <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-muted mx-auto">
+            <Clock className="w-6 h-6" />
+          </div>
+          <h3 className="text-sm font-semibold text-white">No Schedule Planned Yet</h3>
+          <p className="text-xs text-nocturn-muted max-w-xs mx-auto">
+            Enter your commitments in the prompt on the left to generate your optimized timeline timetable.
+          </p>
         </div>
       )}
 
@@ -1004,15 +1116,27 @@ export default function PlanMyDay() {
 
           {/* Vertical Timetable / Time Blocks */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-sm sm:text-base font-bold text-white tracking-wide flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+              <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-nocturn-accent" />
-                <span>Timeline Timetable</span>
-              </h2>
-              <div className="flex items-center gap-2.5">
-                <span className="text-xs text-nocturn-muted">
-                  {plan.blocks.length} block{plan.blocks.length !== 1 ? 's' : ''}
+                <h2 className="text-sm sm:text-base font-bold text-white tracking-wide">
+                  Timeline Timetable
+                </h2>
+                <span className="text-xs text-nocturn-muted ml-1">
+                  ({plan.blocks.length} {plan.blocks.length !== 1 ? 'blocks' : 'block'})
                 </span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  disabled={isApplying}
+                  onClick={handleCommitToDayAndCalendar}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                  title="Commit schedule and any suggested tasks to My Day"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Commit to My Day & Calendar</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1023,7 +1147,7 @@ export default function PlanMyDay() {
                     setNewBlockDuration(45)
                     setIsAddBlockOpen(true)
                   }}
-                  className="px-2.5 py-1 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/[0.08] text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/[0.08] text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 text-nocturn-accent" />
                   <span>Add Block</span>
@@ -1339,6 +1463,8 @@ export default function PlanMyDay() {
           </div>
         </div>
       )}
+        </div>
+      </div>
 
       {/* Confirmation Modal for Overwriting Active Plan */}
       <Modal

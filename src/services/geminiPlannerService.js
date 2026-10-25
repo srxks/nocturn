@@ -274,6 +274,93 @@ export function generateOfflinePlan(userPrompt = '', existingTasks = [], current
     }
   }
 
+  // 4. If no specific keywords matched and no blocks created, decompose prompt clauses
+  const focusBlockCount = blocks.filter((b) => b.type === 'focus' || b.type === 'task').length
+  if (focusBlockCount === 0 && userPrompt.trim()) {
+    // Extract meaningful phrases by splitting on common punctuation and conjunctions
+    const rawClauses = userPrompt
+      .split(/[,;\n.]+|\band\b|\bthen\b|\balso\b|\bplus\b|\bafter that\b/i)
+      .map((c) => c.trim())
+      .filter((c) => c.length >= 3 && !/^(i|we|my|today|tomorrow|need|want|have|to|the|a|an)$/i.test(c))
+
+    for (let cIdx = 0; cIdx < Math.min(rawClauses.length, 4); cIdx++) {
+      const clause = rawClauses[cIdx]
+      // Capitalize first letter
+      const taskTitle = clause.charAt(0).toUpperCase() + clause.slice(1)
+      const dur = 45
+      const bStart = currentMinutes
+      const bEnd = bStart + dur
+
+      blocks.push({
+        id: 'block-clause-' + Date.now() + '-' + cIdx,
+        title: taskTitle,
+        startTime: formatTime(bStart),
+        endTime: formatTime(bEnd),
+        durationMinutes: dur,
+        type: 'focus',
+        isExisting: false,
+        taskId: null,
+        priority: cIdx === 0 ? 'high' : 'medium',
+        notes: 'Derived from your daily plan prompt',
+      })
+
+      suggestedNewTasks.push({
+        title: taskTitle,
+        priority: cIdx === 0 ? 'high' : 'medium',
+        estimatedMinutes: dur,
+      })
+
+      currentMinutes = bEnd + 10 // Include 10m buffer/break
+      blocks.push({
+        id: 'break-clause-' + Date.now() + '-' + cIdx,
+        title: 'Short Break & Reset',
+        startTime: formatTime(bEnd),
+        endTime: formatTime(currentMinutes),
+        durationMinutes: 10,
+        type: 'break',
+        isExisting: false,
+        priority: 'low',
+      })
+    }
+  }
+
+  // 5. Ultimate safety: if blocks are still empty, build a default deep-work day
+  if (blocks.length === 0) {
+    const defaultSessions = [
+      { title: 'Morning Deep Work Block', dur: 50, type: 'focus', prio: 'high' },
+      { title: 'Short Rest & Hydration', dur: 10, type: 'break', prio: 'low' },
+      { title: 'Core Project Execution', dur: 50, type: 'focus', prio: 'high' },
+      { title: 'Lunch & Screen Break', dur: 45, type: 'break', prio: 'low' },
+      { title: 'Afternoon Focus Sprint', dur: 45, type: 'focus', prio: 'medium' },
+      { title: 'Daily Wrap-Up & Planning', dur: 25, type: 'focus', prio: 'medium' },
+    ]
+
+    for (let d = 0; d < defaultSessions.length; d++) {
+      const ds = defaultSessions[d]
+      const bStart = currentMinutes
+      const bEnd = bStart + ds.dur
+      blocks.push({
+        id: 'block-default-' + Date.now() + '-' + d,
+        title: ds.title,
+        startTime: formatTime(bStart),
+        endTime: formatTime(bEnd),
+        durationMinutes: ds.dur,
+        type: ds.type,
+        isExisting: false,
+        taskId: null,
+        priority: ds.prio,
+      })
+      if (ds.type === 'focus') {
+        suggestedNewTasks.push({
+          title: ds.title,
+          priority: ds.prio,
+          estimatedMinutes: ds.dur,
+        })
+      }
+      currentMinutes = bEnd
+    }
+  }
+
   // Sort blocks chronologically
   blocks.sort((a, b) => {
     const [ha, ma] = a.startTime.split(':').map(Number)
@@ -353,17 +440,34 @@ Return ONLY a valid JSON object with keys:
   ]
 }`
 
-  // 1. Primary backend: Supabase Edge Function 'generate-plan'
+  // 1. Primary backend: Supabase Edge Function 'generate-plan' with 15s timeout
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase.functions.invoke('generate-plan', {
-        body: {
-          prompt: promptText,
-          model: GEMINI_MODEL,
-          existingTasks: cleanExistingTasks,
-          userPrompt,
-        },
+      const invokeWithTimeout = new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error('AI schedule generation timed out after 15s'))
+        }, 15000)
+
+        supabase.functions
+          .invoke('generate-plan', {
+            body: {
+              prompt: promptText,
+              model: GEMINI_MODEL,
+              existingTasks: cleanExistingTasks,
+              userPrompt,
+            },
+          })
+          .then((res) => {
+            clearTimeout(timeoutId)
+            resolve(res)
+          })
+          .catch((err) => {
+            clearTimeout(timeoutId)
+            reject(err)
+          })
       })
+
+      const { data, error } = await invokeWithTimeout
       if (!error && data?.plan) {
         const validation = validatePlanResponse(data.plan)
         if (validation.valid) return validation.plan
@@ -372,7 +476,7 @@ Return ONLY a valid JSON object with keys:
         console.warn('[geminiPlannerService] Supabase Edge Function notice:', error)
       }
     } catch (err) {
-      console.warn('[geminiPlannerService] Exception invoking generate-plan Edge Function:', err)
+      console.warn('[geminiPlannerService] generate-plan failed or timed out, using intelligent offline plan:', err.message || err)
     }
   }
 

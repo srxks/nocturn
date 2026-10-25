@@ -78,18 +78,19 @@ export default function SelectedDayPanel({
         {/* Google Calendar Action Bridge */}
         <div className="flex flex-col items-start sm:items-end gap-1 shrink-0">
           <motion.button
-            whileHover={{ scale: 1.02 }}
+            whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.98 }}
             type="button"
             onClick={handleOpenGCal}
-            className="px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-nocturn-accent/40 text-xs font-semibold text-white inline-flex items-center gap-2 cursor-pointer shadow-sm transition-all"
+            title="Google Calendar two-way synchronization is planned for an upcoming release"
+            className="px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.08] hover:border-white/15 text-xs font-medium text-nocturn-muted hover:text-white inline-flex items-center gap-2 cursor-pointer shadow-sm transition-all opacity-75"
           >
-            <ExternalLink className="w-3.5 h-3.5 text-nocturn-accent stroke-[2.2]" />
-            Open in Google Calendar
+            <ExternalLink className="w-3.5 h-3.5 text-nocturn-dim stroke-[2]" />
+            <span>Open in Google Calendar</span>
+            <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-white/[0.06] text-nocturn-dim border border-white/[0.06]">
+              Coming Soon
+            </span>
           </motion.button>
-          <span className="text-[10px] text-nocturn-dim font-medium">
-            Google Calendar sync coming soon
-          </span>
         </div>
       </div>
 

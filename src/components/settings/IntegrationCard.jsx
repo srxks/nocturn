@@ -94,6 +94,11 @@ export default function IntegrationCard({ title, description, icon: Icon }) {
                   Connected
                 </span>
               )}
+              {!isMsTodo && (
+                <span className="inline-flex items-center text-[10px] font-semibold text-nocturn-muted bg-white/[0.05] border border-white/[0.08] px-2 py-0.5 rounded-full">
+                  Coming Soon
+                </span>
+              )}
             </div>
             <span className="text-xs text-nocturn-muted block truncate">
               {isMsTodo && conn?.isConnected
@@ -151,8 +156,9 @@ export default function IntegrationCard({ title, description, icon: Icon }) {
             <button
               type="button"
               disabled
+              title={`${title} integration is planned for an upcoming release`}
               aria-label={`${title} integration coming soon`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-nocturn-muted bg-nocturn-surface/60 border border-nocturn-border cursor-not-allowed opacity-75 shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-nocturn-dim bg-white/[0.03] border border-white/[0.06] cursor-not-allowed opacity-75 shrink-0"
             >
               <Lock className="w-3 h-3 stroke-[2]" />
               <span>Coming soon</span>

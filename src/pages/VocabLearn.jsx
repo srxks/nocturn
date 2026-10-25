@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -13,6 +13,7 @@ import {
   BookOpen,
   Volume2,
   SlidersHorizontal,
+  RotateCw,
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
@@ -46,6 +47,7 @@ export default function VocabLearn() {
     generateNewWords,
     markWordLearned,
     addWord,
+    recordQuizResult,
   } = useVocab()
 
   const todayKey = getTodayDateKey()
@@ -53,6 +55,8 @@ export default function VocabLearn() {
   const [customWords, setCustomWords] = useState(() => location.state?.customWords || null)
   const [sessionConfig, setSessionConfig] = useState(() => location.state?.config || null)
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
+  const [flippedWordIndex, setFlippedWordIndex] = useState(null)
+  const [isSpeaking, setIsSpeaking] = useState(false)
 
   // Asynchronously ensure session words are loaded if not in location.state
   useEffect(() => {
@@ -138,7 +142,12 @@ export default function VocabLearn() {
     }
   }, [currentWord, todayKey, markWordLearned, sessionCompletedIdsKey])
 
-  const handleNext = async () => {
+  const isFlipped = flippedWordIndex === safeIndex
+  const toggleFlip = useCallback(() => {
+    setFlippedWordIndex((prev) => (prev === safeIndex ? null : safeIndex))
+  }, [safeIndex])
+
+  const handleNext = useCallback(async () => {
     const nextIdx = safeIndex + 1
 
     let currentCompletedIds = []
@@ -194,7 +203,7 @@ export default function VocabLearn() {
         updated_at: new Date().toISOString(),
       })
     }
-  }
+  }, [safeIndex, currentWord, sessionCompletedIdsKey, effectiveWords, sessionLearnKey, todayKey, user, sessionConfig, sessionCompleteKey])
 
   const handleStartNewSession = async (cfg) => {
     try {
@@ -209,7 +218,7 @@ export default function VocabLearn() {
     }
   }
 
-  const handlePrev = async () => {
+  const handlePrev = useCallback(async () => {
     if (safeIndex > 0) {
       const prevIdx = safeIndex - 1
       setCurrentIndex(prevIdx)
@@ -230,7 +239,69 @@ export default function VocabLearn() {
         updated_at: new Date().toISOString(),
       })
     }
-  }
+  }, [safeIndex, sessionLearnKey, todayKey, user, effectiveWords, sessionConfig, todayVocabLog?.completedWordIds])
+
+  const handlePronounce = useCallback((word, e) => {
+    e?.stopPropagation?.()
+    if (!word || typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    try {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(word)
+      utterance.rate = 0.88
+      utterance.pitch = 1.0
+      utterance.lang = 'en-US'
+      utterance.onstart = () => setIsSpeaking(true)
+      utterance.onend = () => setIsSpeaking(false)
+      utterance.onerror = () => setIsSpeaking(false)
+      window.speechSynthesis.speak(utterance)
+    } catch {
+      setIsSpeaking(false)
+    }
+  }, [])
+
+  const handleRate = useCallback(async (rating) => {
+    if (!currentWord?.id) return
+    try {
+      if (recordQuizResult) {
+        await recordQuizResult(currentWord.id, rating >= 2, user?.id)
+      }
+    } catch (err) {
+      console.warn('Could not record rating:', err)
+    }
+    await handleNext()
+  }, [currentWord, user, recordQuizResult, handleNext])
+
+  // Keyboard ergonomics: Space (flip card), ← / → navigate, 1/2/3 rate
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (isConfigModalOpen || isAddModalOpen) return
+      const activeTag = document.activeElement?.tagName?.toLowerCase()
+      if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable) return
+
+      if (e.code === 'Space') {
+        e.preventDefault()
+        toggleFlip()
+      } else if (e.key === 'ArrowRight' || (e.key === 'Enter' && !e.shiftKey)) {
+        e.preventDefault()
+        handleNext()
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        handlePrev()
+      } else if (e.key === '1') {
+        e.preventDefault()
+        handleRate(1)
+      } else if (e.key === '2') {
+        e.preventDefault()
+        handleRate(2)
+      } else if (e.key === '3') {
+        e.preventDefault()
+        handleRate(3)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isConfigModalOpen, isAddModalOpen, handleNext, handlePrev, handleRate, toggleFlip])
 
   // Loading State
   if (isGenerating) {
@@ -502,127 +573,252 @@ export default function VocabLearn() {
         value={((safeIndex + 1) / Math.max(1, effectiveWords.length)) * 100}
       />
 
-      {/* Flashcard Component with AnimatePresence */}
-      <AnimatePresence mode="wait">
+      {/* 3D Flashcard Component */}
+      <div
+        className="w-full cursor-pointer select-none"
+        style={{ perspective: 1200 }}
+        onClick={toggleFlip}
+      >
         <motion.div
-          key={safeIndex}
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -12 }}
-          transition={{ duration: 0.15, ease: 'easeOut' }}
+          animate={{ rotateY: isFlipped ? 180 : 0 }}
+          transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+          style={{ transformStyle: 'preserve-3d' }}
+          className="relative w-full min-h-[380px]"
         >
-          <Card variant="elevated" className="p-5 sm:p-8 space-y-6">
-            {/* Top Word Badges */}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                {currentWord?.part_of_speech && (
-                  <Badge variant="accent" size="sm">
-                    {currentWord.part_of_speech}
-                  </Badge>
-                )}
-                {currentWord?.difficulty && (
-                  <span
-                    className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-                      currentWord.difficulty.toLowerCase() === 'easy'
-                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                        : currentWord.difficulty.toLowerCase() === 'hard'
-                        ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                        : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                    }`}
-                  >
-                    {currentWord.difficulty}
-                  </span>
-                )}
-              </div>
-              <span className="text-[11px] font-mono text-nocturn-muted">GRE Level</span>
-            </div>
-
-            {/* Word Heading & Audio Pronunciation */}
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-                {currentWord?.word}
-              </h1>
-              {currentWord?.word && (
-                <button
-                  type="button"
-                  onClick={() => speakWord(currentWord.word)}
-                  title="Pronounce word"
-                  aria-label={`Pronounce ${currentWord.word}`}
-                  className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-nocturn-muted hover:text-nocturn-accent border border-white/[0.06] transition-all cursor-pointer active:scale-95 shadow-sm"
-                >
-                  <Volume2 className="w-5 h-5 stroke-[2]" />
-                </button>
-              )}
-            </div>
-
-            {/* Definition */}
-            <div className="space-y-1.5 pt-1">
-              <span className="text-xs uppercase font-semibold tracking-wider text-nocturn-muted block">
-                Definition
-              </span>
-              <p className="text-base sm:text-lg text-white/90 leading-relaxed font-normal">
-                {currentWord?.definition}
-              </p>
-            </div>
-
-            {/* Example Sentence */}
-            {currentWord?.example_sentence && (
-              <div className="p-4 rounded-xl bg-white/[0.02] border-l-2 border-nocturn-accent space-y-1">
-                <span className="text-[11px] uppercase font-semibold tracking-wider text-nocturn-accent block">
-                  Example Sentence
-                </span>
-                <p className="text-sm text-white/90 italic">
-                  "{currentWord.example_sentence}"
-                </p>
-              </div>
-            )}
-
-            {/* Synonyms */}
-            {Array.isArray(currentWord?.synonyms) && currentWord.synonyms.length > 0 && (
-              <div className="space-y-2">
-                <span className="text-xs uppercase font-semibold tracking-wider text-nocturn-muted block">
-                  Synonyms
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {currentWord.synonyms.map((syn, idx) => (
+          {/* FRONT OF CARD */}
+          <div
+            style={{
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+            }}
+            className={`w-full ${isFlipped ? 'pointer-events-none absolute inset-0' : 'relative'}`}
+          >
+            <Card variant="elevated" className="h-full min-h-[380px] p-6 sm:p-8 flex flex-col justify-between border-white/[0.08] hover:border-nocturn-accent/30 transition-all shadow-xl bg-gradient-to-b from-[#11131f] to-[#0c0d16]">
+              {/* Top Badges */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {currentWord?.part_of_speech && (
+                    <Badge variant="accent" size="sm">
+                      {currentWord.part_of_speech}
+                    </Badge>
+                  )}
+                  {currentWord?.difficulty && (
                     <span
-                      key={idx}
-                      className="px-2.5 py-1 rounded-lg text-xs text-nocturn-muted bg-white/[0.03] border border-white/[0.06]"
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                        currentWord.difficulty.toLowerCase() === 'easy'
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          : currentWord.difficulty.toLowerCase() === 'hard'
+                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                          : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                      }`}
                     >
-                      {syn}
+                      {currentWord.difficulty}
                     </span>
-                  ))}
+                  )}
                 </div>
+                <span className="text-[11px] font-mono text-nocturn-muted">GRE Vocabulary</span>
               </div>
-            )}
-          </Card>
+
+              {/* Center Word & Audio */}
+              <div className="py-8 flex flex-col items-center justify-center text-center space-y-4">
+                <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+                  {currentWord?.word}
+                </h1>
+
+                {currentWord?.word && (
+                  <button
+                    type="button"
+                    onClick={(e) => handlePronounce(currentWord.word, e)}
+                    title="Pronounce word"
+                    aria-label={`Pronounce ${currentWord.word}`}
+                    className="px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-nocturn-muted hover:text-nocturn-accent border border-white/[0.06] transition-all cursor-pointer flex items-center gap-2 text-xs font-medium shadow-sm"
+                  >
+                    <Volume2 className="w-4 h-4" />
+                    <span>Pronounce</span>
+                    {isSpeaking && (
+                      <div className="flex items-center gap-0.5 h-3 ml-1">
+                        <span className="w-0.5 h-full bg-nocturn-accent animate-pulse rounded-full" />
+                        <span className="w-0.5 h-2 bg-nocturn-accent animate-pulse delay-75 rounded-full" />
+                        <span className="w-0.5 h-3 bg-nocturn-accent animate-pulse delay-150 rounded-full" />
+                      </div>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Bottom Flip Prompt */}
+              <div className="pt-4 border-t border-white/[0.06] flex items-center justify-center gap-2 text-xs text-nocturn-muted">
+                <RotateCw className="w-3.5 h-3.5 text-nocturn-accent" />
+                <span>Tap card or press <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/10 text-[10px] font-mono text-white">Space</kbd> to reveal definition</span>
+              </div>
+            </Card>
+          </div>
+
+          {/* BACK OF CARD */}
+          <div
+            style={{
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+              transform: 'rotateY(180deg)',
+            }}
+            className={`w-full ${!isFlipped ? 'pointer-events-none absolute inset-0' : 'relative'}`}
+          >
+            <Card variant="elevated" className="h-full min-h-[380px] p-6 sm:p-8 flex flex-col justify-between border-white/[0.08] hover:border-nocturn-accent/30 transition-all shadow-xl bg-gradient-to-b from-[#11131f] to-[#0c0d16] space-y-4">
+              {/* Top Header */}
+              <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl font-bold text-white tracking-tight">
+                    {currentWord?.word}
+                  </span>
+                  {currentWord?.part_of_speech && (
+                    <Badge variant="accent" size="sm">
+                      {currentWord.part_of_speech}
+                    </Badge>
+                  )}
+                </div>
+                {currentWord?.word && (
+                  <button
+                    type="button"
+                    onClick={(e) => handlePronounce(currentWord.word, e)}
+                    className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-nocturn-muted hover:text-nocturn-accent transition-colors cursor-pointer"
+                    title="Pronounce word"
+                  >
+                    <Volume2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Body: Definition, Example, Synonyms */}
+              <div className="space-y-4 flex-1">
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-nocturn-muted block">
+                    Definition
+                  </span>
+                  <p className="text-base sm:text-lg text-white/95 leading-relaxed font-normal">
+                    {currentWord?.definition}
+                  </p>
+                </div>
+
+                {currentWord?.example_sentence && (
+                  <div className="p-3.5 rounded-xl bg-white/[0.02] border-l-2 border-nocturn-accent space-y-0.5">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-nocturn-accent block">
+                      Example
+                    </span>
+                    <p className="text-xs sm:text-sm text-white/90 italic">
+                      "{currentWord.example_sentence}"
+                    </p>
+                  </div>
+                )}
+
+                {Array.isArray(currentWord?.synonyms) && currentWord.synonyms.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-nocturn-muted block">
+                      Synonyms
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {currentWord.synonyms.map((syn, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded-lg text-xs text-nocturn-muted bg-white/[0.03] border border-white/[0.06]"
+                        >
+                          {syn}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom Flip Back */}
+              <div className="pt-3 border-t border-white/[0.06] flex items-center justify-center gap-2 text-xs text-nocturn-muted">
+                <RotateCw className="w-3.5 h-3.5 text-nocturn-accent" />
+                <span>Tap card or press <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/10 text-[10px] font-mono text-white">Space</kbd> to flip back</span>
+              </div>
+            </Card>
+          </div>
         </motion.div>
-      </AnimatePresence>
+      </div>
 
-      {/* Control Buttons */}
-      <div className="flex items-center justify-between gap-4 pt-1">
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={handlePrev}
-          disabled={safeIndex === 0}
-          icon={ChevronLeft}
-        >
-          Previous
-        </Button>
+      {/* Control & Rating Bar */}
+      <div className="space-y-3 pt-1">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={handlePrev}
+            disabled={safeIndex === 0}
+            icon={ChevronLeft}
+            className="w-full sm:w-auto"
+          >
+            <span>Previous</span>
+            <kbd className="ml-1 px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/10 text-[10px] font-mono text-nocturn-muted">
+              ←
+            </kbd>
+          </Button>
 
-        <Button
-          variant="primary"
-          size="md"
-          onClick={handleNext}
-        >
-          <span>
-            {safeIndex === effectiveWords.length - 1
-              ? 'Complete Set'
-              : 'Next Word'}
+          {/* Quick Mastery Rating Buttons */}
+          <div className="flex items-center gap-1.5 w-full sm:w-auto justify-center">
+            <button
+              type="button"
+              onClick={() => handleRate(1)}
+              className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Need more practice (Key 1)"
+            >
+              <span>Again</span>
+              <kbd className="px-1 py-0.2 rounded bg-rose-500/20 text-[10px] font-mono">1</kbd>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRate(2)}
+              className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/25 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Familiar but tricky (Key 2)"
+            >
+              <span>Hard</span>
+              <kbd className="px-1 py-0.2 rounded bg-amber-500/20 text-[10px] font-mono">2</kbd>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRate(3)}
+              className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Know it well (Key 3)"
+            >
+              <span>Good</span>
+              <kbd className="px-1 py-0.2 rounded bg-emerald-500/20 text-[10px] font-mono">3</kbd>
+            </button>
+          </div>
+
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleNext}
+            className="w-full sm:w-auto"
+          >
+            <span>
+              {safeIndex === effectiveWords.length - 1
+                ? 'Complete Set'
+                : 'Next Word'}
+            </span>
+            <kbd className="ml-1 px-1.5 py-0.5 rounded bg-black/30 border border-black/20 text-[10px] font-mono text-black font-bold">
+              →
+            </kbd>
+            <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
+        </div>
+
+        {/* Hotkey Legend */}
+        <div className="flex flex-wrap items-center justify-center gap-2.5 text-[11px] text-nocturn-muted pt-1">
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] font-mono text-[10px] text-white">Space</kbd> Flip
           </span>
-          <ChevronRight className="w-4 h-4 ml-1.5" />
-        </Button>
+          <span>·</span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] font-mono text-[10px] text-white">←</kbd> <kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] font-mono text-[10px] text-white">→</kbd> Navigate
+          </span>
+          <span>·</span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] font-mono text-[10px] text-white">1</kbd> <kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] font-mono text-[10px] text-white">2</kbd> <kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] font-mono text-[10px] text-white">3</kbd> Rate
+          </span>
+        </div>
       </div>
 
       {/* Vocab Session Config Modal */}

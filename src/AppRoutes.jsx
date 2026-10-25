@@ -54,55 +54,51 @@ function RouteAccentSweep() {
 }
 
 function AppRoutes() {
-  const location = useLocation()
-
   return (
     <>
       <RouteAccentSweep />
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          {/* Root redirect: if already onboarded or logged in, go straight to Tasks My Day */}
-          <Route path="/" element={<RootRedirect />} />
+      <Routes>
+        {/* Root redirect: if already onboarded or logged in, go straight to Tasks My Day */}
+        <Route path="/" element={<RootRedirect />} />
 
-          {/* Standalone Onboarding & Auth routes */}
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/login" element={<Navigate to="/auth" replace />} />
-          <Route path="/signup" element={<Navigate to="/auth" replace />} />
+        {/* Standalone Onboarding & Auth routes */}
+        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/login" element={<Navigate to="/auth" replace />} />
+        <Route path="/signup" element={<Navigate to="/auth" replace />} />
 
-          {/* Core app routes wrapped in AppShell with ProtectedRoute */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppShell />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/today" element={<Navigate to="/tasks?view=myday" replace />} />
-            <Route path="/inbox" element={<Navigate to="/tasks?view=inbox" replace />} />
-            <Route path="/upcoming" element={<Navigate to="/tasks?view=upcoming" replace />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/calendar" element={<Calendar />} />
-            <Route path="/timer" element={<Timer />} />
-            <Route path="/timer-settings" element={<TimerSettings />} />
-            <Route path="/plan" element={<PlanMyDay />} />
-            <Route path="/plan-my-day" element={<Navigate to="/plan" replace />} />
-            <Route path="/statistics" element={<Statistics />} />
-            <Route path="/stats" element={<Navigate to="/statistics" replace />} />
-            <Route path="/analytics" element={<Navigate to="/statistics" replace />} />
-            <Route path="/productivity" element={<Navigate to="/statistics" replace />} />
-            <Route path="/vocab" element={<Vocab />} />
-            <Route path="/vocab/learn" element={<VocabLearn />} />
-            <Route path="/vocab/review" element={<VocabReview />} />
-            <Route path="/vocab/list" element={<VocabList />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/profile" element={<Profile />} />
-          </Route>
+        {/* Core app routes wrapped in AppShell with ProtectedRoute */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppShell />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/today" element={<Navigate to="/tasks?view=myday" replace />} />
+          <Route path="/inbox" element={<Navigate to="/tasks?view=inbox" replace />} />
+          <Route path="/upcoming" element={<Navigate to="/tasks?view=upcoming" replace />} />
+          <Route path="/tasks" element={<Tasks />} />
+          <Route path="/calendar" element={<Calendar />} />
+          <Route path="/timer" element={<Timer />} />
+          <Route path="/timer-settings" element={<TimerSettings />} />
+          <Route path="/plan" element={<PlanMyDay />} />
+          <Route path="/plan-my-day" element={<Navigate to="/plan" replace />} />
+          <Route path="/statistics" element={<Statistics />} />
+          <Route path="/stats" element={<Navigate to="/statistics" replace />} />
+          <Route path="/analytics" element={<Navigate to="/statistics" replace />} />
+          <Route path="/productivity" element={<Navigate to="/statistics" replace />} />
+          <Route path="/vocab" element={<Vocab />} />
+          <Route path="/vocab/learn" element={<VocabLearn />} />
+          <Route path="/vocab/review" element={<VocabReview />} />
+          <Route path="/vocab/list" element={<VocabList />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/profile" element={<Profile />} />
+        </Route>
 
-          {/* Catch-all route */}
-          <Route path="*" element={<RootRedirect />} />
-        </Routes>
-      </AnimatePresence>
+        {/* Catch-all route */}
+        <Route path="*" element={<RootRedirect />} />
+      </Routes>
     </>
   )
 }

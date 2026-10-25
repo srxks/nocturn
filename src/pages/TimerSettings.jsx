@@ -119,7 +119,7 @@ export default function TimerSettings() {
     try {
       await updateSettings(localSettings)
       addToast('Timer settings saved successfully', 'success', 2500)
-      navigate('/timer')
+      navigate('/timer', { replace: true })
     } catch (err) {
       console.error('[TimerSettings] Failed to save:', err)
       addToast('Failed to save settings. Please try again.', 'error')
@@ -129,7 +129,7 @@ export default function TimerSettings() {
   }
 
   const handleCancel = () => {
-    navigate('/timer')
+    navigate('/timer', { replace: true })
   }
 
   return (

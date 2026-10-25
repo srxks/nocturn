@@ -3,11 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Zap, Mail, Lock, User, ArrowRight, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
+import { useToast } from '../context/useToast'
 
 export default function Auth() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, signInWithEmail, signUpWithEmail, signInWithGoogle, continueAsGuest } = useAuth()
+  const { addToast } = useToast()
 
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
@@ -17,6 +19,7 @@ export default function Auth() {
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState(null)
   const [successMsg, setSuccessMsg] = useState(null)
+  const [shakeKey, setShakeKey] = useState(0)
 
   const fromPath = location.state?.from?.pathname || '/tasks'
 
@@ -26,18 +29,34 @@ export default function Auth() {
     }
   }, [user, navigate, fromPath])
 
+  // Isolate state between Sign In and Sign Up tabs (BUG-07 & Bug 1B)
+  const handleTabToggle = (toSignUp) => {
+    setIsSignUp(toSignUp)
+    setEmail('')
+    setPassword('')
+    setFullName('')
+    setErrorMsg(null)
+    setSuccessMsg(null)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setErrorMsg(null)
     setSuccessMsg(null)
 
     if (!email || !password) {
-      setErrorMsg('Please provide both email and password.')
+      const msg = 'Please provide both email and password.'
+      setErrorMsg(msg)
+      setShakeKey((prev) => prev + 1)
+      addToast(msg, { type: 'warning' })
       return
     }
 
     if (isSignUp && !fullName.trim()) {
-      setErrorMsg('Please provide your name.')
+      const msg = 'Please provide your name.'
+      setErrorMsg(msg)
+      setShakeKey((prev) => prev + 1)
+      addToast(msg, { type: 'warning' })
       return
     }
 
@@ -47,12 +66,18 @@ export default function Auth() {
       if (isSignUp) {
         await signUpWithEmail(email, password, fullName)
         setSuccessMsg('Account created successfully! Check your email to confirm registration or sign in.')
+        addToast('Account created! Please check your email.', { type: 'success' })
       } else {
         await signInWithEmail(email, password)
+        addToast('Signed in successfully', { type: 'success' })
         navigate(fromPath, { replace: true })
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Authentication failed. Please check your credentials.')
+      // Clear visible error feedback on invalid login (BUG-03 & Bug 1A)
+      const msg = err.message || 'Authentication failed. Please check your credentials.'
+      setErrorMsg(msg)
+      setShakeKey((prev) => prev + 1)
+      addToast(msg, { type: 'error' })
     } finally {
       setLoading(false)
     }
@@ -60,11 +85,25 @@ export default function Auth() {
 
   const handleGoogleSignIn = async () => {
     setErrorMsg(null)
+    // Pre-flight feature flag to avoid Supabase 400 validation_failed crash (BUG-01 & Bug 1C)
+    const isGoogleOAuthEnabled = import.meta.env.VITE_ENABLE_GOOGLE_OAUTH === 'true'
+    if (!isGoogleOAuthEnabled) {
+      const msg = 'Google Sign-In is not currently enabled for this project. Please sign in with Email or use Guest Mode.'
+      setErrorMsg(msg)
+      setShakeKey((prev) => prev + 1)
+      addToast(msg, { type: 'warning' })
+      return
+    }
+
     setLoading(true)
     try {
       await signInWithGoogle()
     } catch (err) {
-      setErrorMsg(err.message || 'Google OAuth sign in failed.')
+      const msg = err.message || 'Google OAuth sign in failed.'
+      setErrorMsg(msg)
+      setShakeKey((prev) => prev + 1)
+      addToast(msg, { type: 'error' })
+    } finally {
       setLoading(false)
     }
   }
@@ -97,11 +136,7 @@ export default function Auth() {
         <div className="flex bg-white/[0.03] border border-white/[0.06] rounded-2xl p-1 relative">
           <button
             type="button"
-            onClick={() => {
-              setIsSignUp(false)
-              setErrorMsg(null)
-              setSuccessMsg(null)
-            }}
+            onClick={() => handleTabToggle(false)}
             className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-colors relative z-10 cursor-pointer ${
               !isSignUp ? 'text-black font-bold' : 'text-nocturn-muted hover:text-white'
             }`}
@@ -117,11 +152,7 @@ export default function Auth() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setIsSignUp(true)
-              setErrorMsg(null)
-              setSuccessMsg(null)
-            }}
+            onClick={() => handleTabToggle(true)}
             className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-colors relative z-10 cursor-pointer ${
               isSignUp ? 'text-black font-bold' : 'text-nocturn-muted hover:text-white'
             }`}
@@ -139,10 +170,17 @@ export default function Auth() {
 
         {/* Alerts */}
         {errorMsg && (
-          <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-            <span>{errorMsg}</span>
-          </div>
+          <motion.div
+            key={shakeKey}
+            initial={{ x: -8, opacity: 0 }}
+            animate={{ x: [0, -8, 8, -6, 6, -2, 2, 0], opacity: 1 }}
+            transition={{ duration: 0.45 }}
+            role="alert"
+            className="p-3.5 rounded-2xl bg-[#F43F5E]/10 border border-[#F43F5E]/30 text-rose-300 text-xs flex items-start gap-2.5 shadow-sm"
+          >
+            <AlertTriangle className="w-4 h-4 shrink-0 text-[#F43F5E] mt-0.5" />
+            <span className="font-medium leading-relaxed">{errorMsg}</span>
+          </motion.div>
         )}
 
         {successMsg && (

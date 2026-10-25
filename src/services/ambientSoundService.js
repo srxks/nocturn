@@ -1,10 +1,10 @@
 /**
  * ambientSoundService.js
  *
- * Professional ambient focus sound generator synthesized entirely with the Web Audio API.
+ * Professional multi-stem ambient focus sound generator synthesized entirely with the Web Audio API.
  * 100% offline, zero external audio asset downloads, ultra-low memory footprint.
  *
- * Supported soundscapes:
+ * Supported soundscapes / stems:
  * - 'rain': Layered pink noise with soft rain filtration
  * - 'brown': Deep, warm Brownian noise (-6dB/oct) for deep work & ADHD focus
  * - 'white': Balanced gentle white noise for masking distractions
@@ -13,10 +13,45 @@
  */
 
 let audioCtx = null
-let activeSourceNodes = []
 let masterGainNode = null
-let currentSoundType = null
-let currentVolume = 0.5
+let masterVolume = 0.5
+let isMuted = false
+
+// Map of stemId -> { sources: Array<AudioNode>, gainNode: GainNode }
+const activeStemsMap = new Map()
+
+// Stored volumes per stem (0.0 to 1.0)
+const stemVolumes = {
+  rain: 0.6,
+  brown: 0.5,
+  white: 0.4,
+  binaural: 0.5,
+  waves: 0.6,
+}
+
+// Event subscribers
+const listeners = new Set()
+
+function notifyListeners() {
+  const state = {
+    activeStems: getActiveStems(),
+    stemVolumes: { ...stemVolumes },
+    masterVolume,
+    isMuted,
+  }
+  listeners.forEach((listener) => {
+    try {
+      listener(state)
+    } catch (e) {
+      console.warn('[ambientSoundService] Listener error:', e)
+    }
+  })
+}
+
+export function subscribeAmbientState(listener) {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
 
 function getAudioContext() {
   if (typeof window === 'undefined') return null
@@ -36,54 +71,13 @@ function getAudioContext() {
   }
 }
 
-/**
- * Stop any currently running ambient soundscape
- */
-export function stopAmbientSound() {
-  try {
-    activeSourceNodes.forEach((node) => {
-      try {
-        if (node.stop) node.stop()
-        if (node.disconnect) node.disconnect()
-      } catch {
-        // Node already stopped
-      }
-    })
-    activeSourceNodes = []
-    if (masterGainNode) {
-      try {
-        masterGainNode.disconnect()
-      } catch {
-        // ignore
-      }
-      masterGainNode = null
-    }
-    currentSoundType = null
-  } catch (err) {
-    console.warn('[ambientSoundService] Error stopping audio:', err)
+function ensureMasterGain(ctx) {
+  if (!masterGainNode && ctx) {
+    masterGainNode = ctx.createGain()
+    masterGainNode.gain.setValueAtTime(isMuted ? 0 : masterVolume, ctx.currentTime)
+    masterGainNode.connect(ctx.destination)
   }
-}
-
-/**
- * Set ambient volume (0 to 1)
- */
-export function setAmbientVolume(vol) {
-  currentVolume = Math.max(0, Math.min(1, vol))
-  if (masterGainNode && audioCtx) {
-    try {
-      masterGainNode.gain.setValueAtTime(currentVolume, audioCtx.currentTime)
-    } catch {
-      // ignore
-    }
-  }
-}
-
-export function getCurrentAmbientSound() {
-  return currentSoundType
-}
-
-export function getCurrentAmbientVolume() {
-  return currentVolume
+  return masterGainNode
 }
 
 /**
@@ -125,44 +119,45 @@ function createNoiseBuffer(ctx, type = 'white') {
 }
 
 /**
- * Start playing an ambient soundscape
+ * Start a specific ambient stem
  */
-export function playAmbientSound(type, volume = 0.5) {
-  stopAmbientSound()
-
-  if (!type || type === 'none') {
-    return
-  }
+export function startStem(stemId, initialVolume) {
+  if (!stemId || stemId === 'none') return
+  if (activeStemsMap.has(stemId)) return // Already active
 
   const ctx = getAudioContext()
   if (!ctx) return
 
-  currentSoundType = type
-  currentVolume = volume
+  ensureMasterGain(ctx)
+
+  if (typeof initialVolume === 'number') {
+    stemVolumes[stemId] = Math.max(0, Math.min(1, initialVolume))
+  }
+  const stemVol = stemVolumes[stemId] ?? 0.5
 
   try {
-    masterGainNode = ctx.createGain()
-    masterGainNode.gain.setValueAtTime(volume, ctx.currentTime)
-    masterGainNode.connect(ctx.destination)
+    const stemGain = ctx.createGain()
+    stemGain.gain.setValueAtTime(stemVol, ctx.currentTime)
+    stemGain.connect(masterGainNode)
 
-    if (type === 'white' || type === 'brown') {
-      const noiseBuffer = createNoiseBuffer(ctx, type)
+    const sources = []
+
+    if (stemId === 'white' || stemId === 'brown') {
+      const noiseBuffer = createNoiseBuffer(ctx, stemId)
       const noiseSource = ctx.createBufferSource()
       noiseSource.buffer = noiseBuffer
       noiseSource.loop = true
 
-      // Mild low-pass filter for ear comfort
       const filter = ctx.createBiquadFilter()
       filter.type = 'lowpass'
-      filter.frequency.setValueAtTime(type === 'brown' ? 450 : 2800, ctx.currentTime)
+      filter.frequency.setValueAtTime(stemId === 'brown' ? 450 : 2800, ctx.currentTime)
 
       noiseSource.connect(filter)
-      filter.connect(masterGainNode)
+      filter.connect(stemGain)
 
       noiseSource.start()
-      activeSourceNodes.push(noiseSource)
-    } else if (type === 'rain') {
-      // Pink noise + lowpass + bandpass with soft lfo flutter
+      sources.push(noiseSource)
+    } else if (stemId === 'rain') {
       const rainBuffer = createNoiseBuffer(ctx, 'pink')
       const rainSource = ctx.createBufferSource()
       rainSource.buffer = rainBuffer
@@ -179,12 +174,11 @@ export function playAmbientSound(type, volume = 0.5) {
 
       rainSource.connect(filter)
       filter.connect(bandpass)
-      bandpass.connect(masterGainNode)
+      bandpass.connect(stemGain)
 
       rainSource.start()
-      activeSourceNodes.push(rainSource)
-    } else if (type === 'binaural') {
-      // Left ear: 200 Hz, Right ear: 210 Hz (Alpha brainwave 10 Hz difference)
+      sources.push(rainSource)
+    } else if (stemId === 'binaural') {
       const leftOsc = ctx.createOscillator()
       const rightOsc = ctx.createOscillator()
 
@@ -202,19 +196,17 @@ export function playAmbientSound(type, volume = 0.5) {
       rightGain.gain.setValueAtTime(0.35, ctx.currentTime)
 
       leftOsc.connect(leftGain)
-      leftGain.connect(merger, 0, 0) // Left channel
+      leftGain.connect(merger, 0, 0)
 
       rightOsc.connect(rightGain)
-      rightGain.connect(merger, 0, 1) // Right channel
+      rightGain.connect(merger, 0, 1)
 
-      merger.connect(masterGainNode)
+      merger.connect(stemGain)
 
       leftOsc.start()
       rightOsc.start()
-
-      activeSourceNodes.push(leftOsc, rightOsc)
-    } else if (type === 'waves') {
-      // Brownian noise with sinusoidal gain modulation (ocean swell)
+      sources.push(leftOsc, rightOsc)
+    } else if (stemId === 'waves') {
       const noiseBuffer = createNoiseBuffer(ctx, 'brown')
       const noiseSource = ctx.createBufferSource()
       noiseSource.buffer = noiseBuffer
@@ -223,7 +215,6 @@ export function playAmbientSound(type, volume = 0.5) {
       const swellGain = ctx.createGain()
       swellGain.gain.setValueAtTime(0.2, ctx.currentTime)
 
-      // LFO for ocean wave cycles (approx 0.12 Hz = 8.3s cycle)
       const lfo = ctx.createOscillator()
       lfo.frequency.setValueAtTime(0.12, ctx.currentTime)
 
@@ -234,14 +225,173 @@ export function playAmbientSound(type, volume = 0.5) {
       lfoGain.connect(swellGain.gain)
 
       noiseSource.connect(swellGain)
-      swellGain.connect(masterGainNode)
+      swellGain.connect(stemGain)
 
       lfo.start()
       noiseSource.start()
+      sources.push(noiseSource, lfo)
+    }
 
-      activeSourceNodes.push(noiseSource, lfo)
+    activeStemsMap.set(stemId, { sources, gainNode: stemGain })
+    notifyListeners()
+  } catch (err) {
+    console.warn('[ambientSoundService] Failed to start stem ' + stemId + ':', err)
+  }
+}
+
+/**
+ * Stop a specific ambient stem
+ */
+export function stopStem(stemId) {
+  const stem = activeStemsMap.get(stemId)
+  if (!stem) return
+
+  try {
+    stem.sources.forEach((node) => {
+      try {
+        if (node.stop) node.stop()
+        if (node.disconnect) node.disconnect()
+      } catch {
+        // Node already stopped
+      }
+    })
+    if (stem.gainNode) {
+      try {
+        stem.gainNode.disconnect()
+      } catch {
+        // ignore
+      }
     }
   } catch (err) {
-    console.warn('[ambientSoundService] Failed to start sound:', err)
+    console.warn('[ambientSoundService] Error stopping stem ' + stemId + ':', err)
   }
+
+  activeStemsMap.delete(stemId)
+  notifyListeners()
+}
+
+/**
+ * Toggle a specific ambient stem
+ */
+export function toggleStem(stemId) {
+  if (activeStemsMap.has(stemId)) {
+    stopStem(stemId)
+  } else {
+    startStem(stemId)
+  }
+}
+
+/**
+ * Check if a stem is currently playing
+ */
+export function isStemActive(stemId) {
+  return activeStemsMap.has(stemId)
+}
+
+/**
+ * Get array of all currently active stem IDs
+ */
+export function getActiveStems() {
+  return Array.from(activeStemsMap.keys())
+}
+
+/**
+ * Set individual stem volume (0.0 to 1.0)
+ */
+export function setStemVolume(stemId, volume) {
+  const clamped = Math.max(0, Math.min(1, volume))
+  stemVolumes[stemId] = clamped
+
+  const stem = activeStemsMap.get(stemId)
+  if (stem && stem.gainNode && audioCtx) {
+    try {
+      stem.gainNode.gain.setValueAtTime(clamped, audioCtx.currentTime)
+    } catch {
+      // ignore
+    }
+  }
+  notifyListeners()
+}
+
+export function getStemVolumes() {
+  return { ...stemVolumes }
+}
+
+/**
+ * Set master volume (0.0 to 1.0)
+ */
+export function setMasterVolume(vol) {
+  masterVolume = Math.max(0, Math.min(1, vol))
+  if (masterGainNode && audioCtx && !isMuted) {
+    try {
+      masterGainNode.gain.setValueAtTime(masterVolume, audioCtx.currentTime)
+    } catch {
+      // ignore
+    }
+  }
+  notifyListeners()
+}
+
+export function getMasterVolume() {
+  return masterVolume
+}
+
+/**
+ * Toggle master mute
+ */
+export function toggleMasterMute() {
+  isMuted = !isMuted
+  if (masterGainNode && audioCtx) {
+    try {
+      masterGainNode.gain.setValueAtTime(isMuted ? 0 : masterVolume, audioCtx.currentTime)
+    } catch {
+      // ignore
+    }
+  }
+  notifyListeners()
+  return isMuted
+}
+
+export function isMasterMuted() {
+  return isMuted
+}
+
+/**
+ * Stop all active ambient stems
+ */
+export function stopAllAmbientSounds() {
+  const stems = Array.from(activeStemsMap.keys())
+  stems.forEach((id) => stopStem(id))
+}
+
+// ── BACKWARD COMPATIBILITY EXPORTS ──
+
+export function playAmbientSound(type, volume = 0.5) {
+  if (!type || type === 'none') {
+    stopAllAmbientSounds()
+    return
+  }
+  // If switching single soundscape in legacy mode, stop other stems and start this one
+  const stems = Array.from(activeStemsMap.keys())
+  stems.forEach((id) => {
+    if (id !== type) stopStem(id)
+  })
+  startStem(type, volume)
+}
+
+export function stopAmbientSound() {
+  stopAllAmbientSounds()
+}
+
+export function setAmbientVolume(vol) {
+  setMasterVolume(vol)
+}
+
+export function getCurrentAmbientSound() {
+  const active = getActiveStems()
+  return active.length > 0 ? active[0] : 'none'
+}
+
+export function getCurrentAmbientVolume() {
+  return masterVolume
 }

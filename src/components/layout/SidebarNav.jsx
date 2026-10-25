@@ -177,10 +177,10 @@ export default function SidebarNav() {
                       </motion.div>
 
                       {!isCollapsed && (
-                        <div className="flex items-center justify-between flex-1 min-w-0">
-                          <span className="truncate text-[13.5px]">{item.name}</span>
+                        <div className="flex items-center justify-between flex-1 min-w-0 gap-1.5">
+                          <span className="truncate text-[13.5px]" title={item.name}>{item.name}</span>
                           {getItemCount(item.id) !== null && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-white/[0.06] text-nocturn-muted group-hover:text-white">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-white/[0.06] text-nocturn-muted group-hover:text-white shrink-0">
                               {getItemCount(item.id)}
                             </span>
                           )}

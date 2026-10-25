@@ -95,6 +95,14 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
     }
   }
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setTitle('')
+      inputRef.current?.blur()
+    }
+  }
+
   const hasNaturalTokens =
     naturalParsed.priority ||
     naturalParsed.day ||
@@ -122,6 +130,7 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={handleKeyDown}
           onFocus={() => setIsFocused(true)}
           onBlur={() => {
             // Delay to allow clicking autocomplete chips
@@ -132,6 +141,13 @@ export default function AddTask({ onAddTask, defaultDay = 'none', defaultInMyDay
           style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
           className="w-full h-full bg-transparent text-sm sm:text-[14.5px] text-white placeholder-nocturn-muted/60 focus:outline-none focus:ring-0 focus:shadow-none focus:border-none border-none outline-none shadow-none z-10"
         />
+
+        {/* Keyboard shortcut hint when typing */}
+        {title.trim() && (
+          <span className="text-[10px] font-mono text-nocturn-dim mr-2 hidden sm:inline select-none z-10">
+            ↵ to add · Esc to clear
+          </span>
+        )}
 
         {/* Enter / Submit Button */}
         <motion.button
