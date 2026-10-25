@@ -892,7 +892,8 @@ export function TimerSessionProvider({ children }) {
     const currentRemaining = endAt ? Math.max(0, Math.round((endAt - nowMs) / 1000)) : remainingSeconds
     const elapsedSecs = Math.max(0, totalSeconds - currentRemaining)
 
-    const resetDur = getModeDurationSeconds(mode)
+    const resetDur = getModeDurationSeconds('focus')
+    setMode('focus')
     setStatus('idle')
     setEndAt(null)
     setTotalSeconds(resetDur)
@@ -907,7 +908,7 @@ export function TimerSessionProvider({ children }) {
       await updateTimerState({
         actionId: crypto.randomUUID(),
         status: 'idle',
-        mode,
+        mode: 'focus',
         endAt: null,
         totalSeconds: resetDur,
         lastActionAt: new Date(nowMs).toISOString(),

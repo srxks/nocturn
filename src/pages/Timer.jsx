@@ -155,9 +155,9 @@ export default function Timer() {
   }, [togglePlayPause])
 
   const handleRequestEndSession = useCallback(() => {
-    if (status !== 'running' && status !== 'paused') return
+    if (status !== 'running' && status !== 'paused' && mode === 'focus') return
     setShowEndSessionConfirm(true)
-  }, [status])
+  }, [status, mode])
 
   const handleConfirmEndSession = useCallback(async () => {
     setShowEndSessionConfirm(false)
@@ -395,7 +395,13 @@ export default function Timer() {
                 isBreak={mode !== 'focus'}
               />
               <span className="text-[11px] text-nocturn-dim font-medium">
-                {mode === 'focus' ? `${settings.sessions} Focus blocks cycle` : 'Break in progress'}
+                {mode === 'focus'
+                  ? `${settings?.sessions || 4} Focus blocks cycle`
+                  : isRunning
+                  ? 'Break in progress'
+                  : isPaused
+                  ? 'Break paused'
+                  : 'Break ready to start'}
               </span>
             </div>
           )}

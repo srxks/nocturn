@@ -190,9 +190,12 @@ export default function TimerControls({
   }
 
   // ── COUNTDOWN / POMODORO CONTROLS ──
+  const isSessionActive = isRunning || isPaused || mode !== 'focus'
+  const endSessionLabel = mode === 'focus' ? 'End Session' : 'End Break'
+
   return (
     <div className="flex flex-col items-center gap-3 pt-2">
-      <div className="flex items-center justify-center gap-3 sm:gap-4">
+      <div className="flex items-center justify-center gap-2.5 sm:gap-4 flex-wrap">
         {/* Reset Button */}
         <motion.button
           whileHover={{ scale: 1.05 }}
@@ -201,7 +204,7 @@ export default function TimerControls({
           onClick={onReset}
           title="Reset timer"
           aria-label="Reset current timer"
-          className="w-11 h-11 rounded-full bg-white/[0.03] border border-white/[0.08] hover:border-white/20 text-nocturn-muted hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+          className="w-11 h-11 rounded-full bg-white/[0.03] border border-white/[0.08] hover:border-white/20 text-nocturn-muted hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
         >
           <RotateCcw className="w-4 h-4 stroke-[2]" />
         </motion.button>
@@ -213,7 +216,7 @@ export default function TimerControls({
           type="button"
           onClick={onTogglePlayPause}
           aria-label={isRunning ? 'Pause timer' : isPaused ? 'Resume timer' : isCompleted ? (mode === 'focus' ? 'Start break' : 'Start focus') : 'Start timer'}
-          className={`w-16 h-16 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white flex items-center justify-center cursor-pointer transition-all ${
+          className={`w-16 h-16 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white flex items-center justify-center cursor-pointer transition-all shrink-0 ${
             isCompleted
               ? 'shadow-[0_0_30px_rgba(var(--color-nocturn-accent-rgb),0.55)] ring-2 ring-nocturn-accent ring-offset-2 ring-offset-[#07070a]'
               : 'shadow-[0_0_24px_rgba(var(--color-nocturn-accent-rgb),0.35)]'
@@ -244,23 +247,24 @@ export default function TimerControls({
           </AnimatePresence>
         </motion.button>
 
-        {/* End Session Button (Terminates current session intentionally) */}
+        {/* End Session Button (Explicit, visually distinct pill) */}
         <motion.button
-          whileHover={isRunning || isPaused ? { scale: 1.05 } : {}}
-          whileTap={isRunning || isPaused ? { scale: 0.92 } : {}}
+          whileHover={isSessionActive ? { scale: 1.04 } : {}}
+          whileTap={isSessionActive ? { scale: 0.94 } : {}}
           type="button"
           data-testid="timer-end-session-btn"
-          onClick={onTerminate}
-          disabled={!isRunning && !isPaused}
-          title="End session"
-          aria-label="End session"
-          className={`w-11 h-11 rounded-full border flex items-center justify-center transition-colors ${
-            isRunning || isPaused
-              ? 'bg-rose-500/10 border-rose-500/30 text-rose-300 hover:bg-rose-500/20 cursor-pointer shadow-[0_0_12px_rgba(244,63,94,0.15)]'
-              : 'bg-white/[0.02] border-white/[0.05] text-white/20 cursor-not-allowed opacity-40'
+          onClick={isSessionActive ? onTerminate : undefined}
+          disabled={!isSessionActive}
+          title={endSessionLabel}
+          aria-label={endSessionLabel}
+          className={`h-11 px-3.5 sm:px-4 rounded-full border flex items-center justify-center gap-1.5 transition-all text-xs font-semibold shrink-0 ${
+            isSessionActive
+              ? 'bg-rose-500/15 border-rose-500/35 text-rose-300 hover:bg-rose-500/25 hover:text-rose-200 cursor-pointer shadow-[0_0_14px_rgba(244,63,94,0.18)]'
+              : 'bg-white/[0.02] border-white/[0.06] text-white/30 cursor-not-allowed'
           }`}
         >
-          <Square className="w-4 h-4 fill-current" />
+          <Square className="w-3.5 h-3.5 fill-current" />
+          <span>{endSessionLabel}</span>
         </motion.button>
 
         {/* Skip / Next Button */}
@@ -271,7 +275,7 @@ export default function TimerControls({
           onClick={onSkip}
           title="Skip to next session"
           aria-label="Skip to next session"
-          className="w-11 h-11 rounded-full bg-white/[0.03] border border-white/[0.08] hover:border-white/20 text-nocturn-muted hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+          className="w-11 h-11 rounded-full bg-white/[0.03] border border-white/[0.08] hover:border-white/20 text-nocturn-muted hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
         >
           <SkipForward className="w-4 h-4 stroke-[2]" />
         </motion.button>

@@ -82,7 +82,7 @@ export default function GlobalOfflineBanner() {
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-20 sm:bottom-5 left-1/2 -translate-x-1/2 z-[85] pointer-events-none select-none"
+      className="fixed bottom-20 left-1/2 -translate-x-1/2 sm:bottom-5 sm:right-6 sm:left-auto sm:translate-x-0 z-[85] pointer-events-none select-none"
     >
       <AnimatePresence>
         {isVisible && (
