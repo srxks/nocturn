@@ -25,6 +25,7 @@ import { resolveConflict, getTombstones, clearTombstone, isTombstoned } from './
 import { setSyncingState, reportNetworkSuccess, classifyAndReportError, isNetworkInCooldown } from './networkStateService.js'
 import { drainSyncQueue } from './syncQueue.js'
 import { runCoordinatedSync } from './syncCoordinator.js'
+import { areRecordsContentEqual } from '../utils/hashUtils.js'
 
 export async function syncWithCloud(userId) {
   if (
@@ -210,12 +211,15 @@ export async function syncWithCloud(userId) {
         }
       } else {
         confirmedTaskIds.add(remoteMatch.id)
-        const conflict = resolveConflict(localTask, remoteMatch)
-        if (conflict === 'local') {
-          const res = await upsertTaskRemote({ ...localTask, userId }, userId)
-          if (res) totalSynced++
-        } else if (conflict === 'remote') {
-          await db.tasks.put({ ...remoteMatch, id: localTask.id })
+        // Check canonical hash equality before uploading or overwriting
+        if (!areRecordsContentEqual(localTask, remoteMatch)) {
+          const conflict = resolveConflict(localTask, remoteMatch)
+          if (conflict === 'local') {
+            const res = await upsertTaskRemote({ ...localTask, userId }, userId)
+            if (res) totalSynced++
+          } else if (conflict === 'remote') {
+            await db.tasks.put({ ...remoteMatch, id: localTask.id })
+          }
         }
       }
     }
@@ -414,12 +418,14 @@ export async function syncWithCloud(userId) {
           totalSynced++
         }
       } else {
-        const conflict = resolveConflict(localW, remoteMatch)
-        if (conflict === 'local') {
-          await upsertVocabWordsRemote([localW], userId)
-          totalSynced++
-        } else if (conflict === 'remote') {
-          await db.vocab.put(remoteMatch)
+        if (!areRecordsContentEqual(localW, remoteMatch)) {
+          const conflict = resolveConflict(localW, remoteMatch)
+          if (conflict === 'local') {
+            await upsertVocabWordsRemote([localW], userId)
+            totalSynced++
+          } else if (conflict === 'remote') {
+            await db.vocab.put(remoteMatch)
+          }
         }
       }
     }

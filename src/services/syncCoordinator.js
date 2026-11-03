@@ -4,12 +4,13 @@
  * Centralized Global Sync Coordinator for Nocturn.
  *
  * Guarantees:
- * 1. Single global sync lock: only one full cloud sync can run at a time.
- * 2. In-flight request deduplication: concurrent requests for the same resource
+ * 1. Single global sync lock: only one full cloud sync can run at a time per tab.
+ * 2. Cross-tab leadership coordination via Web Locks API (`navigator.locks`).
+ * 3. In-flight request deduplication: concurrent requests for the same resource
  *    share a single HTTP promise.
- * 3. Cooldown & circuit breaker: suppresses requests during network drops (ERR_CONNECTION_CLOSED).
- * 4. Throttles auth-triggered and visibility-triggered syncs (min 15s interval).
- * 5. Preserves Dexie local cache as source of truth during offline / network errors.
+ * 4. Cooldown & circuit breaker: suppresses requests during network drops.
+ * 5. Throttles auth-triggered and visibility-triggered syncs (min 15s interval).
+ * 6. Preserves Dexie local cache as source of truth during offline / network errors.
  */
 
 import { isNetworkInCooldown } from './networkStateService.js'
@@ -24,7 +25,6 @@ const inFlightRequests = new Map()
 
 /**
  * Deduplicates concurrent in-flight async operations by key.
- * If a request for `key` is already pending, subsequent calls receive the existing promise.
  */
 export async function dedupeRequest(key, fetcher) {
   if (inFlightRequests.has(key)) {
@@ -43,15 +43,27 @@ export async function dedupeRequest(key, fetcher) {
   return promise
 }
 
-// ─── 2. Coordinated Cloud Sync ────────────────────────────────────────────────
+// ─── 2. Cross-Tab Lock Wrapper ────────────────────────────────────────────────
+async function acquireTabSyncLock(fn) {
+  if (typeof navigator !== 'undefined' && navigator.locks && navigator.locks.request) {
+    try {
+      return await navigator.locks.request('nocturn_cloud_sync_lock', { ifAvailable: true }, async (lock) => {
+        if (!lock) {
+          // Another tab is actively syncing
+          return { success: true, synced: 0, sharedLock: true }
+        }
+        return await fn()
+      })
+    } catch {
+      return await fn()
+    }
+  }
+  return await fn()
+}
+
+// ─── 3. Coordinated Cloud Sync ────────────────────────────────────────────────
 /**
  * Executes a centrally coordinated cloud sync.
- *
- * @param {string} userId - Authenticated user UUID
- * @param {Function} syncFn - The underlying syncWithCloud function
- * @param {object} options
- * @param {boolean} [options.force=false] - Bypass interval throttle (e.g. user manually clicked Sync)
- * @param {string} [options.source='unknown'] - Origin of the sync request for diagnostics
  */
 export async function runCoordinatedSync(userId, syncFn, options = {}) {
   const { force = false, source = 'unknown' } = options
@@ -60,12 +72,12 @@ export async function runCoordinatedSync(userId, syncFn, options = {}) {
     return { success: false, synced: 0, reason: 'unauthenticated' }
   }
 
-  // 1. Return active in-flight sync if one is currently executing
+  // Return active in-flight sync if one is currently executing
   if (activeSyncPromise) {
     return activeSyncPromise
   }
 
-  // 2. Offline / Cooldown guard (circuit breaker for connection drops)
+  // Offline / Cooldown guard
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return { success: true, synced: 0, offline: true }
   }
@@ -74,21 +86,23 @@ export async function runCoordinatedSync(userId, syncFn, options = {}) {
     return { success: false, synced: 0, offline: true, inCooldown: true }
   }
 
-  // 3. Minimum interval throttle
+  // Minimum interval throttle
   const now = Date.now()
   if (!force && now - lastSyncCompletedAt < MIN_SYNC_INTERVAL_MS) {
     return { success: true, synced: 0, throttled: true }
   }
 
-  // 4. Launch coordinated execution
+  // Launch execution under Web Locks cross-tab protection
   activeSyncPromise = (async () => {
     try {
-      const result = await syncFn(userId)
-      if (result && result.success) {
-        lastSyncCompletedAt = Date.now()
-        lastSyncSource = source
-      }
-      return result
+      return await acquireTabSyncLock(async () => {
+        const result = await syncFn(userId)
+        if (result && result.success) {
+          lastSyncCompletedAt = Date.now()
+          lastSyncSource = source
+        }
+        return result
+      })
     } finally {
       activeSyncPromise = null
     }
@@ -97,30 +111,18 @@ export async function runCoordinatedSync(userId, syncFn, options = {}) {
   return activeSyncPromise
 }
 
-/**
- * Returns true if a full cloud sync is currently running.
- */
 export function isSyncInProgress() {
   return Boolean(activeSyncPromise)
 }
 
-/**
- * Returns the epoch timestamp of the last successful sync.
- */
 export function getLastSyncCompletedAt() {
   return lastSyncCompletedAt
 }
 
-/**
- * Returns the source identifier of the last successful sync.
- */
 export function getLastSyncSource() {
   return lastSyncSource
 }
 
-/**
- * Triggers an immediate manual sync pass (drains pending queue and runs full sync).
- */
 export async function syncNow(userId = null) {
   try {
     const { forceManualSync, drainSyncQueue } = await import('./syncService.js')
