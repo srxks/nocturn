@@ -290,7 +290,7 @@ export default function Vocab() {
               </div>
 
               {/* Status Badge */}
-              {isDailyCompleted ? (
+              {isDailyCompleted && learnedTodayCount >= totalConfiguredWords && totalConfiguredWords > 0 ? (
                 <Badge variant="success" size="sm" dot icon={CheckCircle2}>
                   Completed
                 </Badge>
@@ -343,11 +343,11 @@ export default function Vocab() {
               onClick={handleStartLearn}
               disabled={isGenerating || totalConfiguredWords === 0}
               className="w-full justify-center text-sm font-semibold shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.35)]"
-              icon={isDailyCompleted ? ArrowRight : Play}
+              icon={isDailyCompleted && learnedTodayCount >= totalConfiguredWords ? ArrowRight : Play}
             >
               {totalConfiguredWords === 0
                 ? 'Configure Words to Start'
-                : isDailyCompleted
+                : isDailyCompleted && learnedTodayCount >= totalConfiguredWords
                 ? 'Review Set'
                 : learnedTodayCount > 0
                 ? 'Continue Learning'

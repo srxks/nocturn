@@ -124,9 +124,7 @@ export default function VocabLearn() {
   useEffect(() => {
     if (currentWord?.id && !markedWordsRef.current.has(currentWord.id)) {
       markedWordsRef.current.add(currentWord.id)
-      if (currentWord.date_added !== todayKey) {
-        markWordLearned(currentWord).catch(() => {})
-      }
+      markWordLearned(currentWord).catch(() => {})
       try {
         if (sessionCompletedIdsKey) {
           const raw = localStorage.getItem(sessionCompletedIdsKey)
@@ -140,7 +138,7 @@ export default function VocabLearn() {
         // ignore
       }
     }
-  }, [currentWord, todayKey, markWordLearned, sessionCompletedIdsKey])
+  }, [currentWord, markWordLearned, sessionCompletedIdsKey])
 
   const isFlipped = flippedWordIndex === safeIndex
   const toggleFlip = useCallback(() => {

@@ -75,6 +75,8 @@ export function useVocab() {
 
   // Session Resumption Metrics
   const isDailyCompleted = useMemo(() => {
+    // Only completed if there are daily words and all daily words have been learned
+    if (!dailyWords || dailyWords.length === 0) return false
     if (todayVocabLog?.completed === true) return true
     try {
       if (typeof localStorage !== 'undefined' && localStorage.getItem(sessionCompleteKey) === 'true') {
@@ -84,7 +86,7 @@ export function useVocab() {
       // ignore
     }
     return false
-  }, [todayVocabLog, sessionCompleteKey])
+  }, [dailyWords, todayVocabLog, sessionCompleteKey])
 
   const currentLearningIndex = useMemo(() => {
     if (dailyWords.length === 0) return 0
