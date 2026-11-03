@@ -166,9 +166,18 @@ export async function drainSyncQueue() {
               ? 'user_id, name'
               : 'id'
 
+          // Sanitize vocab_words difficulty to lowercase to adhere to check constraint
+          let payloadToUpsert = entry.payload
+          if (entry.table === 'vocab_words' && payloadToUpsert?.difficulty) {
+            payloadToUpsert = {
+              ...payloadToUpsert,
+              difficulty: String(payloadToUpsert.difficulty).trim().toLowerCase(),
+            }
+          }
+
           const { error } = await supabase
             .from(entry.table)
-            .upsert(entry.payload, { onConflict })
+            .upsert(payloadToUpsert, { onConflict })
 
           if (error) {
             classifyAndReportError(error)

@@ -3,6 +3,23 @@ import { toUuid } from './idUtils.js'
 import { dedupeRequest } from '../services/syncCoordinator.js'
 import { classifyAndReportError } from '../services/networkStateService.js'
 
+export function normalizeDifficultyForDb(diff) {
+  if (!diff) return 'medium'
+  const lower = String(diff).trim().toLowerCase()
+  if (lower === 'easy' || lower === 'medium' || lower === 'hard') {
+    return lower
+  }
+  return 'medium'
+}
+
+export function formatDifficultyForUi(diff) {
+  if (!diff) return 'Medium'
+  const lower = String(diff).trim().toLowerCase()
+  if (lower === 'easy') return 'Easy'
+  if (lower === 'hard') return 'Hard'
+  return 'Medium'
+}
+
 export function mapRowToVocabWord(row) {
   if (!row) return null
   return {
@@ -13,7 +30,7 @@ export function mapRowToVocabWord(row) {
     example_sentence: row.example_sentence || '',
     part_of_speech: row.part_of_speech || 'noun',
     synonyms: row.synonyms || [],
-    difficulty: row.difficulty || 'Medium',
+    difficulty: formatDifficultyForUi(row.difficulty),
     date_added: row.date_added,
     correct_count: Math.min(Math.max(row.correct_count || 0, 0), 5),
     last_quizzed_date: row.last_quizzed_date || null,
@@ -67,7 +84,7 @@ export function mapVocabWordToRow(item, userId) {
     date_added: item.date_added || new Date().toISOString().split('T')[0],
     correct_count: Math.min(Math.max(item.correct_count || 0, 0), 5),
     last_quizzed_date: item.last_quizzed_date || null,
-    difficulty: item.difficulty || 'Medium',
+    difficulty: normalizeDifficultyForDb(item.difficulty),
     created_at: item.createdAt || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }
