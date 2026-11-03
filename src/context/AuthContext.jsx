@@ -270,6 +270,17 @@ export function AuthProvider({ children }) {
       password,
     })
     if (error) throw error
+
+    // Immediately hydrate user and session synchronously to guarantee downstream ProtectedRoute does not bounce
+    if (data?.user) {
+      setUser(data.user)
+      setSession(data.session)
+      try {
+        localStorage.setItem('nocturn_auth_user', JSON.stringify(data.user))
+      } catch {
+        // ignore
+      }
+    }
     return data
   }
 
