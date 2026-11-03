@@ -43,6 +43,7 @@ export default function TimerControls({
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.94 }}
             type="button"
+            data-testid="timer-play-pause-btn"
             onClick={onTogglePlayPause}
             aria-label={isRunning ? 'Pause stopwatch' : isPaused ? 'Resume stopwatch' : 'Start stopwatch'}
             className="w-16 h-16 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white flex items-center justify-center cursor-pointer transition-all shadow-[0_0_24px_rgba(var(--color-nocturn-accent-rgb),0.35)]"
@@ -74,20 +75,22 @@ export default function TimerControls({
 
           {/* Stop Button (Freezes stopwatch elapsed time) */}
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.92 }}
+            whileHover={isRunning || isPaused ? { scale: 1.04 } : {}}
+            whileTap={isRunning || isPaused ? { scale: 0.94 } : {}}
             type="button"
+            data-testid="timer-stop-stopwatch-btn"
             onClick={onTerminate || onTogglePlayPause}
             disabled={!isRunning && !isPaused}
             title="Stop stopwatch"
             aria-label="Stop stopwatch"
-            className={`w-11 h-11 rounded-full border flex items-center justify-center transition-colors cursor-pointer ${
+            className={`h-11 px-3.5 sm:px-4 rounded-full border flex items-center justify-center gap-1.5 transition-all text-xs font-semibold shrink-0 ${
               isRunning || isPaused
-                ? 'bg-rose-500/10 border-rose-500/25 text-rose-300 hover:bg-rose-500/20'
-                : 'bg-white/[0.02] border-white/[0.05] text-white/20 cursor-not-allowed'
+                ? 'bg-rose-500/15 border-rose-500/35 text-rose-300 hover:bg-rose-500/25 hover:text-rose-200 cursor-pointer shadow-[0_0_14px_rgba(244,63,94,0.18)]'
+                : 'bg-white/[0.02] border-white/[0.06] text-white/30 cursor-not-allowed'
             }`}
           >
-            <Square className="w-4 h-4 fill-current" />
+            <Square className="w-3.5 h-3.5 fill-current" />
+            <span>Stop</span>
           </motion.button>
         </div>
       </div>
@@ -122,6 +125,7 @@ export default function TimerControls({
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.94 }}
             type="button"
+            data-testid="timer-play-pause-btn"
             onClick={onTogglePlayPause}
             aria-label={isRunning ? 'Pause focus session' : isPaused ? 'Resume focus session' : 'Start focus stopwatch'}
             className="w-16 h-16 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white flex items-center justify-center cursor-pointer transition-all shadow-[0_0_24px_rgba(var(--color-nocturn-accent-rgb),0.35)]"
@@ -153,38 +157,24 @@ export default function TimerControls({
 
           {/* Finish Focus Button (Saves focus session to stats) */}
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.92 }}
+            whileHover={isRunning || isPaused ? { scale: 1.04 } : {}}
+            whileTap={isRunning || isPaused ? { scale: 0.94 } : {}}
             type="button"
+            data-testid="timer-finish-focus-btn"
             onClick={onFinishFocus || onTerminate}
             disabled={!isRunning && !isPaused}
             title="Finish and log focus session"
             aria-label="Finish focus session"
-            className={`w-11 h-11 rounded-full border flex items-center justify-center transition-colors cursor-pointer ${
+            className={`h-11 px-3.5 sm:px-4 rounded-full border flex items-center justify-center gap-1.5 transition-all text-xs font-semibold shrink-0 ${
               isRunning || isPaused
-                ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300 hover:bg-emerald-500/25'
-                : 'bg-white/[0.02] border-white/[0.05] text-white/20 cursor-not-allowed'
+                ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300 hover:bg-emerald-500/25 hover:text-emerald-200 cursor-pointer shadow-[0_0_14px_rgba(16,185,129,0.18)]'
+                : 'bg-white/[0.02] border-white/[0.06] text-white/30 cursor-not-allowed'
             }`}
-          >
-            <Check className="w-4 h-4 stroke-[2.5]" />
-          </motion.button>
-        </div>
-
-        {/* Prominent Finish Focus CTA when running or paused */}
-        {(isRunning || isPaused) && (
-          <motion.button
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            type="button"
-            onClick={onFinishFocus || onTerminate}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.2)]"
           >
             <Check className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>Finish Focus</span>
           </motion.button>
-        )}
+        </div>
       </div>
     )
   }
@@ -201,9 +191,10 @@ export default function TimerControls({
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.92 }}
           type="button"
+          data-testid="timer-reset-btn"
           onClick={onReset}
           title="Reset timer"
-          aria-label="Reset current timer"
+          aria-label="Reset timer"
           className="w-11 h-11 rounded-full bg-white/[0.03] border border-white/[0.08] hover:border-white/20 text-nocturn-muted hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
         >
           <RotateCcw className="w-4 h-4 stroke-[2]" />
@@ -214,6 +205,7 @@ export default function TimerControls({
           whileHover={{ scale: 1.04 }}
           whileTap={{ scale: 0.94 }}
           type="button"
+          data-testid="timer-play-pause-btn"
           onClick={onTogglePlayPause}
           aria-label={isRunning ? 'Pause timer' : isPaused ? 'Resume timer' : isCompleted ? (mode === 'focus' ? 'Start break' : 'Start focus') : 'Start timer'}
           className={`w-16 h-16 rounded-full bg-nocturn-accent hover:bg-nocturn-accent-bright text-white flex items-center justify-center cursor-pointer transition-all shrink-0 ${
@@ -272,6 +264,7 @@ export default function TimerControls({
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.92 }}
           type="button"
+          data-testid="timer-skip-btn"
           onClick={onSkip}
           title="Skip to next session"
           aria-label="Skip to next session"
@@ -340,24 +333,6 @@ export default function TimerControls({
             </>
           )}
         </motion.div>
-      )}
-
-      {/* Dedicated End Session Action Pill */}
-      {(isRunning || isPaused) && onTerminate && (
-        <motion.button
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.96 }}
-          type="button"
-          onClick={onTerminate}
-          title="End session"
-          aria-label="End session"
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition-all cursor-pointer shadow-[0_0_12px_rgba(244,63,94,0.15)]"
-        >
-          <Square className="w-3.5 h-3.5 fill-current" />
-          <span>End Session</span>
-        </motion.button>
       )}
     </div>
   )

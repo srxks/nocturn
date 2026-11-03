@@ -9,6 +9,7 @@ import {
   Maximize2,
   Sparkles,
   Square,
+  RotateCcw,
 } from 'lucide-react'
 import TimerRing from '../components/timer/TimerRing'
 import TimerControls from '../components/timer/TimerControls'
@@ -39,6 +40,8 @@ export default function Timer() {
     elapsedSeconds,
     currentSession,
     completedFocusCount,
+    cycleState,
+    resetCycle,
     status,
     isCompleted: isSessionCompleted,
     taskName,
@@ -69,6 +72,8 @@ export default function Timer() {
   const [isFocusModeOpen, setIsFocusModeOpen] = useState(() => Boolean(location.state?.focusMode))
   const [prevFocusModeProp, setPrevFocusModeProp] = useState(location.state?.focusMode)
   const [showEndSessionConfirm, setShowEndSessionConfirm] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [showResetCycleConfirm, setShowResetCycleConfirm] = useState(false)
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false)
 
   const activePresetId = useMemo(() => {
@@ -163,6 +168,15 @@ export default function Timer() {
     setShowEndSessionConfirm(false)
     await terminateTimer()
   }, [terminateTimer])
+
+  const handleRequestReset = useCallback(() => {
+    // Require confirmation only if resetting an active/paused session with >= 15s elapsed to prevent accidental loss
+    if ((isRunning || isPaused) && elapsedSeconds >= 15) {
+      setShowResetConfirm(true)
+    } else {
+      resetTimer()
+    }
+  }, [isRunning, isPaused, elapsedSeconds, resetTimer])
 
   // ONLY EXCEPTION: Spacebar toggles Play/Pause on the /timer route (and only when not inside an input/textarea)
   useEffect(() => {
@@ -391,18 +405,30 @@ export default function Timer() {
             <div className="w-full flex flex-col items-center space-y-1">
               <SessionDots
                 currentSession={currentSession}
-                totalSessions={settings.sessions}
+                totalSessions={settings?.sessions || 4}
                 isBreak={mode !== 'focus'}
+                blockStatuses={cycleState?.blockStatuses || {}}
               />
-              <span className="text-[11px] text-nocturn-dim font-medium">
-                {mode === 'focus'
-                  ? `${settings?.sessions || 4} Focus blocks cycle`
-                  : isRunning
-                  ? 'Break in progress'
-                  : isPaused
-                  ? 'Break paused'
-                  : 'Break ready to start'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-nocturn-dim font-medium">
+                  {mode === 'focus'
+                    ? `${cycleState?.completedBlocks ?? completedFocusCount} of ${cycleState?.totalBlocks ?? settings?.sessions ?? 4} completed`
+                    : isRunning
+                    ? 'Break in progress'
+                    : isPaused
+                    ? 'Break paused'
+                    : 'Break ready to start'}
+                </span>
+                <span className="text-white/20">•</span>
+                <button
+                  type="button"
+                  data-testid="timer-inline-reset-cycle-btn"
+                  onClick={() => setShowResetCycleConfirm(true)}
+                  className="text-[11px] text-nocturn-muted hover:text-rose-400 transition-colors cursor-pointer"
+                >
+                  Reset Cycle
+                </button>
+              </div>
             </div>
           )}
 
@@ -414,7 +440,7 @@ export default function Timer() {
             mode={mode}
             isLongBreak={isLongBreak}
             onTogglePlayPause={handleTogglePlayPause}
-            onReset={resetTimer}
+            onReset={handleRequestReset}
             onSkip={skipTimer}
             onTerminate={handleRequestEndSession}
             onFinishFocus={finishFocusStopwatch}
@@ -480,14 +506,24 @@ export default function Timer() {
 
           {/* Daily Rhythm Progress */}
           <div className="p-5 rounded-3xl bg-[#11131a]/70 backdrop-blur-2xl border border-white/[0.08] shadow-2xl space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-nocturn-muted flex items-center gap-1.5">
-              <Target className="w-3.5 h-3.5 text-nocturn-accent" />
-              <span>Today's Progress</span>
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-nocturn-muted flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-nocturn-accent" />
+                <span>Today's Progress</span>
+              </h3>
+              <button
+                type="button"
+                data-testid="timer-reset-cycle-btn"
+                onClick={() => setShowResetCycleConfirm(true)}
+                className="text-[11px] font-semibold text-nocturn-muted hover:text-rose-400 transition-colors cursor-pointer"
+              >
+                Reset Cycle
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] text-center">
                 <span className="text-xl font-bold font-mono text-white block">
-                  {completedFocusCount % (Number(settings?.sessions) || 4)} / {settings?.sessions || 4}
+                  {cycleState?.completedBlocks ?? completedFocusCount} / {cycleState?.totalBlocks ?? settings?.sessions ?? 4}
                 </span>
                 <span className="text-[10px] text-nocturn-muted uppercase tracking-wider font-semibold">
                   Blocks Done
@@ -495,7 +531,7 @@ export default function Timer() {
               </div>
               <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] text-center">
                 <span className="text-xl font-bold font-mono text-nocturn-accent block">
-                  {Math.round(((completedFocusCount % (Number(settings?.sessions) || 4)) * (totalSeconds || 1500)) / 60)}m
+                  {Math.round((cycleState?.actualFocusedSeconds ?? 0) / 60)}m
                 </span>
                 <span className="text-[10px] text-nocturn-muted uppercase tracking-wider font-semibold">
                   Focused
@@ -528,7 +564,7 @@ export default function Timer() {
         onSkip={skipTimer}
         onFinishFocus={finishFocusStopwatch}
         onDiscardFocus={discardFocusStopwatch}
-        onReset={resetTimer}
+        onReset={handleRequestReset}
       />
 
       {/* Mid-Session Preset Switch Confirmation Modal */}
@@ -633,10 +669,89 @@ export default function Timer() {
         </div>
       )}
 
+      {/* Reset Block Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto">
+          <div className="bg-[#12141c] border border-amber-500/25 rounded-2xl p-5 sm:p-6 shadow-2xl max-w-sm w-full space-y-4 text-center animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 mx-auto">
+              <RotateCcw className="w-5 h-5 stroke-[2.5]" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base sm:text-lg font-bold text-white">
+                Reset Current Block?
+              </h3>
+              <p className="text-xs sm:text-sm text-nocturn-muted leading-relaxed">
+                This will reset the current block's timer back to {Math.round(totalSeconds / 60)} min. Unsaved progress on this block will be cleared. Completed sessions and cycle statistics remain safe.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="py-2.5 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white border border-white/10 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-reset-btn"
+                onClick={async () => {
+                  setShowResetConfirm(false)
+                  await resetTimer()
+                }}
+                className="py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-md shadow-amber-950/50 transition-colors cursor-pointer"
+              >
+                Reset Block
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Cycle Confirmation Modal */}
+      {showResetCycleConfirm && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto">
+          <div className="bg-[#12141c] border border-rose-500/25 rounded-2xl p-5 sm:p-6 shadow-2xl max-w-sm w-full space-y-4 text-center animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400 mx-auto">
+              <RotateCcw className="w-5 h-5 stroke-[2.5]" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base sm:text-lg font-bold text-white">
+                Reset Current Cycle?
+              </h3>
+              <p className="text-xs sm:text-sm text-nocturn-muted leading-relaxed">
+                This will reset your current cycle progress back to Block 1 of {cycleState?.totalBlocks || settings?.sessions || 4}. Your completed focus history and daily statistics will NOT be deleted.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowResetCycleConfirm(false)}
+                className="py-2.5 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-white border border-white/10 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-reset-cycle-btn"
+                onClick={async () => {
+                  setShowResetCycleConfirm(false)
+                  if (resetCycle) await resetCycle()
+                }}
+                className="py-2.5 px-4 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold shadow-md shadow-rose-950/50 transition-colors cursor-pointer"
+              >
+                Reset Cycle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Slide-over Timer Settings Drawer */}
       <TimerSettingsDrawer
         isOpen={isSettingsDrawerOpen}
         onClose={() => setIsSettingsDrawerOpen(false)}
+        onRequestResetCycle={() => setShowResetCycleConfirm(true)}
       />
     </div>
   )

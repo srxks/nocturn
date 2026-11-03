@@ -62,27 +62,89 @@ export function TimerSessionProvider({ children }) {
 
   const isStopwatch = mode === 'normal_stopwatch' || mode === 'focus_stopwatch'
 
-  const [completedFocusCount, setCompletedFocusCount] = useState(() => {
+  const cycleLength = Math.max(1, Number(settings?.sessions) || 4)
+
+  // ── EXPLICIT CYCLE STATE (INDEPENDENT FROM RAW SESSION ROW COUNT) ──
+  const [cycleState, setCycleState] = useState(() => {
     try {
-      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('nocturn_timer_cycles') : null
-      return saved !== null && !isNaN(parseInt(saved, 10)) ? parseInt(saved, 10) : 0
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('nocturn_timer_cycle_state') : null
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed && typeof parsed === 'object') {
+          const total = Math.max(1, Number(parsed.totalBlocks) || cycleLength)
+          const blockIdx = Math.max(1, Math.min(total, Number(parsed.currentBlockIndex) || 1))
+          const statuses = parsed.blockStatuses || {}
+          if (!statuses[blockIdx]) statuses[blockIdx] = 'active'
+          return {
+            currentBlockIndex: blockIdx,
+            completedBlocks: Math.max(0, Number(parsed.completedBlocks) || 0),
+            skippedBlocks: Math.max(0, Number(parsed.skippedBlocks) || 0),
+            terminatedBlocks: Math.max(0, Number(parsed.terminatedBlocks) || 0),
+            totalBlocks: total,
+            actualFocusedSeconds: Math.max(0, Number(parsed.actualFocusedSeconds) || 0),
+            blockStatuses: statuses,
+          }
+        }
+      }
     } catch {
-      return 0
+      // ignore
+    }
+    const initialStatuses = {}
+    for (let i = 1; i <= cycleLength; i++) {
+      initialStatuses[i] = i === 1 ? 'active' : 'upcoming'
+    }
+    return {
+      currentBlockIndex: 1,
+      completedBlocks: 0,
+      skippedBlocks: 0,
+      terminatedBlocks: 0,
+      totalBlocks: cycleLength,
+      actualFocusedSeconds: 0,
+      blockStatuses: initialStatuses,
     }
   })
-  const [pendingPreset, setPendingPreset] = useState(null)
-  const pendingPresetRef = useRef(null)
 
-  const updateCompletedFocusCount = useCallback((newCount) => {
-    setCompletedFocusCount(newCount)
+  // Synchronize cycle total if settings.sessions changes
+  useEffect(() => {
+    const configuredSessions = Math.max(1, Number(settings?.sessions) || 4)
+    setCycleState((prev) => {
+      if (prev.totalBlocks === configuredSessions) return prev
+      const newStatuses = { ...prev.blockStatuses }
+      for (let i = 1; i <= configuredSessions; i++) {
+        if (!newStatuses[i]) {
+          newStatuses[i] = i === prev.currentBlockIndex ? 'active' : 'upcoming'
+        }
+      }
+      const updated = {
+        ...prev,
+        totalBlocks: configuredSessions,
+        currentBlockIndex: Math.min(prev.currentBlockIndex, configuredSessions),
+        blockStatuses: newStatuses,
+      }
+      try {
+        localStorage.setItem('nocturn_timer_cycle_state', JSON.stringify(updated))
+      } catch {}
+      return updated
+    })
+  }, [settings?.sessions])
+
+  const saveCycleState = useCallback((newState) => {
+    setCycleState(newState)
     try {
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('nocturn_timer_cycles', String(newCount))
+        localStorage.setItem('nocturn_timer_cycle_state', JSON.stringify(newState))
+        localStorage.setItem('nocturn_timer_cycles', String(newState.completedBlocks))
       }
     } catch {
       // ignore
     }
   }, [])
+
+  const completedFocusCount = cycleState.completedBlocks
+  const currentSession = cycleState.currentBlockIndex
+
+  const [pendingPreset, setPendingPreset] = useState(null)
+  const pendingPresetRef = useRef(null)
 
   const queuePendingPreset = useCallback((preset) => {
     pendingPresetRef.current = preset
@@ -126,9 +188,6 @@ export function TimerSessionProvider({ children }) {
     },
     [settings]
   )
-
-  const cycleLength = Math.max(1, Number(settings?.sessions) || 4)
-  const currentSession = (completedFocusCount % cycleLength) + 1
 
   const targetDuration = isStopwatch ? 0 : getModeDurationSeconds(mode)
   const [totalSeconds, setTotalSeconds] = useState(targetDuration)
@@ -211,8 +270,17 @@ export function TimerSessionProvider({ children }) {
           completed: true,
         })
 
-        const newCount = currentCount + 1
-        updateCompletedFocusCount(newCount)
+        const currIdx = cycleState.currentBlockIndex
+        const newCount = cycleState.completedBlocks + 1
+        const newStatuses = { ...cycleState.blockStatuses, [currIdx]: 'completed' }
+        const newFocusedSecs = cycleState.actualFocusedSeconds + currentTotal
+
+        saveCycleState({
+          ...cycleState,
+          completedBlocks: newCount,
+          actualFocusedSeconds: newFocusedSecs,
+          blockStatuses: newStatuses,
+        })
 
         // Play warm bell sound
         if (isTimerSoundsEnabled()) {
@@ -259,7 +327,7 @@ export function TimerSessionProvider({ children }) {
           actionId: crypto.randomUUID(),
           status: 'completed',
           mode: currentMode,
-          currentSession: (newCount % cycleLength) + 1,
+          currentSession: cycleState.currentBlockIndex,
           endAt: null,
           totalSeconds: currentTotal,
           lastActionAt: new Date(nowMs).toISOString(),
@@ -272,7 +340,8 @@ export function TimerSessionProvider({ children }) {
     }
   }, [
     mode,
-    completedFocusCount,
+    cycleState,
+    saveCycleState,
     taskName,
     taskId,
     totalSeconds,
@@ -280,7 +349,6 @@ export function TimerSessionProvider({ children }) {
     settings,
     updateTimerState,
     addToast,
-    updateCompletedFocusCount,
   ])
 
   // ── START NEXT PHASE (EXPLICIT USER CLICK REQUIRED) ──
@@ -289,8 +357,8 @@ export function TimerSessionProvider({ children }) {
     hasWarned5mRef.current = false
 
     if (mode === 'focus') {
-      const longBreakInterval = Number(settings?.sessions) || 4
-      const isLongBreak = completedFocusCount > 0 && completedFocusCount % longBreakInterval === 0
+      const longBreakInterval = cycleState.totalBlocks
+      const isLongBreak = cycleState.completedBlocks > 0 && cycleState.completedBlocks % longBreakInterval === 0
       const nextMode = isLongBreak ? 'longBreak' : 'shortBreak'
       const breakSecs = getModeDurationSeconds(nextMode)
       const nextEndAt = nowMs + breakSecs * 1000
@@ -314,7 +382,7 @@ export function TimerSessionProvider({ children }) {
         startedAt: new Date(nowMs).toISOString(),
         expectedEndAt: new Date(nextEndAt).toISOString(),
         status: 'active',
-        currentSession,
+        currentSession: cycleState.currentBlockIndex,
       }
       await recordActiveSession(sessionObj)
       updateActiveSession(sessionObj)
@@ -324,13 +392,22 @@ export function TimerSessionProvider({ children }) {
           actionId: crypto.randomUUID(),
           status: 'running',
           mode: nextMode,
-          currentSession,
+          currentSession: cycleState.currentBlockIndex,
           endAt: nextEndAt,
           totalSeconds: breakSecs,
           lastActionAt: new Date(nowMs).toISOString(),
         })
       }
     } else {
+      const total = cycleState.totalBlocks
+      const nextIdx = cycleState.currentBlockIndex < total ? cycleState.currentBlockIndex + 1 : 1
+      const updatedStatuses = { ...cycleState.blockStatuses, [nextIdx]: 'active' }
+      saveCycleState({
+        ...cycleState,
+        currentBlockIndex: nextIdx,
+        blockStatuses: updatedStatuses,
+      })
+
       const focusSecs = getModeDurationSeconds('focus')
       const nextEndAt = nowMs + focusSecs * 1000
 
@@ -353,7 +430,7 @@ export function TimerSessionProvider({ children }) {
         startedAt: new Date(nowMs).toISOString(),
         expectedEndAt: new Date(nextEndAt).toISOString(),
         status: 'active',
-        currentSession,
+        currentSession: nextIdx,
       }
       await recordActiveSession(sessionObj)
       updateActiveSession(sessionObj)
@@ -363,14 +440,14 @@ export function TimerSessionProvider({ children }) {
           actionId: crypto.randomUUID(),
           status: 'running',
           mode: 'focus',
-          currentSession,
+          currentSession: nextIdx,
           endAt: nextEndAt,
           totalSeconds: focusSecs,
           lastActionAt: new Date(nowMs).toISOString(),
         })
       }
     }
-  }, [mode, completedFocusCount, taskName, settings, getModeDurationSeconds, updateTimerState])
+  }, [mode, cycleState, taskName, getModeDurationSeconds, saveCycleState, updateTimerState])
 
   // ── START TIMER (COUNTDOWN) ──
   const startTimer = async (
@@ -411,6 +488,19 @@ export function TimerSessionProvider({ children }) {
     if (actualTaskName !== undefined) setTaskName(actualTaskName)
     if (actualTaskId !== undefined) setTaskId(actualTaskId)
 
+    let activeBlockIndex = cycleState.currentBlockIndex
+    if (targetMode === 'focus' && cycleState.blockStatuses[activeBlockIndex] === 'completed') {
+      activeBlockIndex = activeBlockIndex < cycleState.totalBlocks ? activeBlockIndex + 1 : 1
+      saveCycleState({
+        ...cycleState,
+        currentBlockIndex: activeBlockIndex,
+        blockStatuses: {
+          ...cycleState.blockStatuses,
+          [activeBlockIndex]: 'active',
+        },
+      })
+    }
+
     setMode(targetMode)
     setTotalSeconds(durationSecs)
     setRemainingSeconds(durationSecs)
@@ -439,7 +529,7 @@ export function TimerSessionProvider({ children }) {
       startedAt: new Date(nowMs).toISOString(),
       expectedEndAt: new Date(targetEndAt).toISOString(),
       status: 'active',
-      currentSession,
+      currentSession: activeBlockIndex,
     }
     updateActiveSession(sessionObj)
     await recordActiveSession(sessionObj)
@@ -451,6 +541,7 @@ export function TimerSessionProvider({ children }) {
         mode: targetMode,
         endAt: targetEndAt,
         totalSeconds: durationSecs,
+        currentSession: activeBlockIndex,
         taskName: actualTaskName !== undefined ? actualTaskName : taskName,
         taskId: actualTaskId !== undefined ? actualTaskId : taskId,
         lastActionAt: new Date(nowMs).toISOString(),
@@ -635,6 +726,12 @@ export function TimerSessionProvider({ children }) {
         completed: true,
       })
 
+      // Update actualFocusedSeconds in cycleState exactly once
+      saveCycleState({
+        ...cycleState,
+        actualFocusedSeconds: cycleState.actualFocusedSeconds + runningSecs,
+      })
+
       if (isTimerSoundsEnabled()) {
         playBell()
       }
@@ -648,7 +745,7 @@ export function TimerSessionProvider({ children }) {
         duration: 4000,
       })
     }
-  }, [status, taskId, taskName, addToast])
+  }, [status, taskId, taskName, cycleState, saveCycleState, addToast])
 
   const discardFocusStopwatch = useCallback(async () => {
     setStatus('idle')
@@ -684,10 +781,11 @@ export function TimerSessionProvider({ children }) {
     }
   }
 
-  // ── RESET TIMER (UNIFIED) ──
+  // ── RESET TIMER (RESET CURRENT BLOCK ONLY, PRESERVES HISTORICAL COMPLETED SESSIONS) ──
   const resetTimer = async () => {
     if (isStopwatch) {
       await resetStopwatch()
+      addToast('Stopwatch reset', { type: 'info', duration: 2500 })
     } else {
       const resetDur = getModeDurationSeconds(mode)
       setStatus('idle')
@@ -710,10 +808,11 @@ export function TimerSessionProvider({ children }) {
           lastActionAt: new Date().toISOString(),
         })
       }
+      addToast('Current block reset', { type: 'info', duration: 2500 })
     }
   }
 
-  // ── SKIP TIMER (COUNTDOWN) ──
+  // ── SKIP TIMER (EXPLICITLY ADVANCES CYCLE INDEX WITHOUT ADDING MINUTES OR INCREMENTING COMPLETED) ──
   const skipTimer = async () => {
     if (isStopwatch) {
       if (mode === 'focus_stopwatch') {
@@ -730,29 +829,23 @@ export function TimerSessionProvider({ children }) {
     hasWarned5mRef.current = false
 
     if (mode === 'focus') {
-      const currentElapsed = Math.max(0, totalSeconds - remainingSeconds)
-      if (currentElapsed >= 60) {
-        const focusMins = Math.round((currentElapsed / 60) * 10) / 10
-        const sessionStartedAt =
-          activeSessionRef.current?.startedAt ||
-          new Date(Date.now() - currentElapsed * 1000).toISOString()
-        const sessionId =
-          activeSessionRef.current?.sessionId ||
-          `session-${new Date(sessionStartedAt).getTime()}`
-        await recordPomodoroSession({
-          taskId,
-          duration: focusMins,
-          durationSeconds: currentElapsed,
-          sessionType: 'focus',
-          startedAt: sessionStartedAt,
-          taskTitle: taskName,
-          sessionId,
-          completed: false,
-        }).catch(console.warn)
+      const currIdx = cycleState.currentBlockIndex
+      const total = cycleState.totalBlocks
+      const nextIdx = currIdx < total ? currIdx + 1 : 1
+      const updatedStatuses = {
+        ...cycleState.blockStatuses,
+        [currIdx]: 'skipped',
+        [nextIdx]: 'active',
       }
+      const updatedCycle = {
+        ...cycleState,
+        currentBlockIndex: nextIdx,
+        skippedBlocks: cycleState.skippedBlocks + 1,
+        blockStatuses: updatedStatuses,
+      }
+      saveCycleState(updatedCycle)
 
-      const longBreakInterval = Number(settings?.sessions) || 4
-      const isLongBreak = (completedFocusCount + 1) > 0 && (completedFocusCount + 1) % longBreakInterval === 0
+      const isLongBreak = currIdx % total === 0
       const nextMode = isLongBreak ? 'longBreak' : 'shortBreak'
       const breakSecs = getModeDurationSeconds(nextMode)
 
@@ -761,6 +854,8 @@ export function TimerSessionProvider({ children }) {
       setRemainingSeconds(breakSecs)
       setElapsedSeconds(0)
       setStatus('idle')
+
+      addToast(`Block ${currIdx} skipped`, { type: 'info', duration: 3000 })
     } else {
       const focusSecs = getModeDurationSeconds('focus')
       setMode('focus')
@@ -768,6 +863,7 @@ export function TimerSessionProvider({ children }) {
       setRemainingSeconds(focusSecs)
       setElapsedSeconds(0)
       setStatus('idle')
+      addToast('Break skipped — ready to focus', { type: 'info', duration: 3000 })
     }
   }
 
@@ -916,9 +1012,20 @@ export function TimerSessionProvider({ children }) {
     }
 
     if (mode === 'focus') {
-      if (elapsedSecs >= 60) {
+      const currIdx = cycleState.currentBlockIndex
+      const updatedStatuses = { ...cycleState.blockStatuses, [currIdx]: 'terminated' }
+      const updatedCycle = {
+        ...cycleState,
+        terminatedBlocks: cycleState.terminatedBlocks + 1,
+        actualFocusedSeconds: cycleState.actualFocusedSeconds + elapsedSecs,
+        blockStatuses: updatedStatuses,
+      }
+      saveCycleState(updatedCycle)
+
+      if (elapsedSecs >= 1) {
         const focusMins = Math.round((elapsedSecs / 60) * 10) / 10
         const displayMins = Math.round(elapsedSecs / 60)
+        const displayTime = elapsedSecs >= 60 ? `${displayMins}m` : `${elapsedSecs}s`
         const sessionStartedAt =
           activeSessionRef.current?.startedAt ||
           new Date(nowMs - elapsedSecs * 1000).toISOString()
@@ -937,7 +1044,7 @@ export function TimerSessionProvider({ children }) {
           completed: false,
         }).catch(console.warn)
 
-        addToast(`Focus session ended — ${displayMins}m focused`, {
+        addToast(`Focus session ended early — ${displayTime} focused`, {
           type: 'info',
           duration: 3500,
         })
@@ -961,12 +1068,45 @@ export function TimerSessionProvider({ children }) {
     totalSeconds,
     taskId,
     taskName,
+    cycleState,
+    saveCycleState,
     getModeDurationSeconds,
     discardFocusStopwatch,
     resetStopwatch,
     updateTimerState,
     addToast,
   ])
+
+  // ── RESET CYCLE (CYCLE RE-INITIALIZATION ONLY, DOES NOT DELETE HISTORY) ──
+  const resetCycle = useCallback(async () => {
+    const total = Math.max(1, Number(settings?.sessions) || 4)
+    const initialStatuses = {}
+    for (let i = 1; i <= total; i++) {
+      initialStatuses[i] = i === 1 ? 'active' : 'upcoming'
+    }
+    const newCycleState = {
+      currentBlockIndex: 1,
+      completedBlocks: 0,
+      skippedBlocks: 0,
+      terminatedBlocks: 0,
+      totalBlocks: total,
+      actualFocusedSeconds: 0,
+      blockStatuses: initialStatuses,
+    }
+    saveCycleState(newCycleState)
+
+    const focusDur = getModeDurationSeconds('focus')
+    setMode('focus')
+    setStatus('idle')
+    setEndAt(null)
+    setTotalSeconds(focusDur)
+    setRemainingSeconds(focusDur)
+    setElapsedSeconds(0)
+    hasWarned5mRef.current = false
+    await clearActiveSession()
+    updateActiveSession(null)
+    addToast('Cycle reset to Block 1', { type: 'info', duration: 3000 })
+  }, [settings, getModeDurationSeconds, saveCycleState, addToast])
 
   // ── SINGLE TICKER LOOP (250ms anti-drift) ──
   useEffect(() => {
@@ -1280,7 +1420,9 @@ export function TimerSessionProvider({ children }) {
     handleCompleteSessionModal,
     pendingPreset,
     queuePendingPreset,
-    resetCycles: () => updateCompletedFocusCount(0),
+    cycleState,
+    resetCycle,
+    resetCycles: resetCycle,
     // Stopwatch methods
     startStopwatch,
     pauseStopwatch,

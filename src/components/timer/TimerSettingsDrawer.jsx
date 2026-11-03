@@ -13,7 +13,7 @@ const PRESETS = [
   { id: 'sprint', label: 'Sprint', desc: '15 / 3 / 10', focus: 15, short: 3, long: 10, sessions: 4 },
 ]
 
-export default function TimerSettingsDrawer({ isOpen, onClose }) {
+export default function TimerSettingsDrawer({ isOpen, onClose, onRequestResetCycle }) {
   const { settings, updateSettings } = useTimerSettings()
   const { addToast } = useToast()
 
@@ -252,6 +252,31 @@ export default function TimerSettingsDrawer({ isOpen, onClose }) {
                     checked={localSettings.autoStartPomo}
                     onChange={(checked) => setLocalSettings((p) => ({ ...p, autoStartPomo: checked }))}
                   />
+                </div>
+              </div>
+
+              {/* Active Cycle Management */}
+              <div className="space-y-3">
+                <span className="text-[11px] font-semibold text-nocturn-muted uppercase tracking-wider block">
+                  Active Cycle
+                </span>
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-semibold text-white block">Reset Active Cycle</span>
+                    <span className="text-[10px] text-nocturn-muted">Reset progress back to Block 1 (keeps history safe)</span>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    data-testid="drawer-reset-cycle-btn"
+                    onClick={() => {
+                      onClose()
+                      onRequestResetCycle?.()
+                    }}
+                    className="text-xs hover:border-rose-500/40 hover:text-rose-300"
+                  >
+                    Reset Cycle
+                  </Button>
                 </div>
               </div>
             </div>
