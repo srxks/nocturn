@@ -20,6 +20,7 @@ import { mapRowToVocabWord } from '../lib/vocab.js'
 import { setStorageItem } from '../utils/storageUtils.js'
 import { getTimestampMs, isTombstoned, recordTombstone } from './conflictService.js'
 import { isNetworkInCooldown } from './networkStateService.js'
+import { handleIncomingTimerPayload } from './timerSyncService.js'
 
 // ─── Sync-loop guard ──────────────────────────────────────────────────────────
 let _realtimeWrite = false
@@ -209,6 +210,11 @@ const handleTimerSettings = withRealtimeGuard(async (payload, userId) => {
     timerState: s.timerState || null,
     updatedAt: newRow.updated_at || new Date().toISOString(),
   })
+
+  // If remote payload contains timerState, notify timerSyncService
+  if (s.timerState) {
+    handleIncomingTimerPayload(s.timerState)
+  }
 })
 
 const handleThemes = withRealtimeGuard(async (payload, userId) => {

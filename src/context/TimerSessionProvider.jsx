@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from './useAuth'
 import { useTimerSettings } from './useTimerSettings'
 import { TimerSessionContext } from './TimerSessionContext'
 import { useToast } from './useToast'
@@ -14,6 +15,14 @@ import { markPlanBlockCompleted } from '../services/plannerPersistenceService'
 import { notifyTimerFiveMinuteWarning, notifyTimerEnded, hasNotificationPermission } from '../services/notificationService'
 import { mapTaskToRow } from '../lib/tasks'
 import { enqueueMutation } from '../services/syncQueue'
+import { getServerNowMs } from '../lib/timer'
+import {
+  initTimerSync,
+  stopTimerSync,
+  broadcastTimerState,
+  getLocalTimerRevision,
+  setLocalTimerRevision,
+} from '../services/timerSyncService'
 import {
   playTimerStartSound,
   playTimerPauseSound,
@@ -28,6 +37,7 @@ import { setFaviconActive } from '../utils/faviconUtils'
 
 export function TimerSessionProvider({ children }) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { addToast } = useToast()
   const { settings, updateTimerState, updateSettings } = useTimerSettings()
 
@@ -128,7 +138,7 @@ export function TimerSessionProvider({ children }) {
     })
   }, [settings?.sessions])
 
-  const saveCycleState = useCallback((newState) => {
+  const saveCycleState = useCallback((newState, shouldBroadcast = false) => {
     setCycleState(newState)
     try {
       if (typeof localStorage !== 'undefined') {
@@ -200,6 +210,140 @@ export function TimerSessionProvider({ children }) {
     ? (status === 'idle' ? 0 : stopwatchElapsed)
     : (status === 'idle' ? 0 : elapsedSeconds)
 
+  // ── REMOTE STATE RECONCILIATION ──
+  const applyRemoteTimerState = useCallback(
+    (payload) => {
+      if (!payload || typeof payload !== 'object') return
+
+      const {
+        mode: remoteMode,
+        status: remoteStatus,
+        endAt: remoteEndAt,
+        remainingSecondsWhenPaused: remoteRemainingWhenPaused,
+        totalSeconds: remoteTotalSeconds,
+        elapsedSeconds: remoteElapsedSeconds,
+        canonicalStartTime: remoteCanonicalStartTime,
+        taskId: remoteTaskId,
+        taskName: remoteTaskName,
+        cycleState: remoteCycleState,
+      } = payload
+
+      // Reconcile cycleState if present
+      if (remoteCycleState && typeof remoteCycleState === 'object') {
+        setCycleState((prev) => {
+          const merged = {
+            currentBlockIndex: Math.max(1, Number(remoteCycleState.currentBlockIndex) || prev.currentBlockIndex),
+            completedBlocks: Math.max(0, Number(remoteCycleState.completedBlocks) ?? prev.completedBlocks),
+            skippedBlocks: Math.max(0, Number(remoteCycleState.skippedBlocks) ?? prev.skippedBlocks),
+            terminatedBlocks: Math.max(0, Number(remoteCycleState.terminatedBlocks) ?? prev.terminatedBlocks),
+            totalBlocks: Math.max(1, Number(remoteCycleState.totalBlocks) || prev.totalBlocks),
+            actualFocusedSeconds: Math.max(0, Number(remoteCycleState.actualFocusedSeconds) ?? prev.actualFocusedSeconds),
+            blockStatuses: remoteCycleState.blockStatuses || prev.blockStatuses,
+          }
+          try {
+            localStorage.setItem('nocturn_timer_cycle_state', JSON.stringify(merged))
+            localStorage.setItem('nocturn_timer_cycles', String(merged.completedBlocks))
+          } catch {}
+          return merged
+        })
+      }
+
+      if (remoteTaskName !== undefined) setTaskName(remoteTaskName || '')
+      if (remoteTaskId !== undefined) setTaskId(remoteTaskId || null)
+
+      const targetMode = remoteMode || mode
+      const isRemoteStopwatch = targetMode === 'normal_stopwatch' || targetMode === 'focus_stopwatch'
+      setMode(targetMode)
+
+      if (isRemoteStopwatch) {
+        const baseElapsed = Number(remoteElapsedSeconds) || 0
+        if (remoteStatus === 'running' && remoteCanonicalStartTime) {
+          const nowMs = getServerNowMs()
+          const deltaSecs = Math.max(0, Math.floor((nowMs - remoteCanonicalStartTime) / 1000))
+          accumulatedSecondsRef.current = baseElapsed
+          startedAtMsRef.current = remoteCanonicalStartTime
+          setAccumulatedSeconds(baseElapsed)
+          setStopwatchElapsed(baseElapsed + deltaSecs)
+          setStatus('running')
+        } else if (remoteStatus === 'paused') {
+          accumulatedSecondsRef.current = baseElapsed
+          startedAtMsRef.current = null
+          setAccumulatedSeconds(baseElapsed)
+          setStopwatchElapsed(baseElapsed)
+          setStatus('paused')
+        } else {
+          // idle or reset
+          accumulatedSecondsRef.current = 0
+          startedAtMsRef.current = null
+          setAccumulatedSeconds(0)
+          setStopwatchElapsed(0)
+          setStatus('idle')
+        }
+        return
+      }
+
+      // Countdown modes (focus, shortBreak, longBreak)
+      const configuredTotal = Number(remoteTotalSeconds) || getModeDurationSeconds(targetMode)
+      setTotalSeconds(configuredTotal)
+
+      if (remoteStatus === 'running' && remoteEndAt) {
+        const nowMs = getServerNowMs()
+        const remaining = Math.max(0, Math.round((remoteEndAt - nowMs) / 1000))
+        if (remaining > 0) {
+          setStatus('running')
+          setEndAt(remoteEndAt)
+          setRemainingSeconds(remaining)
+          setElapsedSeconds(Math.max(0, configuredTotal - remaining))
+        } else {
+          setStatus('completed')
+          setEndAt(null)
+          setRemainingSeconds(0)
+          setElapsedSeconds(configuredTotal)
+        }
+      } else if (remoteStatus === 'paused') {
+        const remaining = Number.isFinite(Number(remoteRemainingWhenPaused))
+          ? Number(remoteRemainingWhenPaused)
+          : configuredTotal
+        setStatus('paused')
+        setEndAt(null)
+        setRemainingSeconds(remaining)
+        setElapsedSeconds(Math.max(0, configuredTotal - remaining))
+      } else if (remoteStatus === 'completed') {
+        setStatus('completed')
+        setEndAt(null)
+        setRemainingSeconds(0)
+        setElapsedSeconds(configuredTotal)
+      } else {
+        // idle
+        setStatus('idle')
+        setEndAt(null)
+        setRemainingSeconds(configuredTotal)
+        setElapsedSeconds(0)
+      }
+    },
+    [mode, getModeDurationSeconds]
+  )
+
+  // Listen for realtime timer synchronization
+  useEffect(() => {
+    if (!user?.id) return
+    initTimerSync(user.id, (remotePayload) => {
+      applyRemoteTimerState(remotePayload)
+    })
+
+    const handleWindowSync = (e) => {
+      if (e.detail) {
+        applyRemoteTimerState(e.detail)
+      }
+    }
+    window.addEventListener('nocturn:remote-timer-sync', handleWindowSync)
+
+    return () => {
+      window.removeEventListener('nocturn:remote-timer-sync', handleWindowSync)
+      stopTimerSync()
+    }
+  }, [user?.id, applyRemoteTimerState])
+
   // Synchronize duration when idle whenever mode or settings change
   useEffect(() => {
     if (status === 'idle' && !isStopwatch) {
@@ -255,6 +399,17 @@ export function TimerSessionProvider({ children }) {
       await clearActiveSession()
       updateActiveSession(null)
 
+      const nextCycleState = {
+        ...(currentMode === 'focus'
+          ? {
+              ...cycleState,
+              completedBlocks: cycleState.completedBlocks + 1,
+              actualFocusedSeconds: cycleState.actualFocusedSeconds + currentTotal,
+              blockStatuses: { ...cycleState.blockStatuses, [cycleState.currentBlockIndex]: 'completed' },
+            }
+          : cycleState),
+      }
+
       if (currentMode === 'focus') {
         const focusMins = Math.round(currentTotal / 60) || 25
 
@@ -270,17 +425,7 @@ export function TimerSessionProvider({ children }) {
           completed: true,
         })
 
-        const currIdx = cycleState.currentBlockIndex
-        const newCount = cycleState.completedBlocks + 1
-        const newStatuses = { ...cycleState.blockStatuses, [currIdx]: 'completed' }
-        const newFocusedSecs = cycleState.actualFocusedSeconds + currentTotal
-
-        saveCycleState({
-          ...cycleState,
-          completedBlocks: newCount,
-          actualFocusedSeconds: newFocusedSecs,
-          blockStatuses: newStatuses,
-        })
+        saveCycleState(nextCycleState)
 
         // Play warm bell sound
         if (isTimerSoundsEnabled()) {
@@ -300,7 +445,7 @@ export function TimerSessionProvider({ children }) {
 
         // Summary Modal check (ONLY on focus completion & if setting enabled)
         const longBreakInterval = Number(settings?.sessions) || 4
-        const isLongBreak = newCount > 0 && newCount % longBreakInterval === 0
+        const isLongBreak = nextCycleState.completedBlocks > 0 && nextCycleState.completedBlocks % longBreakInterval === 0
         if (settings?.showSessionSummary) {
           setCompletionModalData({
             sessionId,
@@ -323,7 +468,7 @@ export function TimerSessionProvider({ children }) {
       }
 
       if (updateTimerState) {
-        await updateTimerState({
+        const stateObj = {
           actionId: crypto.randomUUID(),
           status: 'completed',
           mode: currentMode,
@@ -331,7 +476,12 @@ export function TimerSessionProvider({ children }) {
           endAt: null,
           totalSeconds: currentTotal,
           lastActionAt: new Date(nowMs).toISOString(),
-        })
+          cycleState: nextCycleState,
+        }
+        await updateTimerState(stateObj)
+        if (user?.id) {
+          broadcastTimerState(user.id, stateObj)
+        }
       }
     } finally {
       setTimeout(() => {
@@ -349,6 +499,7 @@ export function TimerSessionProvider({ children }) {
     settings,
     updateTimerState,
     addToast,
+    user?.id,
   ])
 
   // ── START NEXT PHASE (EXPLICIT USER CLICK REQUIRED) ──
@@ -388,7 +539,7 @@ export function TimerSessionProvider({ children }) {
       updateActiveSession(sessionObj)
 
       if (updateTimerState) {
-        await updateTimerState({
+        const stateObj = {
           actionId: crypto.randomUUID(),
           status: 'running',
           mode: nextMode,
@@ -396,17 +547,23 @@ export function TimerSessionProvider({ children }) {
           endAt: nextEndAt,
           totalSeconds: breakSecs,
           lastActionAt: new Date(nowMs).toISOString(),
-        })
+          cycleState,
+        }
+        await updateTimerState(stateObj)
+        if (user?.id) {
+          broadcastTimerState(user.id, stateObj)
+        }
       }
     } else {
       const total = cycleState.totalBlocks
       const nextIdx = cycleState.currentBlockIndex < total ? cycleState.currentBlockIndex + 1 : 1
       const updatedStatuses = { ...cycleState.blockStatuses, [nextIdx]: 'active' }
-      saveCycleState({
+      const updatedCycle = {
         ...cycleState,
         currentBlockIndex: nextIdx,
         blockStatuses: updatedStatuses,
-      })
+      }
+      saveCycleState(updatedCycle)
 
       const focusSecs = getModeDurationSeconds('focus')
       const nextEndAt = nowMs + focusSecs * 1000
@@ -436,7 +593,7 @@ export function TimerSessionProvider({ children }) {
       updateActiveSession(sessionObj)
 
       if (updateTimerState) {
-        await updateTimerState({
+        const stateObj = {
           actionId: crypto.randomUUID(),
           status: 'running',
           mode: 'focus',
@@ -444,10 +601,15 @@ export function TimerSessionProvider({ children }) {
           endAt: nextEndAt,
           totalSeconds: focusSecs,
           lastActionAt: new Date(nowMs).toISOString(),
-        })
+          cycleState: updatedCycle,
+        }
+        await updateTimerState(stateObj)
+        if (user?.id) {
+          broadcastTimerState(user.id, stateObj)
+        }
       }
     }
-  }, [mode, cycleState, taskName, getModeDurationSeconds, saveCycleState, updateTimerState])
+  }, [mode, cycleState, taskName, getModeDurationSeconds, saveCycleState, updateTimerState, user?.id])
 
   // ── START TIMER (COUNTDOWN) ──
   const startTimer = async (
@@ -535,7 +697,7 @@ export function TimerSessionProvider({ children }) {
     await recordActiveSession(sessionObj)
 
     if (updateTimerState) {
-      await updateTimerState({
+      const stateObj = {
         actionId: crypto.randomUUID(),
         status: 'running',
         mode: targetMode,
@@ -545,7 +707,12 @@ export function TimerSessionProvider({ children }) {
         taskName: actualTaskName !== undefined ? actualTaskName : taskName,
         taskId: actualTaskId !== undefined ? actualTaskId : taskId,
         lastActionAt: new Date(nowMs).toISOString(),
-      })
+        cycleState,
+      }
+      await updateTimerState(stateObj)
+      if (user?.id) {
+        broadcastTimerState(user.id, stateObj)
+      }
     }
   }
 
@@ -569,7 +736,7 @@ export function TimerSessionProvider({ children }) {
     await recordActiveSession(sessionObj)
 
     if (updateTimerState) {
-      await updateTimerState({
+      const stateObj = {
         actionId: crypto.randomUUID(),
         status: 'paused',
         mode,
@@ -577,7 +744,12 @@ export function TimerSessionProvider({ children }) {
         remainingSecondsWhenPaused: safeRemaining,
         totalSeconds,
         lastActionAt: new Date(nowMs).toISOString(),
-      })
+        cycleState,
+      }
+      await updateTimerState(stateObj)
+      if (user?.id) {
+        broadcastTimerState(user.id, stateObj)
+      }
     }
   }
 
@@ -600,14 +772,19 @@ export function TimerSessionProvider({ children }) {
     await recordActiveSession(sessionObj)
 
     if (updateTimerState) {
-      await updateTimerState({
+      const stateObj = {
         actionId: crypto.randomUUID(),
         status: 'running',
         mode,
         endAt: targetEndAt,
         totalSeconds,
         lastActionAt: new Date(nowMs).toISOString(),
-      })
+        cycleState,
+      }
+      await updateTimerState(stateObj)
+      if (user?.id) {
+        broadcastTimerState(user.id, stateObj)
+      }
     }
   }
 
@@ -636,7 +813,25 @@ export function TimerSessionProvider({ children }) {
     }
     updateActiveSession(sessionObj)
     await recordActiveSession(sessionObj)
-  }, [mode, taskId, taskName])
+
+    if (updateTimerState) {
+      const stateObj = {
+        actionId: crypto.randomUUID(),
+        status: 'running',
+        mode,
+        canonicalStartTime: nowMs,
+        elapsedSeconds: accumulatedSecondsRef.current,
+        taskName: sessionObj.taskName,
+        taskId: sessionObj.taskId,
+        lastActionAt: new Date(nowMs).toISOString(),
+        cycleState,
+      }
+      await updateTimerState(stateObj)
+      if (user?.id) {
+        broadcastTimerState(user.id, stateObj)
+      }
+    }
+  }, [mode, taskId, taskName, updateTimerState, user?.id, cycleState])
 
   const pauseStopwatch = useCallback(async () => {
     if (status !== 'running') return
@@ -659,7 +854,23 @@ export function TimerSessionProvider({ children }) {
     }
     updateActiveSession(sessionObj)
     await recordActiveSession(sessionObj)
-  }, [status])
+
+    if (updateTimerState) {
+      const stateObj = {
+        actionId: crypto.randomUUID(),
+        status: 'paused',
+        mode,
+        canonicalStartTime: null,
+        elapsedSeconds: totalElapsed,
+        lastActionAt: new Date(nowMs).toISOString(),
+        cycleState,
+      }
+      await updateTimerState(stateObj)
+      if (user?.id) {
+        broadcastTimerState(user.id, stateObj)
+      }
+    }
+  }, [status, mode, updateTimerState, user?.id, cycleState])
 
   const resumeStopwatch = useCallback(async () => {
     if (status !== 'paused') return
@@ -676,7 +887,23 @@ export function TimerSessionProvider({ children }) {
     }
     updateActiveSession(sessionObj)
     await recordActiveSession(sessionObj)
-  }, [status])
+
+    if (updateTimerState) {
+      const stateObj = {
+        actionId: crypto.randomUUID(),
+        status: 'running',
+        mode,
+        canonicalStartTime: nowMs,
+        elapsedSeconds: accumulatedSecondsRef.current,
+        lastActionAt: new Date(nowMs).toISOString(),
+        cycleState,
+      }
+      await updateTimerState(stateObj)
+      if (user?.id) {
+        broadcastTimerState(user.id, stateObj)
+      }
+    }
+  }, [status, mode, updateTimerState, user?.id, cycleState])
 
   const stopStopwatch = useCallback(async () => {
     if (status === 'running') {
@@ -692,7 +919,23 @@ export function TimerSessionProvider({ children }) {
     setStopwatchElapsed(0)
     await clearActiveSession()
     updateActiveSession(null)
-  }, [])
+
+    if (updateTimerState) {
+      const stateObj = {
+        actionId: crypto.randomUUID(),
+        status: 'idle',
+        mode,
+        canonicalStartTime: null,
+        elapsedSeconds: 0,
+        lastActionAt: new Date().toISOString(),
+        cycleState,
+      }
+      await updateTimerState(stateObj)
+      if (user?.id) {
+        broadcastTimerState(user.id, stateObj)
+      }
+    }
+  }, [mode, updateTimerState, user?.id, cycleState])
 
   const finishFocusStopwatch = useCallback(async () => {
     const nowMs = Date.now()
@@ -799,14 +1042,19 @@ export function TimerSessionProvider({ children }) {
       updateActiveSession(null)
 
       if (updateTimerState) {
-        await updateTimerState({
+        const stateObj = {
           actionId: crypto.randomUUID(),
           status: 'idle',
           mode,
           endAt: null,
           totalSeconds: resetDur,
           lastActionAt: new Date().toISOString(),
-        })
+          cycleState,
+        }
+        await updateTimerState(stateObj)
+        if (user?.id) {
+          broadcastTimerState(user.id, stateObj)
+        }
       }
       addToast('Current block reset', { type: 'info', duration: 2500 })
     }
@@ -855,6 +1103,22 @@ export function TimerSessionProvider({ children }) {
       setElapsedSeconds(0)
       setStatus('idle')
 
+      if (updateTimerState) {
+        const stateObj = {
+          actionId: crypto.randomUUID(),
+          status: 'idle',
+          mode: nextMode,
+          endAt: null,
+          totalSeconds: breakSecs,
+          lastActionAt: new Date().toISOString(),
+          cycleState: updatedCycle,
+        }
+        await updateTimerState(stateObj)
+        if (user?.id) {
+          broadcastTimerState(user.id, stateObj)
+        }
+      }
+
       addToast(`Block ${currIdx} skipped`, { type: 'info', duration: 3000 })
     } else {
       const focusSecs = getModeDurationSeconds('focus')
@@ -863,6 +1127,23 @@ export function TimerSessionProvider({ children }) {
       setRemainingSeconds(focusSecs)
       setElapsedSeconds(0)
       setStatus('idle')
+
+      if (updateTimerState) {
+        const stateObj = {
+          actionId: crypto.randomUUID(),
+          status: 'idle',
+          mode: 'focus',
+          endAt: null,
+          totalSeconds: focusSecs,
+          lastActionAt: new Date().toISOString(),
+          cycleState,
+        }
+        await updateTimerState(stateObj)
+        if (user?.id) {
+          broadcastTimerState(user.id, stateObj)
+        }
+      }
+
       addToast('Break skipped — ready to focus', { type: 'info', duration: 3000 })
     }
   }
@@ -1000,28 +1281,39 @@ export function TimerSessionProvider({ children }) {
     await clearActiveSession()
     updateActiveSession(null)
 
+    const nextCycleState = {
+      ...(mode === 'focus'
+        ? {
+            ...cycleState,
+            terminatedBlocks: cycleState.terminatedBlocks + 1,
+            actualFocusedSeconds: cycleState.actualFocusedSeconds + elapsedSecs,
+            blockStatuses: { ...cycleState.blockStatuses, [cycleState.currentBlockIndex]: 'terminated' },
+          }
+        : cycleState),
+    }
+
+    if (mode === 'focus') {
+      saveCycleState(nextCycleState)
+    }
+
     if (updateTimerState) {
-      await updateTimerState({
+      const stateObj = {
         actionId: crypto.randomUUID(),
         status: 'idle',
         mode: 'focus',
         endAt: null,
         totalSeconds: resetDur,
         lastActionAt: new Date(nowMs).toISOString(),
-      })
+        cycleState: nextCycleState,
+      }
+      await updateTimerState(stateObj)
+      if (user?.id) {
+        broadcastTimerState(user.id, stateObj)
+      }
     }
 
     if (mode === 'focus') {
       const currIdx = cycleState.currentBlockIndex
-      const updatedStatuses = { ...cycleState.blockStatuses, [currIdx]: 'terminated' }
-      const updatedCycle = {
-        ...cycleState,
-        terminatedBlocks: cycleState.terminatedBlocks + 1,
-        actualFocusedSeconds: cycleState.actualFocusedSeconds + elapsedSecs,
-        blockStatuses: updatedStatuses,
-      }
-      saveCycleState(updatedCycle)
-
       if (elapsedSecs >= 1) {
         const focusMins = Math.round((elapsedSecs / 60) * 10) / 10
         const displayMins = Math.round(elapsedSecs / 60)
@@ -1075,6 +1367,7 @@ export function TimerSessionProvider({ children }) {
     resetStopwatch,
     updateTimerState,
     addToast,
+    user?.id,
   ])
 
   // ── RESET CYCLE (CYCLE RE-INITIALIZATION ONLY, DOES NOT DELETE HISTORY) ──
@@ -1105,8 +1398,25 @@ export function TimerSessionProvider({ children }) {
     hasWarned5mRef.current = false
     await clearActiveSession()
     updateActiveSession(null)
+
+    if (updateTimerState) {
+      const stateObj = {
+        actionId: crypto.randomUUID(),
+        status: 'idle',
+        mode: 'focus',
+        endAt: null,
+        totalSeconds: focusDur,
+        lastActionAt: new Date().toISOString(),
+        cycleState: newCycleState,
+      }
+      await updateTimerState(stateObj)
+      if (user?.id) {
+        broadcastTimerState(user.id, stateObj)
+      }
+    }
+
     addToast('Cycle reset to Block 1', { type: 'info', duration: 3000 })
-  }, [settings, getModeDurationSeconds, saveCycleState, addToast])
+  }, [settings, getModeDurationSeconds, saveCycleState, addToast, updateTimerState, user?.id])
 
   // ── SINGLE TICKER LOOP (250ms anti-drift) ──
   useEffect(() => {
