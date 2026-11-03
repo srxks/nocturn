@@ -108,18 +108,25 @@ export function handleIncomingTimerPayload(payload) {
   if (!payload || typeof payload !== 'object') return
 
   // Prevent echoing our own commands
+  if (payload.actionId && payload.actionId === _lastCommandId) {
+    return
+  }
   if (payload.commandId && payload.commandId === _lastCommandId) {
     return
   }
 
-  // Revision check (monotonicity)
+  // Revision / action timestamp check
   const incomingRev = Number(payload.revision) || 0
-  if (incomingRev <= _localRevision) {
+  const incomingActionAt = payload.lastActionAt ? new Date(payload.lastActionAt).getTime() : 0
+
+  if (incomingRev > 0 && incomingRev <= _localRevision) {
     // Stale or duplicate update, ignore
     return
   }
 
-  _localRevision = incomingRev
+  if (incomingRev > 0) {
+    _localRevision = incomingRev
+  }
 
   // Notify active listener/provider
   if (_onRemoteStateCallback) {
@@ -155,15 +162,29 @@ export async function broadcastTimerState(userId, statePayload) {
   }
 
   // If connected via Realtime channel, broadcast immediately
-  if (_timerChannel && userId && !isGuestUserId(userId)) {
+  if (userId && !isGuestUserId(userId) && supabase) {
     try {
-      _timerChannel.send({
-        type: 'broadcast',
-        event: 'TIMER_STATE_CHANGED',
-        payload: fullPayload,
-      }).catch((err) => {
-        console.warn('[timerSync] Broadcast send warning:', err)
-      })
+      // Broadcast on primary realtime channel
+      const primaryChannel = supabase.getChannels().find(c => c.topic.includes(`nocturn-realtime-${userId}`))
+      if (primaryChannel) {
+        primaryChannel.send({
+          type: 'broadcast',
+          event: 'TIMER_STATE_CHANGED',
+          payload: fullPayload,
+        }).catch((err) => {
+          console.warn('[timerSync] Primary channel broadcast send warning:', err)
+        })
+      }
+
+      if (_timerChannel) {
+        _timerChannel.send({
+          type: 'broadcast',
+          event: 'TIMER_STATE_CHANGED',
+          payload: fullPayload,
+        }).catch((err) => {
+          console.warn('[timerSync] Dedicated channel broadcast send warning:', err)
+        })
+      }
     } catch (err) {
       console.warn('[timerSync] Failed to send broadcast:', err)
     }

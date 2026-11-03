@@ -21,15 +21,24 @@ export function TimerSettingsProvider({ children }) {
     async function hydrateRemoteTimerSettings() {
       try {
         const local = await db.timerSettings.get('default')
-        if (!local || !local.updatedAt) {
-          const remote = await fetchTimerSettingsRemote(user.id)
-          if (remote && isMounted) {
-            const sanitized = sanitizeTimerSettings(remote)
+        // Hydrate from cloud if local settings missing, not updated, or lacking remote timerState
+        const remote = await fetchTimerSettingsRemote(user.id)
+        if (remote && isMounted) {
+          const sanitized = sanitizeTimerSettings(remote)
+          const remoteUpdatedMs = new Date(remote.updatedAt || 0).getTime()
+          const localUpdatedMs = new Date(local?.updatedAt || 0).getTime()
+
+          if (!local || !local.updatedAt || remoteUpdatedMs >= localUpdatedMs || (remote.timerState && !local.timerState)) {
             await db.timerSettings.put({
               ...sanitized,
               userId: user.id,
               updatedAt: remote.updatedAt || new Date().toISOString(),
             })
+            // If remote has an active timerState, broadcast to local listeners/TimerSessionProvider
+            if (remote.timerState) {
+              const { handleIncomingTimerPayload } = await import('../services/timerSyncService.js')
+              handleIncomingTimerPayload(remote.timerState)
+            }
           }
         }
       } catch (err) {

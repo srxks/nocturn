@@ -251,7 +251,7 @@ export function TimerSessionProvider({ children }) {
       if (remoteTaskName !== undefined) setTaskName(remoteTaskName || '')
       if (remoteTaskId !== undefined) setTaskId(remoteTaskId || null)
 
-      const targetMode = remoteMode || mode
+      const targetMode = remoteMode || 'focus'
       const isRemoteStopwatch = targetMode === 'normal_stopwatch' || targetMode === 'focus_stopwatch'
       setMode(targetMode)
 
@@ -317,23 +317,32 @@ export function TimerSessionProvider({ children }) {
         // idle
         setStatus('idle')
         setEndAt(null)
+        setTotalSeconds(configuredTotal)
         setRemainingSeconds(configuredTotal)
         setElapsedSeconds(0)
+        hasWarned5mRef.current = false
+        clearActiveSession().catch(() => {})
+        updateActiveSession(null)
       }
     },
-    [mode, getModeDurationSeconds]
+    [getModeDurationSeconds]
   )
+
+  const applyRemoteTimerStateRef = useRef(applyRemoteTimerState)
+  useEffect(() => {
+    applyRemoteTimerStateRef.current = applyRemoteTimerState
+  }, [applyRemoteTimerState])
 
   // Listen for realtime timer synchronization
   useEffect(() => {
     if (!user?.id) return
     initTimerSync(user.id, (remotePayload) => {
-      applyRemoteTimerState(remotePayload)
+      applyRemoteTimerStateRef.current?.(remotePayload)
     })
 
     const handleWindowSync = (e) => {
       if (e.detail) {
-        applyRemoteTimerState(e.detail)
+        applyRemoteTimerStateRef.current?.(e.detail)
       }
     }
     window.addEventListener('nocturn:remote-timer-sync', handleWindowSync)
@@ -342,7 +351,7 @@ export function TimerSessionProvider({ children }) {
       window.removeEventListener('nocturn:remote-timer-sync', handleWindowSync)
       stopTimerSync()
     }
-  }, [user?.id, applyRemoteTimerState])
+  }, [user?.id])
 
   // Synchronize duration when idle whenever mode or settings change
   useEffect(() => {
@@ -1053,7 +1062,7 @@ export function TimerSessionProvider({ children }) {
         }
         await updateTimerState(stateObj)
         if (user?.id) {
-          broadcastTimerState(user.id, stateObj)
+          await broadcastTimerState(user.id, stateObj)
         }
       }
       addToast('Current block reset', { type: 'info', duration: 2500 })
@@ -1487,7 +1496,7 @@ export function TimerSessionProvider({ children }) {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [totalSeconds, isStopwatch, handleNaturalCompletion])
 
-  // ── RESTORE ACTIVE SESSION ON MOUNT ──
+  // ── RESTORE ACTIVE SESSION ON MOUNT / REHYDRATION ──
   useEffect(() => {
     let isMounted = true
 
@@ -1554,26 +1563,49 @@ export function TimerSessionProvider({ children }) {
         return
       }
 
-      // Check cloud state if available
+      // Check cloud settings state if local activeSession wasn't present
       const cloudState = settings?.timerState
-      if (cloudState && cloudState.endAt && cloudState.status === 'running') {
-        const nowMs = Date.now()
-        const remaining = Math.max(0, Math.round((cloudState.endAt - nowMs) / 1000))
-        const total = cloudState.totalSeconds || getModeDurationSeconds(cloudState.mode || 'focus')
+      if (cloudState && cloudState.status === 'running') {
+        if (cloudState.endAt) {
+          const nowMs = Date.now()
+          const remaining = Math.max(0, Math.round((cloudState.endAt - nowMs) / 1000))
+          const total = cloudState.totalSeconds || getModeDurationSeconds(cloudState.mode || 'focus')
 
-        setMode(cloudState.mode || 'focus')
-        setTotalSeconds(total)
+          setMode(cloudState.mode || 'focus')
+          setTotalSeconds(total)
 
-        if (remaining > 0) {
+          if (remaining > 0) {
+            setStatus('running')
+            setEndAt(cloudState.endAt)
+            setRemainingSeconds(remaining)
+            setElapsedSeconds(Math.max(0, total - remaining))
+            return
+          } else {
+            handleNaturalCompletion()
+            return
+          }
+        } else if (cloudState.canonicalStartTime) {
+          // Stopwatch running in cloud
+          const nowMs = Date.now()
+          const deltaSecs = Math.max(0, Math.floor((nowMs - cloudState.canonicalStartTime) / 1000))
+          const baseElapsed = Number(cloudState.elapsedSeconds) || 0
+          accumulatedSecondsRef.current = baseElapsed
+          startedAtMsRef.current = cloudState.canonicalStartTime
+          setAccumulatedSeconds(baseElapsed)
+          setStopwatchElapsed(baseElapsed + deltaSecs)
           setStatus('running')
-          setEndAt(cloudState.endAt)
-          setRemainingSeconds(remaining)
-          setElapsedSeconds(Math.max(0, total - remaining))
-          return
-        } else {
-          handleNaturalCompletion()
+          setMode(cloudState.mode || 'normal_stopwatch')
           return
         }
+      } else if (cloudState && cloudState.status === 'paused') {
+        const total = cloudState.totalSeconds || getModeDurationSeconds(cloudState.mode || 'focus')
+        setMode(cloudState.mode || 'focus')
+        setTotalSeconds(total)
+        setStatus('paused')
+        setEndAt(null)
+        setRemainingSeconds(cloudState.remainingSecondsWhenPaused ?? total)
+        setElapsedSeconds(Math.max(0, total - (cloudState.remainingSecondsWhenPaused ?? total)))
+        return
       }
     }
 
@@ -1581,7 +1613,7 @@ export function TimerSessionProvider({ children }) {
     return () => {
       isMounted = false
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settings?.timerState]) // Re-run when settings.timerState hydrates!
 
   // Document Title & Favicon sync
   useEffect(() => {
