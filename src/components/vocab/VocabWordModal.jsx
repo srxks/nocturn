@@ -191,19 +191,21 @@ export default function VocabWordModal({
   isOpen,
   onClose,
   onSave,
+  onSubmit,
   initialData = null,
   mode = 'add', // 'add' | 'edit'
 }) {
   if (!isOpen) return null
 
   const formKey = initialData?.id || (mode === 'add' ? 'add' : 'edit')
+  const saveHandler = onSave || onSubmit
 
   return (
     <VocabWordForm
       key={formKey}
       initialData={initialData}
       mode={mode}
-      onSave={onSave}
+      onSave={saveHandler}
       onClose={onClose}
     />
   )

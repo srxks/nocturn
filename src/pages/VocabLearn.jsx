@@ -383,7 +383,7 @@ export default function VocabLearn() {
         <VocabWordModal
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
-          onSubmit={async (wordData) => {
+          onSave={async (wordData) => {
             await addWord(wordData)
           }}
           mode="add"
