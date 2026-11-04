@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -9,7 +9,9 @@ import {
   Award,
   ChevronRight,
   HelpCircle,
+  Volume2,
 } from 'lucide-react'
+import { speakWord } from '../services/soundService'
 import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
 import { getReviewQueueWords, generateQuizOptions, getTodayDateKey } from '../services/vocabService'
@@ -123,7 +125,9 @@ export default function VocabReview() {
     })
   }
 
-  const options = currentWord?.id === currentOptionsState.wordId ? currentOptionsState.options : []
+  const options = useMemo(() => {
+    return currentWord?.id === currentOptionsState.wordId ? currentOptionsState.options : []
+  }, [currentWord?.id, currentOptionsState])
 
   // Handle Option Click
   const handleSelectOption = useCallback(
@@ -148,7 +152,7 @@ export default function VocabReview() {
   )
 
   // Advance to Next Question
-  const handleNextQuestion = () => {
+  const handleNextQuestion = useCallback(() => {
     if (currentIndex < quizWords.length - 1) {
       setCurrentIndex((prev) => prev + 1)
       setSelectedOption(null)
@@ -169,7 +173,42 @@ export default function VocabReview() {
         // ignore
       }
     }
-  }
+  }, [currentIndex, quizWords.length, completeTodayReview, reviewCompletedKey, reviewWordsKey, reviewProgressKey])
+
+  // Keyboard navigation for review ergonomics: 1-4/A-D to answer, Enter/Space/ArrowRight for next, P to pronounce
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const activeTag = document.activeElement?.tagName?.toLowerCase()
+      if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable) return
+
+      if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault()
+        if (currentWord?.word) speakWord(currentWord.word)
+      } else if (!isAnswered && options.length > 0) {
+        if (['1', 'a', 'A'].includes(e.key) && options[0]) {
+          e.preventDefault()
+          handleSelectOption(options[0])
+        } else if (['2', 'b', 'B'].includes(e.key) && options[1]) {
+          e.preventDefault()
+          handleSelectOption(options[1])
+        } else if (['3', 'c', 'C'].includes(e.key) && options[2]) {
+          e.preventDefault()
+          handleSelectOption(options[2])
+        } else if (['4', 'd', 'D'].includes(e.key) && options[3]) {
+          e.preventDefault()
+          handleSelectOption(options[3])
+        }
+      } else if (isAnswered) {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight') {
+          e.preventDefault()
+          handleNextQuestion()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isAnswered, options, currentWord, handleSelectOption, handleNextQuestion])
 
   // Loading state
   if (isLoading) {
@@ -302,9 +341,19 @@ export default function VocabReview() {
             <span className="text-xs uppercase font-semibold tracking-wider text-nocturn-muted">
               Select the correct definition
             </span>
-            <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-              {currentWord.word}
-            </h1>
+            <div className="flex items-center justify-center gap-2">
+              <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
+                {currentWord.word}
+              </h1>
+              <button
+                type="button"
+                onClick={() => speakWord(currentWord.word)}
+                title="Pronounce word (P)"
+                className="p-1.5 text-neutral-400 hover:text-emerald-400 hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+              >
+                <Volume2 className="w-5 h-5" />
+              </button>
+            </div>
             {currentWord.part_of_speech && (
               <div>
                 <Badge variant="neutral" size="sm">

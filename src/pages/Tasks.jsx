@@ -121,6 +121,8 @@ export default function Tasks() {
     deleteTask,
     duplicateTask,
     addSubtask,
+    updateSubtask,
+    reorderSubtasks,
     toggleSubtask,
     deleteSubtask,
     selectedTaskIds: contextSelectedTaskIds,
@@ -1011,6 +1013,8 @@ export default function Tasks() {
             onDeleteTask={deleteTask}
             onDuplicateTask={duplicateTask}
             onAddSubtask={addSubtask}
+            onUpdateSubtask={updateSubtask}
+            onReorderSubtasks={reorderSubtasks}
             onToggleSubtask={toggleSubtask}
             onDeleteSubtask={deleteSubtask}
           />

@@ -15,6 +15,8 @@ export default function Calendar() {
     updateTask,
     deleteTask,
     addSubtask,
+    updateSubtask,
+    reorderSubtasks,
     toggleSubtask,
     deleteSubtask,
     selectedTask,
@@ -96,6 +98,8 @@ export default function Calendar() {
             onToggleComplete={toggleTask}
             onDeleteTask={deleteTask}
             onAddSubtask={addSubtask}
+            onUpdateSubtask={updateSubtask}
+            onReorderSubtasks={reorderSubtasks}
             onToggleSubtask={toggleSubtask}
             onDeleteSubtask={deleteSubtask}
             isDesktopInline={false}

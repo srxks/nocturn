@@ -36,12 +36,16 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
   onDeleteTask,
   onDuplicateTask,
   onAddSubtask,
+  onUpdateSubtask,
+  onReorderSubtasks,
   onToggleSubtask,
   onDeleteSubtask,
   isDesktopInline = false,
 }) {
   const navigate = useNavigate()
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const [editingSubtaskId, setEditingSubtaskId] = useState(null)
+  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState('')
   const [newLabelInput, setNewLabelInput] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showMoreOptions, setShowMoreOptions] = useState(false)
@@ -187,8 +191,34 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
     }
   }
 
-  const handleSubtaskBlur = () => {
-    commitSubtask()
+  const startEditingSubtask = (sub) => {
+    setEditingSubtaskId(sub.id)
+    setEditingSubtaskTitle(sub.title || '')
+  }
+
+  const saveEditingSubtask = () => {
+    if (!editingSubtaskId) return
+    const trimmed = editingSubtaskTitle.trim()
+    if (trimmed && onUpdateSubtask) {
+      onUpdateSubtask(task.id, editingSubtaskId, { title: trimmed })
+    }
+    setEditingSubtaskId(null)
+    setEditingSubtaskTitle('')
+  }
+
+  const cancelEditingSubtask = () => {
+    setEditingSubtaskId(null)
+    setEditingSubtaskTitle('')
+  }
+
+  const handleMoveSubtask = (subIndex, direction) => {
+    if (!task.subtasks || !onReorderSubtasks) return
+    const targetIndex = direction === 'up' ? subIndex - 1 : subIndex + 1
+    if (targetIndex < 0 || targetIndex >= task.subtasks.length) return
+    const updated = [...task.subtasks]
+    const [moved] = updated.splice(subIndex, 1)
+    updated.splice(targetIndex, 0, moved)
+    onReorderSubtasks(task.id, updated)
   }
 
   // Count active "more options" to show badges on collapsed header
@@ -372,8 +402,8 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
           {/* Subtasks List */}
           {task.subtasks && task.subtasks.length > 0 && (
             <div className="space-y-1.5">
-              {task.subtasks.map((sub) => (
-                <div key={sub.id} className="flex items-center justify-between gap-2 text-xs group py-0.5">
+              {task.subtasks.map((sub, idx) => (
+                <div key={sub.id} className="flex items-center justify-between gap-1.5 text-xs group py-0.5 rounded-lg hover:bg-white/[0.02] px-1 -mx-1 transition-colors">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <button
                       type="button"
@@ -386,17 +416,66 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
                     >
                       <Check className="w-3 h-3 stroke-[3]" />
                     </button>
-                    <span className={`truncate ${sub.completed ? 'line-through text-neutral-500' : 'text-neutral-200'}`}>
-                      {sub.title}
-                    </span>
+                    {editingSubtaskId === sub.id ? (
+                      <input
+                        type="text"
+                        value={editingSubtaskTitle}
+                        onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            saveEditingSubtask()
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault()
+                            cancelEditingSubtask()
+                          }
+                        }}
+                        onBlur={saveEditingSubtask}
+                        autoFocus
+                        className="flex-1 bg-neutral-900 text-white text-xs px-2 py-0.5 rounded-md border border-emerald-500 outline-none"
+                      />
+                    ) : (
+                      <span
+                        onClick={() => startEditingSubtask(sub)}
+                        title="Click to edit step"
+                        className={`truncate cursor-text hover:text-white transition-colors flex-1 ${sub.completed ? 'line-through text-neutral-500' : 'text-neutral-200'}`}
+                      >
+                        {sub.title}
+                      </span>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onDeleteSubtask(task.id, sub.id)}
-                    className="p-1 text-neutral-500 hover:text-rose-400 cursor-pointer opacity-70 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                  <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                    {onReorderSubtasks && task.subtasks.length > 1 && (
+                      <div className="flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveSubtask(idx, 'up')}
+                          disabled={idx === 0}
+                          title="Move step up"
+                          className="p-1 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-default"
+                        >
+                          <ChevronUp className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveSubtask(idx, 'down')}
+                          disabled={idx === task.subtasks.length - 1}
+                          title="Move step down"
+                          className="p-1 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-default"
+                        >
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onDeleteSubtask(task.id, sub.id)}
+                      title="Delete step"
+                      className="p-1 text-neutral-500 hover:text-rose-400 cursor-pointer transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -410,7 +489,6 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
               value={newSubtaskTitle}
               onChange={(e) => setNewSubtaskTitle(e.target.value)}
               onKeyDown={handleSubtaskKeyDown}
-              onBlur={handleSubtaskBlur}
               placeholder="Add step (Press Enter)..."
               className="w-full bg-neutral-900 text-white text-xs px-2.5 py-1.5 rounded-xl border border-white/10 outline-none focus:border-emerald-500"
             />
@@ -477,7 +555,9 @@ const TaskDetailDrawer = memo(function TaskDetailDrawer({
                     <span className="text-neutral-300 font-medium flex items-center gap-1.5">
                       <AlertCircle className="w-3.5 h-3.5 text-rose-400" /> Hard Deadline
                     </span>
-                    <p className="text-[10px] text-neutral-500">Strict cutoff date</p>
+                    <p className={`text-[10px] ${deadlineConfig?.isUrgent ? 'text-rose-400 font-semibold' : 'text-neutral-500'}`}>
+                      {task.deadline && deadlineConfig?.label ? deadlineConfig.label : 'Strict cutoff date'}
+                    </p>
                   </div>
                   <DatePickerPopover
                     value={task.deadline || ''}

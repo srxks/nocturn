@@ -505,6 +505,80 @@ export function TaskProvider({ children }) {
     }
   }
 
+  const updateSubtask = async (taskId, subtaskId, updates) => {
+    const target = await db.tasks.get(taskId)
+    if (!target || !target.subtasks) return
+
+    const targetSub = target.subtasks.find((s) => s.id === subtaskId)
+    if (!targetSub) return
+
+    const updatedSub = { ...targetSub, ...updates }
+    const updatedSubtasks = target.subtasks.map((s) =>
+      s.id === subtaskId ? updatedSub : s
+    )
+
+    const updatedTask = {
+      ...target,
+      subtasks: updatedSubtasks,
+      updatedAt: new Date().toISOString(),
+    }
+
+    await db.tasks.update(taskId, {
+      subtasks: updatedSubtasks,
+      updatedAt: new Date().toISOString(),
+    })
+
+    if (user?.id && !shouldSkipRemote()) {
+      const resTask = await upsertTaskRemote(updatedTask, user.id)
+      if (!resTask) {
+        const row = mapTaskToRow(updatedTask, user.id)
+        if (row) enqueueMutation('upsert', 'tasks', row)
+      }
+      const resSub = await upsertSubtaskRemote(updatedSub, taskId, user.id)
+      if (!resSub) {
+        enqueueMutation('upsert', 'subtasks', {
+          id: toUuid(updatedSub.id),
+          task_id: toUuid(taskId),
+          user_id: user.id,
+          title: updatedSub.title || '',
+          completed: Boolean(updatedSub.completed),
+          position: typeof updatedSub.position === 'number' ? updatedSub.position : 0,
+          created_at: updatedSub.createdAt || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+      }
+    }
+  }
+
+  const reorderSubtasks = async (taskId, reorderedSubtasks) => {
+    const target = await db.tasks.get(taskId)
+    if (!target) return
+
+    const updatedSubtasks = reorderedSubtasks.map((s, idx) => ({
+      ...s,
+      position: idx,
+    }))
+
+    const updatedTask = {
+      ...target,
+      subtasks: updatedSubtasks,
+      updatedAt: new Date().toISOString(),
+    }
+
+    await db.tasks.update(taskId, {
+      subtasks: updatedSubtasks,
+      updatedAt: new Date().toISOString(),
+    })
+
+    if (user?.id && !shouldSkipRemote()) {
+      const resTask = await upsertTaskRemote(updatedTask, user.id)
+      if (!resTask) {
+        const row = mapTaskToRow(updatedTask, user.id)
+        if (row) enqueueMutation('upsert', 'tasks', row)
+      }
+    }
+  }
+
   // 3. List Operations
   const createList = async (name) => {
     const trimmed = name.trim()
@@ -960,6 +1034,8 @@ export function TaskProvider({ children }) {
       toggleStar,
       toggleMyDay,
       addSubtask,
+      updateSubtask,
+      reorderSubtasks,
       toggleSubtask,
       deleteSubtask,
       createList,
@@ -993,6 +1069,8 @@ export function TaskProvider({ children }) {
       toggleStar,
       toggleMyDay,
       addSubtask,
+      updateSubtask,
+      reorderSubtasks,
       toggleSubtask,
       deleteSubtask,
       createList,
