@@ -51,7 +51,7 @@ export default function SidebarNav() {
   }, [tasks])
 
   const getItemCount = (itemId) => {
-    if (itemId === 'my-day') return myDayCount > 0 ? myDayCount : null
+    if (itemId === 'today' || itemId === 'my-day') return myDayCount > 0 ? myDayCount : null
     if (itemId === 'tasks') return allCount > 0 ? allCount : null
     return null
   }
@@ -71,7 +71,7 @@ export default function SidebarNav() {
         {/* Brand Header */}
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-1.5'}`}>
           <Link
-            to="/tasks?view=myday"
+            to="/today"
             className="flex items-center gap-2.5 group cursor-pointer"
             title="Nocturn"
           >

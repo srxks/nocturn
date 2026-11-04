@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import AppShell from './components/layout/AppShell'
 import Onboarding from './pages/Onboarding'
 import Auth from './pages/Auth'
+import Today from './pages/Today'
 import Tasks from './pages/Tasks'
 import Timer from './pages/Timer'
 import TimerSettings from './pages/TimerSettings'
@@ -29,7 +30,7 @@ function RootRedirect() {
   }
 
   if (user || isGuest || onboardingDone) {
-    return <Navigate to="/tasks?view=myday" replace />
+    return <Navigate to="/today" replace />
   }
 
   return <Navigate to="/onboarding" replace />
@@ -75,7 +76,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route path="/today" element={<Navigate to="/tasks?view=myday" replace />} />
+          <Route path="/today" element={<Today />} />
           <Route path="/inbox" element={<Navigate to="/tasks?view=inbox" replace />} />
           <Route path="/upcoming" element={<Navigate to="/tasks?view=upcoming" replace />} />
           <Route path="/tasks" element={<Tasks />} />
@@ -92,6 +93,7 @@ function AppRoutes() {
           <Route path="/vocab/learn" element={<VocabLearn />} />
           <Route path="/vocab/review" element={<VocabReview />} />
           <Route path="/vocab/list" element={<VocabList />} />
+          <Route path="/vocab/words" element={<Navigate to="/vocab/list" replace />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />
         </Route>

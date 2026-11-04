@@ -9,6 +9,7 @@ import AddTask from '../components/tasks/AddTask'
 import MobileQuickAddSheet from '../components/tasks/MobileQuickAddSheet'
 import BulkTaskMenu from '../components/tasks/BulkTaskMenu'
 import BulkActionBar from '../components/tasks/BulkActionBar'
+import Calendar from './Calendar'
 import { Progress } from '../components/ui/Progress'
 import { Skeleton } from '../components/ui/Skeleton'
 import { useTasks } from '../context/useTasks'
@@ -151,6 +152,7 @@ export default function Tasks() {
     if (rawView === 'inbox') return 'inbox'
     if (rawView === 'upcoming') return 'upcoming'
     if (rawView === 'all') return 'all'
+    if (rawView === 'calendar') return 'calendar'
     if (rawView === 'completed') return 'completed'
     if (rawView) return rawView
     return null
@@ -175,6 +177,8 @@ export default function Tasks() {
       setSearchParams({ view: 'upcoming' }, { replace: true })
     } else if (viewId === 'all') {
       setSearchParams({ view: 'all' }, { replace: true })
+    } else if (viewId === 'calendar') {
+      setSearchParams({ view: 'calendar' }, { replace: true })
     } else if (viewId === 'completed') {
       setSearchParams({ view: 'completed' }, { replace: true })
     } else {
@@ -421,16 +425,44 @@ export default function Tasks() {
           </p>
         </div>
 
-        <BulkTaskMenu
-          activeListId={activeListId}
-          completedCount={completedCount}
-          totalCount={totalCount}
-          isSelectMode={isSelectMode}
-          onToggleSelectMode={() => {
-            setIsSelectMode((v) => !v)
-            setSelectedTaskIds([])
-          }}
-        />
+        <div className="flex items-center gap-2">
+          {/* List vs Calendar View Toggle */}
+          <div className="flex items-center gap-1 bg-white/[0.04] p-1 rounded-xl border border-white/10 text-xs">
+            <button
+              type="button"
+              onClick={() => handleSelectView('my-day')}
+              className={`px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
+                activeListId !== 'calendar'
+                  ? 'bg-emerald-500 text-black font-semibold shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectView('calendar')}
+              className={`px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
+                activeListId === 'calendar'
+                  ? 'bg-emerald-500 text-black font-semibold shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              Calendar
+            </button>
+          </div>
+
+          <BulkTaskMenu
+            activeListId={activeListId}
+            completedCount={completedCount}
+            totalCount={totalCount}
+            isSelectMode={isSelectMode}
+            onToggleSelectMode={() => {
+              setIsSelectMode((v) => !v)
+              setSelectedTaskIds([])
+            }}
+          />
+        </div>
       </header>
 
       {/* My Day Centerpiece Progress Card */}
@@ -461,6 +493,7 @@ export default function Tasks() {
           { id: 'inbox', name: 'Inbox', icon: Inbox },
           { id: 'upcoming', name: 'Upcoming', icon: CalendarDays },
           { id: 'all', name: 'All Tasks', icon: ListTodo },
+          { id: 'calendar', name: 'Calendar', icon: CalendarDays },
           { id: 'completed', name: 'Completed', icon: CheckCircle2 },
           ...lists.map((l) => ({ id: l.id, name: l.name, icon: ListTodo })),
         ].map((v) => {
@@ -493,7 +526,11 @@ export default function Tasks() {
 
         {/* Right Tasks Content - Fixed Stationary Width */}
         <div className="lg:col-span-9 xl:col-span-9 space-y-5 min-w-0">
-          {/* Add Task Bar */}
+          {activeListId === 'calendar' ? (
+            <Calendar />
+          ) : (
+            <>
+              {/* Add Task Bar */}
           {activeListId !== 'completed' && (
             <AddTask
               onAddTask={handleAddTask}
@@ -995,6 +1032,8 @@ export default function Tasks() {
                 </div>
               )}
             </div>
+          )}
+          </>
           )}
         </div>
       </div>
