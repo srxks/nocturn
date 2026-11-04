@@ -163,7 +163,6 @@ const handleTimerSettings = withRealtimeGuard(async (payload, userId) => {
   if (eventType === 'DELETE' || !newRow || !newRow.settings) return
   if (newRow.user_id && newRow.user_id !== userId) return
 
-  const currentLocal = await db.timerSettings.get('default')
   const s = newRow.settings
 
   const safeFocus = Number(s.focusDuration)

@@ -9,9 +9,6 @@ import {
   Plus,
   Trash2,
   Volume2,
-  Filter,
-  ArrowUpDown,
-  GraduationCap,
 } from 'lucide-react'
 import { useVocab } from '../hooks/useVocab'
 import { getWordStatus } from '../services/vocabService'

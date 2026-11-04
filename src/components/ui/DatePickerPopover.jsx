@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Sparkles } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 const DAYS_OF_WEEK = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 const MONTH_NAMES = [
@@ -27,7 +27,7 @@ export default function DatePickerPopover({
   value, // 'YYYY-MM-DD'
   onChange,
   onClear,
-  label = 'Select date',
+  label: _label, // eslint-disable-line no-unused-vars
   placeholder = 'No date set',
   variant = 'due', // 'due' (emerald) | 'deadline' (rose)
   align = 'left',
@@ -42,15 +42,19 @@ export default function DatePickerPopover({
   const todayIso = formatDateToIso(today)
 
   // Calendar navigation state (year & month)
-  const [navDate, setNavDate] = useState(() => selectedDate || new Date())
+  const [navDateState, setNavDateState] = useState(null)
+  const [prevValue, setPrevValue] = useState(value)
 
-  // Keep navigation in sync if value changes externally
-  useEffect(() => {
+  // Synchronize navigation date if value changes externally without effect-loop
+  if (value !== prevValue) {
+    setPrevValue(value)
     if (value) {
       const parsed = parseIsoToLocalDate(value)
-      if (parsed) setNavDate(parsed)
+      if (parsed) setNavDateState(parsed)
     }
-  }, [value])
+  }
+
+  const navDate = navDateState || selectedDate || today
 
   // Close on outside click
   useEffect(() => {
@@ -65,11 +69,11 @@ export default function DatePickerPopover({
   }, [isOpen])
 
   const handlePrevMonth = () => {
-    setNavDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+    setNavDateState(new Date(navDate.getFullYear(), navDate.getMonth() - 1, 1))
   }
 
   const handleNextMonth = () => {
-    setNavDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+    setNavDateState(new Date(navDate.getFullYear(), navDate.getMonth() + 1, 1))
   }
 
   const handleSelectDay = (dayNum) => {
@@ -82,7 +86,7 @@ export default function DatePickerPopover({
     const d = new Date()
     d.setDate(d.getDate() + daysToAdd)
     const iso = formatDateToIso(d)
-    setNavDate(d)
+    setNavDateState(d)
     onChange(iso)
     setIsOpen(false)
   }

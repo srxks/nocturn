@@ -16,7 +16,6 @@ import { supabase, isSupabaseConfigured, isGuestUserId } from '../lib/supabaseCl
 import { getServerNowMs } from '../lib/timer.js'
 
 let _timerChannel = null
-let _currentUserId = null
 let _localRevision = 0
 let _lastCommandId = null
 let _onRemoteStateCallback = null
@@ -45,7 +44,6 @@ export function initTimerSync(userId, onRemoteState) {
     return
   }
 
-  _currentUserId = userId
   _onRemoteStateCallback = onRemoteState
 
   // If already subscribed to the user channel, keep it
@@ -97,7 +95,6 @@ export function stopTimerSync() {
     }
     _timerChannel = null
   }
-  _currentUserId = null
   _onRemoteStateCallback = null
 }
 
@@ -115,9 +112,8 @@ export function handleIncomingTimerPayload(payload) {
     return
   }
 
-  // Revision / action timestamp check
+  // Revision / monotonicity check
   const incomingRev = Number(payload.revision) || 0
-  const incomingActionAt = payload.lastActionAt ? new Date(payload.lastActionAt).getTime() : 0
 
   if (incomingRev > 0 && incomingRev <= _localRevision) {
     // Stale or duplicate update, ignore

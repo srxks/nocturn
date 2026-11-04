@@ -133,12 +133,14 @@ export function TimerSessionProvider({ children }) {
       }
       try {
         localStorage.setItem('nocturn_timer_cycle_state', JSON.stringify(updated))
-      } catch {}
+      } catch {
+        // ignore localStorage quota errors
+      }
       return updated
     })
   }, [settings?.sessions])
 
-  const saveCycleState = useCallback((newState, shouldBroadcast = false) => {
+  const saveCycleState = useCallback((newState) => {
     setCycleState(newState)
     try {
       if (typeof localStorage !== 'undefined') {
@@ -233,17 +235,19 @@ export function TimerSessionProvider({ children }) {
         setCycleState((prev) => {
           const merged = {
             currentBlockIndex: Math.max(1, Number(remoteCycleState.currentBlockIndex) || prev.currentBlockIndex),
-            completedBlocks: Math.max(0, Number(remoteCycleState.completedBlocks) ?? prev.completedBlocks),
-            skippedBlocks: Math.max(0, Number(remoteCycleState.skippedBlocks) ?? prev.skippedBlocks),
-            terminatedBlocks: Math.max(0, Number(remoteCycleState.terminatedBlocks) ?? prev.terminatedBlocks),
+            completedBlocks: Math.max(0, Number(remoteCycleState.completedBlocks) || prev.completedBlocks),
+            skippedBlocks: Math.max(0, Number(remoteCycleState.skippedBlocks) || prev.skippedBlocks),
+            terminatedBlocks: Math.max(0, Number(remoteCycleState.terminatedBlocks) || prev.terminatedBlocks),
             totalBlocks: Math.max(1, Number(remoteCycleState.totalBlocks) || prev.totalBlocks),
-            actualFocusedSeconds: Math.max(0, Number(remoteCycleState.actualFocusedSeconds) ?? prev.actualFocusedSeconds),
+            actualFocusedSeconds: Math.max(0, Number(remoteCycleState.actualFocusedSeconds) || prev.actualFocusedSeconds),
             blockStatuses: remoteCycleState.blockStatuses || prev.blockStatuses,
           }
           try {
             localStorage.setItem('nocturn_timer_cycle_state', JSON.stringify(merged))
             localStorage.setItem('nocturn_timer_cycles', String(merged.completedBlocks))
-          } catch {}
+          } catch {
+            // ignore localStorage quota errors
+          }
           return merged
         })
       }
