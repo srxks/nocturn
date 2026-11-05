@@ -1,41 +1,56 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
   BookOpen,
+  Sparkles,
+  RefreshCw,
+  CheckCircle2,
+  ListFilter,
   ArrowRight,
+  AlertTriangle,
+  Zap,
   Plus,
+  Trash2,
   Volume2,
   SlidersHorizontal,
   Play,
-  RotateCcw,
-  Library,
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useVocab } from '../hooks/useVocab'
 import VocabWordModal from '../components/vocab/VocabWordModal'
 import VocabSessionConfigModal from '../components/vocab/VocabSessionConfigModal'
 import {
+  getWordsByDifficultyDistribution,
   getVocabSessionConfig,
   generateAndSaveTodayLearningSession,
   DEFAULT_VOCAB_SESSION_CONFIG,
 } from '../services/vocabService'
-import { speakWord } from '../services/soundService'
+import { Card, Badge, Button, Progress } from '../components/ui'
 
 export default function Vocab() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const {
     allWords,
+    dailyWords,
     learnedTodayCount,
+    effectiveDailyTarget,
     isDailyCompleted,
+    currentLearningIndex,
     todayVocabLog,
     reviewCount,
+    isGenerating,
+    generationError,
+    generateNewWords,
     addWord,
+    deleteAllWords,
   } = useVocab()
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
+  const [isConfirmDeleteAllOpen, setIsConfirmDeleteAllOpen] = useState(false)
+  const [isDeletingAll, setIsDeletingAll] = useState(false)
   const [sessionConfig, setSessionConfig] = useState(() => ({ ...DEFAULT_VOCAB_SESSION_CONFIG }))
 
   // Load saved study session configuration per user
@@ -48,13 +63,15 @@ export default function Vocab() {
           setSessionConfig(cfg)
         }
       } catch (err) {
-        console.warn('[Vocab] Failed to load config:', err)
+        console.warn('[Vocab] Failed to load vocab session config:', err)
       }
     }
     loadConfig()
 
     const handleConfigUpdate = (e) => {
-      if (e?.detail) setSessionConfig(e.detail)
+      if (e?.detail) {
+        setSessionConfig(e.detail)
+      }
     }
     window.addEventListener('nocturn:vocab-config-updated', handleConfigUpdate)
     return () => {
@@ -66,6 +83,27 @@ export default function Vocab() {
   const totalConfiguredWords =
     (sessionConfig?.easy || 0) + (sessionConfig?.medium || 0) + (sessionConfig?.hard || 0)
 
+  const handleStartCustomSession = async (customConfig) => {
+    try {
+      const cfg = customConfig || sessionConfig
+      const words = await generateAndSaveTodayLearningSession(user?.id, cfg)
+      navigate('/vocab/learn', { state: { customWords: words, config: cfg } })
+    } catch (err) {
+      console.error('Failed to configure custom vocab session:', err)
+      navigate('/vocab/learn')
+    }
+  }
+
+  const handleDeleteAllConfirm = async () => {
+    try {
+      setIsDeletingAll(true)
+      await deleteAllWords()
+      setIsConfirmDeleteAllOpen(false)
+    } finally {
+      setIsDeletingAll(false)
+    }
+  }
+
   const handleStartLearn = async () => {
     if (totalConfiguredWords <= 0) {
       setIsConfigModalOpen(true)
@@ -73,270 +111,465 @@ export default function Vocab() {
     }
 
     try {
+      // If today's session has already been completed, allow reviewing it
       if (isDailyCompleted && todayVocabLog?.words?.length > 0) {
         navigate('/vocab/learn', { state: { customWords: todayVocabLog.words, config: sessionConfig } })
         return
       }
 
-      if (todayVocabLog?.words?.length > 0) {
-        navigate('/vocab/learn')
+      // If today's session is in progress, continue with existing session words
+      if (learnedTodayCount > 0 && todayVocabLog?.words?.length > 0) {
+        navigate('/vocab/learn', { state: { customWords: todayVocabLog.words, config: sessionConfig } })
         return
       }
 
+      // Otherwise, generate a fresh randomized session from currently saved configuration
       const words = await generateAndSaveTodayLearningSession(user?.id, sessionConfig)
       navigate('/vocab/learn', { state: { customWords: words, config: sessionConfig } })
     } catch (err) {
-      console.warn('Error starting vocab session:', err)
+      console.error('Failed to start vocab session with configured counts:', err)
       navigate('/vocab/learn')
     }
   }
 
-  // Word of the Day (Deterministic rotation based on day of month)
+  const handleGenerateNewWords = async () => {
+    try {
+      await generateNewWords()
+    } catch {
+      // Error handled by hook state
+    }
+  }
+
+  // Count words by status
+  const learningCount = allWords.filter((w) => w.correct_count < 5).length
+  const settledCount = allWords.filter(
+    (w) => w.correct_count === 5 && w.last_quizzed_date
+  ).length
+
   const wordOfTheDay = useMemo(() => {
     if (!allWords || allWords.length === 0) return null
     const daySeed = new Date().getDate()
     return allWords[daySeed % allWords.length]
   }, [allWords])
 
+  const playPronunciation = (word) => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(word)
+      utterance.rate = 0.9
+      utterance.pitch = 1.0
+      window.speechSynthesis.speak(utterance)
+    }
+  }
+
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
-      {/* 1. Header Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15 }}
+      className="space-y-6 sm:space-y-8 pb-12"
+    >
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Vocabulary
-          </h1>
-          <p className="text-xs sm:text-sm text-neutral-400 mt-0.5">
-            Expand and retain high-yield vocabulary through active recall and spaced repetition.
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
+              Vocabulary
+            </h1>
+            <Badge variant="accent" size="sm">
+              GRE Flashcards
+            </Badge>
+          </div>
+          <p className="text-nocturn-muted text-xs sm:text-sm mt-1">
+            Build your GRE vocabulary with AI-curated daily words.
           </p>
         </div>
 
-        {/* Header Action Buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
+        {/* Action Controls: Generate with AI, Add Word & Delete All Words */}
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleGenerateNewWords}
+            disabled={isGenerating}
+            icon={isGenerating ? RefreshCw : Sparkles}
+            className={isGenerating ? '[&_svg]:animate-spin' : ''}
+            title="Generate brand new words with AI"
+          >
+            <span>Generate with AI</span>
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs transition-colors cursor-pointer"
+            icon={Plus}
           >
-            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>Add Word</span>
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            onClick={() => setIsConfigModalOpen(true)}
-            title="Configure study quota & difficulties"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-neutral-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsConfirmDeleteAllOpen(true)}
+            disabled={allWords.length === 0}
+            icon={Trash2}
+            className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
           >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Study Settings</span>
-          </button>
+            <span>Delete All</span>
+          </Button>
         </div>
       </div>
 
-      {/* 2. Today's Learning Overview Strip */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.02] border border-white/[0.06] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-        <div className="space-y-1.5 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-bold text-neutral-400 tracking-wider">
-              Today's Goal
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-neutral-300 font-mono">
-              {sessionConfig.easy} Easy · {sessionConfig.medium} Medium · {sessionConfig.hard} Hard
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-white font-mono">
-              {learnedTodayCount} / {totalConfiguredWords}
-            </span>
-            <span className="text-xs text-neutral-400">words learned today</span>
-          </div>
-          <div className="w-full max-w-md h-1.5 bg-white/10 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-              style={{
-                width: `${totalConfiguredWords > 0 ? Math.min(100, (learnedTodayCount / totalConfiguredWords) * 100) : 0}%`,
-              }}
-            />
+      {/* Generation Error Alert */}
+      {generationError && (
+        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-sm flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold">Vocabulary Generation Error</p>
+            <p className="text-xs text-rose-300/80">{generationError}</p>
           </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-4 text-xs text-neutral-400 border-t md:border-t-0 md:border-l border-white/10 pt-3 md:pt-0 md:pl-5">
-          <div>
-            <span className="text-lg font-bold font-mono text-white block">
-              {reviewCount}
-            </span>
-            <span className="text-[11px] text-neutral-500 uppercase font-semibold">
-              Words Due Review
-            </span>
-          </div>
-          <div className="border-l border-white/10 pl-4">
-            <span className="text-lg font-bold font-mono text-emerald-400 block">
-              {allWords.length}
-            </span>
-            <span className="text-[11px] text-neutral-500 uppercase font-semibold">
-              Total in Library
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Three Core Action Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* ACTION 1: Learn New Words */}
-        <div className="p-5 rounded-2xl bg-white/[0.025] hover:bg-white/[0.035] border border-white/[0.08] flex flex-col justify-between space-y-4 transition-all">
-          <div className="space-y-2.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-white">1. Learn New Words</h2>
-              <p className="text-xs text-neutral-400 mt-1 leading-relaxed">
-                Study today's curated flashcards with definitions, examples, and synonyms.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleStartLearn}
-            disabled={totalConfiguredWords === 0}
-            className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-black font-semibold text-xs flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.25)] transition-colors cursor-pointer"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            <span>
-              {isDailyCompleted && learnedTodayCount >= totalConfiguredWords
-                ? 'Review Today’s Set'
-                : learnedTodayCount > 0
-                ? 'Continue Learning'
-                : 'Start Learning'}
-            </span>
-          </button>
-        </div>
-
-        {/* ACTION 2: Review Due Words */}
-        <div className="p-5 rounded-2xl bg-white/[0.025] hover:bg-white/[0.035] border border-white/[0.08] flex flex-col justify-between space-y-4 transition-all">
-          <div className="space-y-2.5">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
-              <RotateCcw className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold text-white">2. Review Due Words</h2>
-                {reviewCount > 0 && (
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                    {reviewCount} Due
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-neutral-400 mt-1 leading-relaxed">
-                Test previously learned words through adaptive multiple-choice quizzes.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => navigate('/vocab/review')}
-            disabled={reviewCount === 0}
-            className={`w-full py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-              reviewCount > 0
-                ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-[0_0_15px_rgba(99,102,241,0.25)]'
-                : 'bg-white/5 text-neutral-500 border border-white/5 cursor-default'
-            }`}
-          >
-            <span>{reviewCount > 0 ? 'Start Review' : 'All Caught Up!'}</span>
-            {reviewCount > 0 && <ArrowRight className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-
-        {/* ACTION 3: Word Library */}
-        <div className="p-5 rounded-2xl bg-white/[0.025] hover:bg-white/[0.035] border border-white/[0.08] flex flex-col justify-between space-y-4 transition-all">
-          <div className="space-y-2.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
-              <Library className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-white">3. Word Library</h2>
-              <p className="text-xs text-neutral-400 mt-1 leading-relaxed">
-                Search, filter, edit, or delete words in your personal vocabulary collection.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => navigate('/vocab/list')}
-            className="w-full py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-          >
-            <span>Browse Library ({allWords.length})</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* 4. Word of the Day Restrained Card */}
+      {/* Word of the Day Hero Banner with glow & TTS pronunciation */}
       {wordOfTheDay && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.015] border border-white/[0.06] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="space-y-1 flex-1 min-w-0">
+        <div className="relative overflow-hidden p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-nocturn-card via-nocturn-surface/50 to-nocturn-card border border-nocturn-accent/35 shadow-[0_0_35px_rgba(var(--color-nocturn-accent-rgb),0.15)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1.5 flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 font-mono">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-nocturn-accent/15 text-nocturn-accent-bright border border-nocturn-accent/30">
                 Word of the Day
               </span>
               {wordOfTheDay.part_of_speech && (
-                <span className="text-xs text-neutral-500 italic">
+                <span className="text-xs text-nocturn-muted italic font-serif">
                   ({wordOfTheDay.part_of_speech})
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-white tracking-tight">
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
                 {wordOfTheDay.word}
-              </span>
+              </h2>
               <button
                 type="button"
-                onClick={() => speakWord(wordOfTheDay.word)}
-                title="Pronounce word"
-                className="p-1 text-neutral-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                onClick={() => playPronunciation(wordOfTheDay.word)}
+                className="p-2 rounded-xl bg-white/[0.06] hover:bg-nocturn-accent/20 text-nocturn-muted hover:text-nocturn-accent-bright transition-colors cursor-pointer"
+                title="Listen to pronunciation"
+                aria-label={`Pronounce ${wordOfTheDay.word}`}
               >
-                <Volume2 className="w-3.5 h-3.5" />
+                <Volume2 className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-xs text-neutral-400 leading-relaxed">
+            <p className="text-sm text-nocturn-dim leading-relaxed">
               {wordOfTheDay.definition}
             </p>
+            {wordOfTheDay.example_sentence && (
+              <p className="text-xs text-nocturn-muted/75 italic border-l-2 border-nocturn-accent/40 pl-2 mt-1">
+                "{wordOfTheDay.example_sentence}"
+              </p>
+            )}
           </div>
-
-          <div className="text-right shrink-0 self-end sm:self-center">
-            <span className="text-[11px] text-neutral-500 font-mono">
-              Mastery: {wordOfTheDay.correct_count || 0}/5
+          {/* Mini Mastery Ring / Status */}
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+            <span className="text-xs text-nocturn-muted font-medium">Mastery:</span>
+            <span className="text-xs font-mono font-bold text-nocturn-accent-bright">
+              {wordOfTheDay.correct_count || 0}/5
             </span>
           </div>
         </div>
       )}
 
-      {/* Modals */}
-      <AnimatePresence>
-        {isAddModalOpen && (
-          <VocabWordModal
-            mode="add"
-            onSave={async (wordData) => {
-              await addWord(wordData)
-            }}
-            onClose={() => setIsAddModalOpen(false)}
-          />
-        )}
-      </AnimatePresence>
+      {/* Main Grid: Card 1 & Card 2 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
+        {/* CARD 1: Learn Daily Words */}
+        <Card className="flex flex-col justify-between hover:border-white/15 transition-colors duration-200">
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent">
+                <Sparkles className="w-5 h-5" />
+              </div>
 
-      <AnimatePresence>
-        {isConfigModalOpen && (
-          <VocabSessionConfigModal
-            isOpen={isConfigModalOpen}
-            onClose={() => setIsConfigModalOpen(false)}
-            onSave={(newCfg) => setSessionConfig(newCfg)}
-          />
-        )}
-      </AnimatePresence>
-    </div>
+              {/* Status Badge */}
+              {isDailyCompleted && learnedTodayCount >= totalConfiguredWords && totalConfiguredWords > 0 ? (
+                <Badge variant="success" size="sm" dot icon={CheckCircle2}>
+                  Completed
+                </Badge>
+              ) : learnedTodayCount > 0 ? (
+                <Badge variant="accent" size="sm" dot icon={Zap}>
+                  In Progress
+                </Badge>
+              ) : (
+                <Badge variant="neutral" size="sm" dot>
+                  Daily Goal
+                </Badge>
+              )}
+            </div>
+
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight uppercase">
+                LEARN {totalConfiguredWords} WORDS
+              </h2>
+              <div className="text-xs sm:text-sm mt-1.5">
+                <span className="text-nocturn-muted font-medium">Configured: </span>
+                <span className="text-white/90 font-medium">
+                  {sessionConfig.easy} Easy · {sessionConfig.medium} Medium · {sessionConfig.hard} Hard
+                </span>
+              </div>
+            </div>
+
+            {/* Progress Section */}
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-medium">
+                <span className="text-nocturn-muted">Today's Progress:</span>
+                <span className="text-white font-mono font-semibold">
+                  {learnedTodayCount} / {totalConfiguredWords} Words
+                </span>
+              </div>
+              <Progress
+                value={
+                  totalConfiguredWords > 0
+                    ? Math.min(100, (learnedTodayCount / totalConfiguredWords) * 100)
+                    : 0
+                }
+              />
+            </div>
+          </div>
+
+          <div className="pt-6 space-y-3">
+            {/* Primary Action Button */}
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleStartLearn}
+              disabled={isGenerating || totalConfiguredWords === 0}
+              className="w-full justify-center text-sm font-semibold shadow-[0_0_15px_rgba(var(--color-nocturn-accent-rgb),0.35)]"
+              icon={isDailyCompleted && learnedTodayCount >= totalConfiguredWords ? ArrowRight : Play}
+            >
+              {totalConfiguredWords === 0
+                ? 'Configure Words to Start'
+                : isDailyCompleted && learnedTodayCount >= totalConfiguredWords
+                ? 'Review Set'
+                : learnedTodayCount > 0
+                ? 'Continue Learning'
+                : `Start Learning (${totalConfiguredWords} Words)`}
+            </Button>
+
+            {/* Secondary Controls: [Configure] [Review Set] [AI Generate] */}
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsConfigModalOpen(true)}
+                icon={SlidersHorizontal}
+                className="w-full justify-center text-xs"
+                title="Configure word counts by difficulty"
+              >
+                <span>Configure</span>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate('/vocab/learn')}
+                disabled={allWords.length === 0 && !todayVocabLog?.words?.length}
+                icon={BookOpen}
+                className="w-full justify-center text-xs"
+                title="Review current study set"
+              >
+                <span>Review Set</span>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleGenerateNewWords}
+                disabled={isGenerating}
+                icon={isGenerating ? RefreshCw : Sparkles}
+                className={`w-full justify-center text-xs ${isGenerating ? '[&_svg]:animate-spin' : ''}`}
+                title="Generate words with AI"
+              >
+                <span>{isGenerating ? 'AI...' : 'AI Generate'}</span>
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* CARD 2: Review Queue */}
+        <Card className="flex flex-col justify-between hover:border-white/15 transition-colors duration-200">
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+
+              {reviewCount > 0 ? (
+                <Badge variant="warning" size="sm" dot>
+                  {reviewCount} Due
+                </Badge>
+              ) : (
+                <Badge variant="success" size="sm" dot icon={CheckCircle2}>
+                  All Caught Up
+                </Badge>
+              )}
+            </div>
+
+            <div>
+              <h2 className="text-xl font-semibold text-white tracking-tight">
+                Review Queue
+              </h2>
+              <p className="text-nocturn-muted text-xs sm:text-sm mt-1">
+                Reinforce vocabulary memory with spaced multiple-choice quizzes.
+              </p>
+            </div>
+
+            {/* Status Section */}
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+              {reviewCount > 0 ? (
+                <div>
+                  <span className="text-2xl font-bold font-mono text-white">
+                    {reviewCount}
+                  </span>
+                  <span className="text-xs text-nocturn-muted ml-2">
+                    {reviewCount === 1 ? 'word ready for review' : 'words ready for review'}
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-white block">
+                    {allWords.length > 0 ? "You're all caught up for today!" : 'No reviews due today'}
+                  </span>
+                  <span className="text-[11px] text-nocturn-muted block">
+                    {allWords.length > 0
+                      ? 'Spaced repetition reviews will refresh tomorrow.'
+                      : 'Words appear here when spaced repetition refreshes are needed.'}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-6">
+            {reviewCount > 0 ? (
+              <Button
+                variant="primary"
+                onClick={() => navigate('/vocab/review')}
+                className="w-full justify-center"
+                icon={ArrowRight}
+              >
+                Start Review ({reviewCount})
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={() => navigate('/vocab/list')}
+                className="w-full justify-center"
+                icon={ArrowRight}
+              >
+                Explore Word Library
+              </Button>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* CARD 3: Word Library & Quick Stats */}
+      <Card className="space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-nocturn-accent">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-semibold text-white">Word Library</h3>
+              <p className="text-xs text-nocturn-muted">
+                Total learned words & mastery breakdown
+              </p>
+            </div>
+          </div>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate('/vocab/list')}
+            icon={ListFilter}
+          >
+            View All Words ({allWords.length})
+          </Button>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+            <p className="text-xs text-nocturn-muted font-medium">Total Learned</p>
+            <p className="text-2xl font-semibold font-mono text-white mt-1">
+              {allWords.length}
+            </p>
+          </div>
+          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+            <p className="text-xs text-nocturn-muted font-medium">In Progress</p>
+            <p className="text-2xl font-semibold font-mono text-nocturn-accent mt-1">
+              {learningCount}
+            </p>
+          </div>
+          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+            <p className="text-xs text-nocturn-muted font-medium">Mastered</p>
+            <p className="text-2xl font-semibold font-mono text-emerald-400 mt-1">
+              {settledCount} <span className="text-xs font-normal text-nocturn-muted">{settledCount === 1 ? 'word' : 'words'}</span>
+            </p>
+            <p className="text-[10px] text-nocturn-muted/70 mt-0.5">Mastery: 5 successful reviews</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Add Word Modal */}
+      <VocabWordModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSave={addWord}
+        mode="add"
+      />
+
+      {/* Delete All Words Confirmation Modal */}
+      {isConfirmDeleteAllOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-nocturn-card border border-rose-500/30 rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-semibold text-white">Delete All Vocabulary Words?</h3>
+            </div>
+            <p className="text-xs sm:text-sm text-nocturn-muted">
+              Delete all vocabulary words? This cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsConfirmDeleteAllOpen(false)}
+                disabled={isDeletingAll}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleDeleteAllConfirm}
+                disabled={isDeletingAll}
+              >
+                {isDeletingAll ? 'Deleting...' : 'Delete All'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Vocab Session Difficulty & Word Count Config Modal */}
+      <VocabSessionConfigModal
+        isOpen={isConfigModalOpen}
+        onClose={() => setIsConfigModalOpen(false)}
+        onStartSession={handleStartCustomSession}
+        onSaveConfig={(newConfig) => setSessionConfig(newConfig)}
+        initialConfig={sessionConfig}
+      />
+    </motion.div>
   )
 }

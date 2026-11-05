@@ -17,44 +17,51 @@ import {
 
 const PRIMARY_MOBILE_ITEMS = [
   {
-    id: 'today',
+    id: 'my-day',
     name: 'Today',
-    path: '/today',
+    path: '/tasks?view=myday',
     icon: Sun,
-    isActive: (pathname) => pathname === '/today' || pathname === '/',
+    isActive: (pathname, search = '') =>
+      pathname.startsWith('/tasks') &&
+      (search.includes('view=myday') ||
+        (!search.includes('view=all') &&
+          !search.includes('view=completed') &&
+          !search.includes('view=upcoming') &&
+          !search.includes('view=inbox') &&
+          !search.includes('view=list') &&
+          !search.includes('list='))),
   },
   {
     id: 'tasks',
     name: 'Tasks',
-    path: '/tasks',
+    path: '/tasks?view=all',
     icon: CheckSquare,
-    isActive: (pathname) => pathname.startsWith('/tasks'),
+    isActive: (pathname, search = '') =>
+      pathname.startsWith('/tasks') &&
+      (search.includes('view=all') ||
+        search.includes('view=upcoming') ||
+        search.includes('view=inbox') ||
+        search.includes('view=completed') ||
+        search.includes('view=list') ||
+        search.includes('list=')),
+  },
+  {
+    id: 'plan',
+    name: 'Plan',
+    path: '/plan',
+    icon: Sparkles,
+    isActive: (pathname) => pathname.startsWith('/plan'),
   },
   {
     id: 'timer',
-    name: 'Focus',
+    name: 'Timer',
     path: '/timer',
     icon: Timer,
     isActive: (pathname) => pathname.startsWith('/timer'),
   },
-  {
-    id: 'vocab',
-    name: 'Vocab',
-    path: '/vocab',
-    icon: BookOpen,
-    isActive: (pathname) => pathname.startsWith('/vocab'),
-  },
 ]
 
 const SECONDARY_MOBILE_ITEMS = [
-  {
-    id: 'statistics',
-    name: 'Insights',
-    description: 'Focus hours, trends & consistency',
-    path: '/statistics',
-    icon: BarChart3,
-    isActive: (pathname) => pathname.startsWith('/statistics') || pathname.startsWith('/stats'),
-  },
   {
     id: 'calendar',
     name: 'Calendar',
@@ -64,12 +71,20 @@ const SECONDARY_MOBILE_ITEMS = [
     isActive: (pathname) => pathname.startsWith('/calendar'),
   },
   {
-    id: 'plan',
-    name: 'Plan with AI',
-    description: 'Intelligent daily schedule generator',
-    path: '/plan',
-    icon: Sparkles,
-    isActive: (pathname) => pathname.startsWith('/plan'),
+    id: 'statistics',
+    name: 'Statistics',
+    description: 'Focus hours, trends & consistency heatmap',
+    path: '/statistics',
+    icon: BarChart3,
+    isActive: (pathname) => pathname.startsWith('/statistics') || pathname.startsWith('/stats'),
+  },
+  {
+    id: 'vocab',
+    name: 'Vocabulary',
+    description: 'Flashcards & spaced repetition',
+    path: '/vocab',
+    icon: BookOpen,
+    isActive: (pathname) => pathname.startsWith('/vocab'),
   },
   {
     id: 'settings',

@@ -44,8 +44,6 @@ export default function TaskListNav({ onSelectView }) {
       setSearchParams({ view: 'upcoming' }, { replace: true })
     } else if (viewId === 'all') {
       setSearchParams({ view: 'all' }, { replace: true })
-    } else if (viewId === 'calendar') {
-      setSearchParams({ view: 'calendar' }, { replace: true })
     } else if (viewId === 'completed') {
       setSearchParams({ view: 'completed' }, { replace: true })
     } else {
@@ -97,7 +95,6 @@ export default function TaskListNav({ onSelectView }) {
     { id: 'inbox', name: 'Inbox', icon: Inbox, count: inboxCount },
     { id: 'upcoming', name: 'Upcoming', icon: CalendarClock, count: upcomingCount },
     { id: 'all', name: 'All Tasks', icon: ListTodo, count: allCount },
-    { id: 'calendar', name: 'Calendar', icon: CalendarClock, count: null },
     { id: 'completed', name: 'Completed', icon: CheckCircle2, count: completedCount },
   ]
 
